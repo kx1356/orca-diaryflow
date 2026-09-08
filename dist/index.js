@@ -1911,7 +1911,8 @@ var ORCA_CSS = "/* src/style.css */\n.mom-root {\n  position: relative;\n  heigh
 
 var ORCA_PANEL_TYPE = "orca-diaryflow.panel";
 var ORCA_BTN_ID = "orca-diaryflow.button";
-var ORCA_STYLE_ID = "orca-diaryflow-style";
+// style id 带版本号：旧 id 已注入时强制重建，保证 CSS 更新一定生效
+var ORCA_STYLE_ID = "orca-diaryflow-style-v4";
 var orcaPluginName = "";
 var orcaRegisteredPanel = false;
 var orcaReady = false;
