@@ -68,7 +68,8 @@ const patches = [
   { block: "render", name: "P23-tags-filter" },
   { block: "editor", name: "P24-tags-handle" },
   { block: "render", name: "P25-rmupload" },
-  { block: "render", name: "P26-rmdelete" }
+  { block: "render", name: "P26-rmdelete" },
+  { block: "render", name: "P27-empty-hint" }
 ];
 
 function applyPatch(block, name, all) {
@@ -153,7 +154,14 @@ const extraCss = [
   ".north-luna-moments-tag { font-size: 12px; line-height: 1.6; color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); padding: 1px 9px; border-radius: 9px; cursor: pointer; user-select: none; transition: background 0.15s; }",
   ".north-luna-moments-tag:hover { background: var(--b3-theme-primary-lighter); }",
   ".mom-publish-info { flex-wrap: wrap; }",
-  ".mom-publish-info .mom-publish-info-tags { flex: 1 1 100%; min-width: 0; margin-top: 4px; }"
+  ".mom-publish-info .mom-publish-info-tags { flex: 1 1 100%; min-width: 0; margin-top: 4px; }",
+  "/* ---- 空状态美化 ---- */",
+  ".mom-empty { padding: 60px 24px 48px; text-align: center; }",
+  ".mom-empty-ico { font-size: 46px; line-height: 1; margin-bottom: 16px; opacity: 0.85; }",
+  ".mom-empty-title { font-size: 16px; font-weight: 600; margin: 0 0 8px; color: var(--b3-theme-on-surface, #24292f); }",
+  ".mom-empty-sub { font-size: 13px; line-height: 1.7; margin: 0 0 6px; color: var(--b3-theme-on-surface-light, #6b7280); }",
+  ".mom-empty-hint { font-size: 12px; line-height: 1.7; margin: 0 0 20px; color: var(--b3-theme-on-surface-light, #6b7280); opacity: 0.8; }",
+  ".mom-empty-btn { margin-top: 4px; }"
 ].join("\n");
 const allCss = css + extraCss;
 

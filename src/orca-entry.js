@@ -306,7 +306,10 @@ function OrcaPanelRenderer() {
   return h("div", { ref: ref, className: "orca-df-scope orca-df-host" });
 }
 
-// ---------- 面板打开（参考 mreader 模式） ----------
+// ---------- 面板打开（侧栏优化：默认加宽 + 记住宽度） ----------
+var DF_PANEL_W_KEY = "df-panel-width";
+var DF_PANEL_W_DEFAULT = 0.42; // 默认宽度（若从未保存）
+
 function orcaFindPanelId(root) {
   if (!root || typeof root !== "object") return null;
   if (root.view === ORCA_PANEL_TYPE && root.id) return root.id;
@@ -318,6 +321,51 @@ function orcaFindPanelId(root) {
   }
   return null;
 }
+function orcaFindGroupOf(root, panelId) {
+  if (!root || typeof root !== "object") return null;
+  if (Array.isArray(root.children)) {
+    for (var i = 0; i < root.children.length; i++) {
+      var c = root.children[i];
+      if (c && c.id === panelId) return root;
+      var r = orcaFindGroupOf(c, panelId);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+function orcaGroupIndexOf(group, panelId) {
+  for (var i = 0; i < group.children.length; i++) {
+    if (group.children[i].id === panelId) return i;
+  }
+  return -1;
+}
+// 把 targetId 面板宽度设为 w，同一行其余面板等比例缩放
+function orcaApplyPanelWidth(targetId, w) {
+  var group = orcaFindGroupOf(orca.state.panels, targetId);
+  if (!group || !Array.isArray(group.children) || group.children.length < 2) return;
+  var idx = orcaGroupIndexOf(group, targetId);
+  if (idx < 0) return;
+  var w2 = Math.min(0.85, Math.max(0.18, Number(w) || DF_PANEL_W_DEFAULT));
+  var oldW = Number(group.children[idx].width) || 0.5;
+  var scale = 1;
+  var rest = 1 - oldW;
+  if (rest > 0.01) scale = (1 - w2) / rest;
+  var vals = group.children.map(function (c, i) {
+    if (i === idx) return w2;
+    return Math.max(0.05, (Number(c.width) || 0.5) * scale);
+  });
+  try { orca.nav.changeSizes(targetId, vals); } catch (e) {}
+}
+// 记住当前面板宽度（下次打开恢复）
+function orcaRememberPanelWidth(targetId) {
+  var group = orcaFindGroupOf(orca.state.panels, targetId);
+  if (!group || !Array.isArray(group.children)) return;
+  var idx = orcaGroupIndexOf(group, targetId);
+  if (idx < 0) return;
+  var w = Number(group.children[idx].width);
+  if (isNaN(w) || w <= 0) return;
+  try { dfSetData(DF_PANEL_W_KEY, Math.round(w * 100) / 100); } catch (e) {}
+}
 function orcaOpenPanel() {
   try {
     var active = orca.state.activePanel;
@@ -325,11 +373,23 @@ function orcaOpenPanel() {
       orca.notify("warn", "当前没有可用的面板", { title: "日记流" });
       return;
     }
-    var targetId = orcaFindPanelId(orca.state.panels)
-      || orca.nav.addTo(active, "right", { view: ORCA_PANEL_TYPE, viewArgs: {}, viewState: {} });
-    if (!targetId) {
-      orca.notify("error", "无法创建日记流面板", { title: "日记流" });
-      return;
+    var existed = orcaFindPanelId(orca.state.panels);
+    var targetId = existed;
+    if (existed) {
+      // 已存在：记住当前宽度（用户可能拖动过）
+      orcaRememberPanelWidth(existed);
+    } else {
+      targetId = orca.nav.addTo(active, "right", { view: ORCA_PANEL_TYPE, viewArgs: {}, viewState: {} });
+      if (!targetId) {
+        orca.notify("error", "无法创建日记流面板", { title: "日记流" });
+        return;
+      }
+      // 新建：应用保存过的宽度（无则默认加宽）
+      dfGetData(DF_PANEL_W_KEY).then(function (v) {
+        var w = typeof v === "number" ? v : parseFloat(v);
+        if (!isNaN(w) && w > 0.1 && w < 0.9) orcaApplyPanelWidth(targetId, w);
+        else orcaApplyPanelWidth(targetId, DF_PANEL_W_DEFAULT);
+      });
     }
     orca.nav.goTo(ORCA_PANEL_TYPE, {}, targetId);
     setTimeout(function () { try { orca.nav.switchFocusTo(targetId); } catch (e) {} }, 80);
