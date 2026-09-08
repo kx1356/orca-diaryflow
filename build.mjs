@@ -161,7 +161,11 @@ const extraCss = [
   ".mom-empty-title { font-size: 16px; font-weight: 600; margin: 0 0 8px; color: var(--b3-theme-on-surface, #24292f); }",
   ".mom-empty-sub { font-size: 13px; line-height: 1.7; margin: 0 0 6px; color: var(--b3-theme-on-surface-light, #6b7280); }",
   ".mom-empty-hint { font-size: 12px; line-height: 1.7; margin: 0 0 20px; color: var(--b3-theme-on-surface-light, #6b7280); opacity: 0.8; }",
-  ".mom-empty-btn { margin-top: 4px; }"
+  ".mom-empty-btn { margin-top: 4px; }",
+  "/* ---- 内容占满面板（适配宽面板，覆盖思源窄栏 73%/居中限制） ---- */",
+  ".orca-df-scope .mom-list { align-items: stretch; padding-left: 16px; padding-right: 16px; }",
+  ".orca-df-scope .mom-filter-bar, .orca-df-scope .mom-pin-strip { width: 100%; }",
+  ".orca-df-scope .north-luna-moments-item { width: 100%; }"
 ].join("\n");
 const allCss = css + extraCss;
 
