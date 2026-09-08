@@ -1,0 +1,1 @@
+<svg class="icon" style="width:12px;height:12px;"><use xlink:href="#iconClose"></use></svg>

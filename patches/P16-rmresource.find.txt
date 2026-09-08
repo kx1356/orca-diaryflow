@@ -1,0 +1,2 @@
+
+            <button class="mom-cover-tool" data-act="resource" title="\u4ECE\u8D44\u6E90\u5E93\u9009\u62E9">${ico("image")}<span>\u8D44\u6E90</span></button>

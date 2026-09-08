@@ -1,0 +1,2 @@
+          <input type="text" class="mom-publish-inp mom-publish-info-loc" data-location placeholder="\u5730\u70B9..." value="${esc(d.location)}">
+          <input type="text" class="mom-publish-inp mom-publish-info-tags" data-tags placeholder="\u6807\u7B7E\uff08\u7528\u9017\u53F7\u3001\u7A7A\u683C\u6216 # \u5206\u9694\uff09" value="${esc((d.tags || []).join(", "))}">

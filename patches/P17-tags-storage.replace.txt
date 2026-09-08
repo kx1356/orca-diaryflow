@@ -1,0 +1,2 @@
+        location: m.location || "",
+        tags: Array.isArray(m.tags) ? m.tags.filter(Boolean).slice(0, 20) : []

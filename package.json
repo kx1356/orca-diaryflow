@@ -1,0 +1,12 @@
+{
+  "name": "orca-diaryflow",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "日记流：清爽的记录与回顾视图，支持图文与评论互动（Orca Note 版）",
+  "author": "kx1356",
+  "private": true,
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "valtio": "^1.13.2"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "df-test",
+  "private": true,
+  "dependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

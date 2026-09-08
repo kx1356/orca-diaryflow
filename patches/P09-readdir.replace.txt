@@ -1,0 +1,9 @@
+    async function openResourcePicker(ctx) {
+      const names = [];
+      try {
+        const list = await globalThis.__DF_ASSETS.listMedia();
+        const all = (list || []).slice();
+        await Promise.all(all.map((n) => globalThis.__DF_ASSETS.load(ASSET_PREFIX + n).catch(() => null)));
+        all.forEach((n) => names.push(n));
+      } catch (e) {
+      }

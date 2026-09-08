@@ -1,0 +1,10 @@
+    async function uploadDiaryflowFile(file) {
+      const ext = (file.name && file.name.match(/\.([a-z0-9]+)$/i) || [, "bin"])[1].toLowerCase();
+      const name = `df_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      try {
+        return await globalThis.__DF_ASSETS.save(file, name);
+      } catch (e) {
+        console.error("[orca-diaryflow] asset save failed", e);
+      }
+      return null;
+    }

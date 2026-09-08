@@ -1,0 +1,2 @@
+        const ids = { pin: "iconPin", edit: "iconEdit", trash: "iconTrashcan", clock: "iconClock", mark: "iconMark" };
+        svg = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><use xlink:href="#${ids[dataAction]}"></use></svg>`;

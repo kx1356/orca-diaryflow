@@ -1,0 +1,3 @@
+      const video = document.createElement("video");
+      video.src = src;
+      video.controls = true;

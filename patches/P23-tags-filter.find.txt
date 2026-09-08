@@ -1,0 +1,4 @@
+        if (f.kw) {
+          const t = (it.text || "").toLowerCase();
+          if (!t.includes(f.kw.toLowerCase())) return false;
+        }

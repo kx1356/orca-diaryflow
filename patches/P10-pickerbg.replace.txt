@@ -1,0 +1,1 @@
+      <div class="mom-picker-grid">${imgs.length ? imgs.map((n) => `<button class="mom-picker-item" data-path="${esc(n)}" title="${esc(n)}" style="background-image:url(&quot;${esc(ASSET_PREFIX + n)}&quot;)"></button>`).join("") : '<div class="mom-empty">\u6682\u65E0\u53EF\u7528\u56FE\u7247</div>'}</div>

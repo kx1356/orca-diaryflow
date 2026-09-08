@@ -1,0 +1,6 @@
+        for (let __i = 0; __i < (it.images || []).length; __i++) {
+          const __ref = it.images[__i];
+          const src = await (globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.toDataUrl(__ref) : Promise.resolve(__ref));
+          lines.push(`
+![\u56FE${__i + 1}](${src})`);
+        }

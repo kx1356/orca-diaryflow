@@ -1,0 +1,2 @@
+        d.location = q("[data-location]").value.trim();
+        d.tags = (q("[data-tags]").value || "").split(/[,\uFF0C\s]+/).map((t) => t.replace(/^#/, "").trim()).filter(Boolean).slice(0, 20);

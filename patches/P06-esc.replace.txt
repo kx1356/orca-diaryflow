@@ -1,0 +1,4 @@
+    function esc(s) {
+      const __r = globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.resolve(s) : s;
+      return String(__r == null ? "" : __r).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }

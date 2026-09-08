@@ -1,0 +1,2 @@
+
+            <button class="mom-cover-tool" data-act="upload" title="\u4E0A\u4F20\u672C\u5730\u56FE\u7247">${ico("upload")}<span>\u4E0A\u4F20</span></button>

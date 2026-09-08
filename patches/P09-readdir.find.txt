@@ -1,0 +1,13 @@
+    async function openResourcePicker(ctx) {
+      const token = window.siyuan && siyuan.config && siyuan.config.api && siyuan.config.api.token || "";
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Token " + token;
+      const names = [];
+      try {
+        const resp = await fetch("/api/file/readDir", { method: "POST", headers, body: JSON.stringify({ path: ASSET_DIR }) });
+        const result = await resp.json();
+        if (result.code === 0 && Array.isArray(result.data)) {
+          result.data.filter((e) => !e.isDir).forEach((e) => names.push(e.name));
+        }
+      } catch (e) {
+      }

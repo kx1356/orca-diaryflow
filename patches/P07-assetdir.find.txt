@@ -1,0 +1,12 @@
+    const ASSET_DIR = "/data/widgets/diaryflow-assets/";
+    const ASSET_URL = "/widgets/diaryflow-assets/";
+    async function ensureAssetDir() {
+      const fd = new FormData();
+      fd.append("path", ASSET_DIR);
+      fd.append("isDir", "true");
+      fd.append("file", new Blob([]), "");
+      try {
+        await fetch("/api/file/putFile", { method: "POST", body: fd });
+      } catch (e) {
+      }
+    }

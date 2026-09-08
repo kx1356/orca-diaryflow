@@ -1,0 +1,10 @@
+        if (f.kw) {
+          const kw = String(f.kw).toLowerCase();
+          const t = (((it.text || "") + " " + ((it.tags || []).join(" "))) + "").toLowerCase();
+          if (kw.startsWith("#")) {
+            const tagOnly = ((it.tags || []).map((g) => "#" + g).join(" ")).toLowerCase();
+            if (!tagOnly.includes(kw)) return false;
+          } else if (!t.includes(kw)) {
+            return false;
+          }
+        }

@@ -1,0 +1,2 @@
+        (it.images || []).forEach((src, i) => lines.push(`
+![\u56FE${i + 1}](${src})`));

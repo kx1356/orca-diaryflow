@@ -1,0 +1,11 @@
+    var ICONS = {
+      upload: "iconUpload",
+      image: "iconImage",
+      calendar: "iconCalendar",
+      trash: "iconTrashcan",
+      settings: "iconSettings",
+      edit: "iconEdit",
+      pin: "iconPin",
+      clock: "iconClock",
+      mark: "iconMark"
+    };

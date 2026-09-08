@@ -1,0 +1,3 @@
+      const video = document.createElement("video");
+      video.src = globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.resolve(src) : src;
+      video.controls = true;

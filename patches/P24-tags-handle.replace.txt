@@ -1,0 +1,10 @@
+        case "search-tag": {
+          const t = btn.getAttribute("data-tag");
+          if (t) {
+            ctx.filters.kw = "#" + t;
+            ctx.showMessage && ctx.showMessage("已按标签过滤 #" + t);
+            ctx.reApp();
+          }
+          break;
+        }
+        case "like": {

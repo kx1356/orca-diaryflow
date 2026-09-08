@@ -1,0 +1,6 @@
+    function overlayBase(cls) {
+      const div = document.createElement("div");
+      const dark = globalThis.__DF_IS_DARK ? globalThis.__DF_IS_DARK() : false;
+      div.className = "mom-overlay orca-df-scope" + (dark ? " orca-df-dark" : "") + " " + (cls || "");
+      return div;
+    }

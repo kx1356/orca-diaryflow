@@ -1,0 +1,16 @@
+    async function uploadDiaryflowFile(file) {
+      await ensureAssetDir();
+      const ext = (file.name && file.name.match(/\.([a-z0-9]+)$/i) || [, "bin"])[1].toLowerCase();
+      const name = `df_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const fd = new FormData();
+      fd.append("path", ASSET_DIR + name);
+      fd.append("file", file, name);
+      fd.append("isDir", "false");
+      try {
+        const resp = await fetch("/api/file/putFile", { method: "POST", body: fd });
+        const json = await resp.json().catch(() => null);
+        if (json && json.code === 0) return ASSET_URL + name;
+      } catch (e) {
+      }
+      return null;
+    }

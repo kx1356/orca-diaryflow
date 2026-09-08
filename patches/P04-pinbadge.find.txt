@@ -1,0 +1,1 @@
+      const pinBadge = it.pinned ? `<div class="north-luna-moments-pin-badge" title="\u5DF2\u7F6E\u9876"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><use xlink:href="#iconPin"></use></svg></div>` : "";

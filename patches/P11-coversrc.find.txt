@@ -1,0 +1,1 @@
+          setCover(ctx, ASSET_URL + item.dataset.path);

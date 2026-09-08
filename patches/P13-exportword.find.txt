@@ -1,0 +1,12 @@
+      const body = items.map((it) => {
+        const meta = metaLine(it);
+        const imgs = (it.images || []).map((src) => `<div style="margin:6px 0"><img src="${src}" style="max-width:100%"></div>`).join("");
+        return `<div style="margin:0 0 18px">
+        <div style="color:#666">${esc(fmtDisplay(it.created || ""))}</div>
+        ${meta ? `<div style="color:#888">${esc(meta)}</div>` : ""}
+        <div style="white-space:pre-wrap">${esc(it.text || "")}</div>
+        ${imgs}
+        ${it.link ? `<div style="color:#1662af"><a href="${esc(it.link)}">${esc(it.link)}</a></div>` : ""}
+        ${it.comments && it.comments.length ? `<div style="background:#f2f2f2;padding:6px 8px;margin-top:6px">${it.comments.map((c) => `${esc(c.name || "\u6211")}\uFF1A${esc(c.text)}`).join("<br>")}</div>` : ""}
+      </div>`;
+      }).join("\n");

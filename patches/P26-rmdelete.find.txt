@@ -1,0 +1,2 @@
+
+            <button class="mom-cover-tool mom-cover-tool-danger" data-act="delete" title="\u5220\u9664\u5E76\u6062\u590D\u9ED8\u8BA4">${ico("trash")}<span>\u5220\u9664</span></button>

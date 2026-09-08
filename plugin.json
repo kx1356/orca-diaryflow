@@ -1,0 +1,22 @@
+{
+    "name": "orca-diaryflow",
+    "author": "kx1356",
+    "url": "",
+    "version": "0.1.0",
+    "minAppVersion": "2.10.0",
+    "script": "index.js",
+    "description": {
+        "default": "Moments-style diary feed with images, comments and calendar review for Orca Note",
+        "zh_CN": "日记流：清爽的记录与回顾视图，支持图文与评论互动"
+    },
+    "displayName": {
+        "default": "日记流",
+        "zh_CN": "日记流"
+    },
+    "icon": "icon.png",
+    "backends": [],
+    "i18n": [
+        "zh_CN",
+        "en_US"
+    ]
+}
