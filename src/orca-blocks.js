@@ -1,6 +1,7 @@
 // ============================================================
 // src/orca-blocks.js — 日记流深融合虎鲸：块存储 / 查询 / 迁移
-// 主存：日记页子块 + 固定标签「日记流」；插件侧只留配置与评论索引
+// 主存：日记页子块 + 固定标签「日记流」
+// 插件侧：配置 / 置顶 / 点赞；评论主存为条目下带 df.comment 的子块
 // ============================================================
 
 var DF_TAG = "日记流";
@@ -10,8 +11,16 @@ var DF_MIGRATED_KEY = "moments-migrated";
 var DF_TUTORIAL_KEY = "tutorial-inserted-v1"; // 兼容旧标记；现以 dismissed / blockId 为准
 var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
 var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
+/** 使用说明正文版本：改 DF_TUTORIAL_TEXT 时必须递增，已有说明块会按此同步 */
+var DF_TUTORIAL_CONTENT_VER = "0.3.7";
+var DF_TUTORIAL_CONTENT_VER_KEY = "tutorial-content-ver";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
+var DF_ARCHIVED_PROP = "df.archived";
+var DF_COMMENT_PROP = "df.comment";
+var DF_COMMENT_ID_PROP = "df.commentId";
+var DF_COMMENT_AUTHOR_PROP = "df.commentAuthor";
+var DF_COMMENT_TIME_PROP = "df.commentTime";
 var DF_PROP_TEXT = 1; // PropType.Text
 
 var DF_TUTORIAL_TITLE = "日记流 · 使用说明";
@@ -22,13 +31,16 @@ var DF_TUTORIAL_TEXT = [
   "本条由日记流插件自动置顶写入今日日记；手动删除后不再自动出现。",
   "—— 基本用法 ——",
   "右下角「+」：在今日日记新建一条，并跳转虎鲸编辑",
-  "点卡片正文或「打开」：在虎鲸中深度编辑该条目",
+  "点卡片正文或「编辑」：在虎鲸中编辑该条目（时间线不扁改正文）",
   "封面区：设置封面、头像与签名",
   "底栏「地点」：写入正文末行「地点：…」，并同步属性",
-  "「⋯」展开：置顶、改标签、打开虎鲸、删除",
-  "FAB 标签按钮：按用户标签筛选时间线；同步按钮可手动刷新",
+  "评论：写入该条目下的虎鲸子块，可在日记页看到",
+  "「⋯」展开：置顶、归档、改标签、打开虎鲸、删除（进回收站）",
+  "FAB：标签筛选、月份大纲、回收站、归档柜；列表底部可「加载更多」",
   "—— 重要规则 ——",
   "只有带「日记流」标签的日记块才会进入时间线",
+  "月份大纲可按年份定位，再点月份跳到时间线对应分组",
+  "归档后主时间线隐藏，块仍在日记页；可在归档柜取消归档",
   "日记流以展示为主；正文编辑以虎鲸日记页为准，改完会自动同步",
   "条目日期跟随所属日记页；换日期请用卡片改时间（会移动到对应日记）"
 ].join("\n");
@@ -773,6 +785,35 @@ function dfIsMediaBlock(c) {
   return repr.type === "image" || repr.type === "video";
 }
 
+/** 评论子块：属性 df.comment=1（或历史 #评论），不进正文、不成独立卡片 */
+function dfIsCommentBlock(c) {
+  if (!c) return false;
+  if (dfHasTag(c, "评论")) return true;
+  var v = dfProp(c, DF_COMMENT_PROP);
+  return v === true || v === 1 || v === "1" || v === "true";
+}
+
+function dfIsSkippableEntryChild(c) {
+  return dfIsMediaBlock(c) || dfIsCommentBlock(c) || dfHasTag(c, DF_TAG);
+}
+
+function dfGenCommentId() {
+  return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function dfCommentDisplayText(name, text) {
+  var n = String(name || "").trim() || "我";
+  var t = String(text || "").trim();
+  return n + "：" + t;
+}
+
+function dfParseCommentDisplayText(raw) {
+  var s = String(raw || "").trim();
+  var m = s.match(/^([^：:]{1,32})[：:]([\s\S]*)$/);
+  if (m) return { name: m[1].trim(), text: m[2].trim() };
+  return { name: "", text: s };
+}
+
 function dfBlockRepr(block) {
   var repr = (block && (block._repr || block.repr)) || {};
   if (!repr.type) {
@@ -875,6 +916,7 @@ async function dfAppendEntryMarkdown(block, depth, lines, opts) {
   opts = opts || {};
   if (!block) return;
   if (dfIsMediaBlock(block)) return;
+  if (dfIsCommentBlock(block)) return;
   if (!opts.isRoot && dfHasTag(block, DF_TAG)) return;
 
   await dfPrefetchRefTargets(block);
@@ -908,6 +950,9 @@ async function dfAppendEntryMarkdown(block, depth, lines, opts) {
     lines.push(pad + "〔" + String(type) + "〕");
   }
 
+  // shallow：只收根 + 直接子行，不进孙块（feed 列表用）
+  if (opts.maxDepth != null && !opts.isRoot && depth >= opts.maxDepth) return;
+
   var kids = await dfEnsureChildrenLoaded(block);
   // 无论父块是 text 还是 ul/ol，进入子级都加深一层（修复嵌套仍平铺）
   var childDepth = opts.isRoot ? 0 : depth + 1;
@@ -915,9 +960,10 @@ async function dfAppendEntryMarkdown(block, depth, lines, opts) {
   for (var i = 0; i < kids.length; i++) {
     var c = orca.state.blocks[kids[i]];
     if (!c || dfIsMediaBlock(c)) continue;
+    if (dfIsCommentBlock(c)) continue;
     if (dfHasTag(c, DF_TAG)) continue;
     var ct = dfBlockRepr(c).type || "text";
-    var childOpts = { isRoot: false };
+    var childOpts = { isRoot: false, maxDepth: opts.maxDepth, rootTags: opts.rootTags };
     if (ct === "ol") {
       olIdx += 1;
       childOpts.olIndex = olIdx;
@@ -939,18 +985,39 @@ function dfSplitEntryLines(text) {
     });
 }
 
-/** 收集条目正文：首块 + 子树（含嵌套列表，不含图片） */
-async function dfCollectEntryText(block) {
+/**
+ * 收集条目正文：首块 + 子树（含嵌套列表，不含图片）
+ * opts.shallow：只读根与直接子块，不 dfLoadBlockTree（feed 列表）
+ */
+async function dfCollectEntryText(block, opts) {
   if (!block) return "";
-  var rooted = await dfLoadBlockTree(block.id);
-  if (rooted) block = rooted;
+  opts = opts || {};
+  var shallow = !!opts.shallow;
+  if (!shallow) {
+    var rooted = await dfLoadBlockTree(block.id);
+    if (rooted) block = rooted;
+  } else {
+    try { await dfEnsureChildrenLoaded(block); } catch (eSh) { /* ignore */ }
+  }
   await dfPrefetchRefTargets(block);
   var lines = [];
-  await dfAppendEntryMarkdown(block, 0, lines, { isRoot: true, rootTags: dfTagsOf(block) });
+  var mdOpts = { isRoot: true, rootTags: dfTagsOf(block) };
+  if (shallow) mdOpts.maxDepth = 0;
+  await dfAppendEntryMarkdown(block, 0, lines, mdOpts);
   return lines
     .filter(function (x, idx) { return x || idx === 0; })
     .join("\n")
     .replace(/^\n+|\n+$/g, "");
+}
+
+function dfEntryHasDeepChildren(block) {
+  var kids = (block && block.children) || [];
+  for (var i = 0; i < kids.length; i++) {
+    var c = orca.state.blocks && orca.state.blocks[kids[i]];
+    if (!c || dfIsSkippableEntryChild(c)) continue;
+    if ((c.children || []).length) return true;
+  }
+  return false;
 }
 
 /** 图片作为条目子块（lastChild），落在文字列表内 */
@@ -1077,9 +1144,23 @@ async function dfPromoteDiaryChild(block, parent) {
   return (await dfGetBlock(block.id)) || block;
 }
 
-async function dfBlockToFeedItem(block, overlay) {
+async function dfBlockToFeedItem(block, overlay, opts) {
+  opts = opts || {};
+  if (typeof block === "string" || typeof block === "number") {
+    block = await dfGetBlock(block);
+  }
   if (!block || !dfIsId(block.id)) return null;
+  if (!overlay) {
+    try {
+      var idx0 = await dfLoadIndex();
+      overlay = (idx0.overlays && idx0.overlays[String(block.id)]) || {};
+    } catch (eOv) {
+      overlay = {};
+    }
+  }
   overlay = overlay || {};
+  var shallow = !!opts.shallow && !opts.fullText;
+
   var created = block.created instanceof Date ? block.created : new Date(block.created || Date.now());
   // 日期以所属日记页为准；overlay.createdAt 仅在「与日记页同一天」时保留时分
   // （避免 save 把「写入当天」写进 overlay 后永远盖住日记页日期）
@@ -1096,7 +1177,7 @@ async function dfBlockToFeedItem(block, overlay) {
     created = ovt;
   }
   var tags = dfTagsOf(block);
-  var text = await dfCollectEntryText(block);
+  var text = await dfCollectEntryText(block, { shallow: shallow });
   text = dfStripInlineTagText(text, tags);
   var fromBlock = (await dfCollectImageSrcs(block)).map(dfResolveOrcaAssetSrc).filter(dfIsDisplayableImgSrc);
   var fromOverlay = (Array.isArray(overlay.images) ? overlay.images : [])
@@ -1106,6 +1187,12 @@ async function dfBlockToFeedItem(block, overlay) {
     .slice(0, 99);
   var images = fromBlock.length ? fromBlock : fromOverlay;
   var refs = dfOutgoingRefs(block);
+  var needsFullText = shallow && dfEntryHasDeepChildren(block);
+  var comments = await dfCollectCommentsFromBlock(block);
+  var commentsFromBlocks = comments.length > 0;
+  if (!commentsFromBlocks && Array.isArray(overlay.comments) && overlay.comments.length) {
+    comments = overlay.comments.slice();
+  }
   return {
     id: String(block.id),
     blockId: block.id,
@@ -1116,12 +1203,56 @@ async function dfBlockToFeedItem(block, overlay) {
     created: dfFmtCreated(created),
     createdAt: created.getTime(),
     liked: !!(overlay.liked || dfProp(block, "df.liked")),
-    comments: Array.isArray(overlay.comments) ? overlay.comments : [],
+    comments: comments,
+    commentsFromBlocks: commentsFromBlocks,
+    needsCommentMigrate: !commentsFromBlocks && Array.isArray(overlay.comments) && overlay.comments.length > 0,
     pinned: !!(overlay.pinned || dfProp(block, "df.pinned")),
+    archived: dfIsArchived(block, overlay),
     location: dfResolveLocation(block, overlay),
     tags: tags,
-    refs: refs
+    refs: refs,
+    needsFullText: !!needsFullText
   };
+}
+
+function dfIsArchivedFlag(v) {
+  return v === true || v === 1 || v === "1" || v === "true";
+}
+
+function dfIsArchived(block, overlay) {
+  if (overlay && dfIsArchivedFlag(overlay.archived)) return true;
+  return dfIsArchivedFlag(dfProp(block, DF_ARCHIVED_PROP));
+}
+
+/** 归档 / 取消归档：双写属性 df.archived + overlay；归档时顺带取消置顶 */
+async function setEntryArchived(blockId, archived) {
+  var id = dfBlockId(blockId);
+  if (!id) throw new Error("无效 blockId");
+  var on = !!archived;
+  var patch = { archived: on };
+  if (on) patch.pinned = false;
+  await setOverlay(id, patch);
+
+  await dfWithEditor(async function () {
+    if (on) {
+      await dfEditorCommand("core.editor.setProperties", null, [id], [
+        { name: DF_ARCHIVED_PROP, type: DF_PROP_TEXT, value: "1" }
+      ]);
+      try {
+        await dfEditorCommand("core.editor.deleteProperties", null, [id], ["df.pinned"]);
+      } catch (ePin) { /* ignore */ }
+    } else {
+      try {
+        await dfEditorCommand("core.editor.deleteProperties", null, [id], [DF_ARCHIVED_PROP]);
+      } catch (eDel) { /* ignore */ }
+    }
+  });
+  try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
+  return { blockId: id, archived: on };
+}
+
+async function listArchivedFeed(opts) {
+  return listFeed(Object.assign({}, opts || {}, { archivedOnly: true, skipHeal: true }));
 }
 
 function dfResolveLocation(block, overlay) {
@@ -1145,7 +1276,7 @@ async function dfSyncLocationOverlay(block, index) {
   // 属性优先：有属性用属性；属性空但 overlay 有则保留 overlay（稍后 update 会双写）
   if (!propLoc) return;
   index.overlays[key] = Object.assign({}, ov, { location: propLoc });
-  try { await dfSaveIndex(index); } catch (e) { /* ignore */ }
+  try { await dfSaveIndexQueued(index); } catch (e) { /* ignore */ }
 }
 
 async function dfLoadIndex() {
@@ -1165,8 +1296,34 @@ async function dfLoadIndex() {
   }
 }
 
+/** 索引写串行：避免 pin/评论/地点/ctx.save 并发 RMW 丢更新 */
+var dfIndexChain = Promise.resolve();
+function dfEnqueueIndex(task) {
+  var run = dfIndexChain.then(function () {
+    return task();
+  });
+  dfIndexChain = run.then(function () { /* keep chain */ }, function () { /* keep chain */ });
+  return run;
+}
+
 async function dfSaveIndex(idx) {
   await orca.plugins.setData(orcaPluginName, DF_INDEX_KEY, JSON.stringify(idx || { overlays: {} }));
+}
+
+async function dfSaveIndexQueued(idx) {
+  return dfEnqueueIndex(async function () {
+    await dfSaveIndex(idx);
+  });
+}
+
+/** mutator(index) 可同步或 async；在同一把锁内 load→mutate→save */
+async function dfMutateIndex(mutator) {
+  return dfEnqueueIndex(async function () {
+    var index = await dfLoadIndex();
+    var result = await mutator(index);
+    await dfSaveIndex(index);
+    return result;
+  });
 }
 
 /** 搜索命中 ID → 日记流根块 ID（含子块命中向上找父） */
@@ -1295,9 +1452,13 @@ async function listFeed(opts) {
 
   var index = await dfLoadIndex();
   var items = [];
-  var skipHeal = !!opts.skipHeal;
+  // 默认不 heal：读 feed / 标签栏不得改日记结构；显式 skipHeal:false 或 healFeed() 才写库
+  var skipHeal = opts.skipHeal !== false;
   var preferLive = opts.preferLive === true;
   var freezeState = !!opts.freezeState;
+  var fullText = opts.fullText === true;
+  var archivedOnly = opts.archivedOnly === true;
+  var includeArchived = opts.includeArchived === true || archivedOnly;
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
     // 后台同步时优先用内存中的实时块，避免用后端快照盖掉正在编辑的内容（编辑器跳动）
@@ -1318,7 +1479,7 @@ async function listFeed(opts) {
         if (oldOv) {
           index.overlays[String(b.id)] = Object.assign({}, index.overlays[String(b.id)] || {}, oldOv);
           delete index.overlays[String(beforeId)];
-          try { await dfSaveIndex(index); } catch (eOv) { /* ignore */ }
+          try { await dfSaveIndexQueued(index); } catch (eOv) { /* ignore */ }
         }
       }
     }
@@ -1364,8 +1525,18 @@ async function listFeed(opts) {
       try { await dfSyncLocationOverlay(b, index); } catch (eLoc) { /* ignore */ }
     }
     if (b && b.id && !preferLive && !freezeState) orca.state.blocks[b.id] = b;
-    var item = await dfBlockToFeedItem(b, index.overlays[String(b.id)]);
+    var item = await dfBlockToFeedItem(b, index.overlays[String(b.id)], {
+      fullText: fullText,
+      shallow: !fullText,
+      _feedList: true
+    });
     if (item) {
+      var archived = !!item.archived;
+      if (archivedOnly) {
+        if (!archived) continue;
+      } else if (!includeArchived && archived) {
+        continue;
+      }
       items.push(item);
       // 清掉与日记页不同日的误写 createdAt（常见于批量写入后 save 把「今天」落盘）
       if (!skipHeal && b && b.id) {
@@ -1385,7 +1556,7 @@ async function listFeed(opts) {
   if (index.__dfCreatedAtHealed) {
     try {
       delete index.__dfCreatedAtHealed;
-      await dfSaveIndex(index);
+      await dfSaveIndexQueued(index);
     } catch (eHealSave) { /* ignore */ }
   }
   items.sort(function (a, b) {
@@ -1393,6 +1564,12 @@ async function listFeed(opts) {
     return (b.createdAt || 0) - (a.createdAt || 0);
   });
   return { items: items, index: index };
+}
+
+/** 显式修复：跑 heal-on-read（结构/图推送/地点对齐）。平时读路径勿调用。 */
+async function healFeed(opts) {
+  opts = Object.assign({}, opts || {}, { skipHeal: false });
+  return listFeed(opts);
 }
 
 function dfSleep(ms) {
@@ -1551,16 +1728,24 @@ async function createEntry(opts) {
     }
   }
 
-  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.comments || opts.isTutorial) {
+  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.isTutorial) {
     await setOverlay(newId, {
       location: opts.location || "",
       images: orcaImgs.length ? orcaImgs : (Array.isArray(opts.images) ? opts.images.slice(0, 9) : []),
       imagesPushedToOrca: orcaImgs.length > 0,
       liked: !!opts.liked,
       pinned: !!opts.pinned,
-      comments: Array.isArray(opts.comments) ? opts.comments : [],
+      comments: [],
+      commentsStorage: "orca-blocks",
       isTutorial: !!opts.isTutorial
     });
+  }
+  if (Array.isArray(opts.comments) && opts.comments.length && dfIsId(newId)) {
+    for (var ci = 0; ci < opts.comments.length; ci++) {
+      try { await dfInsertCommentBlock(newId, opts.comments[ci]); } catch (eCmt) {
+        console.warn("[orca-diaryflow] createEntry comment failed", eCmt);
+      }
+    }
   }
   if (opts.location && String(opts.location).trim()) {
     try {
@@ -1603,7 +1788,8 @@ async function updateEntry(blockId, payload) {
     var textChildIds = [];
     for (var ci = 0; ci < kids.length; ci++) {
       var ch = orca.state.blocks[kids[ci]] || await dfGetBlock(kids[ci]);
-      if (ch && !dfIsMediaBlock(ch)) textChildIds.push(ch.id);
+      // 保留媒体与评论子块，禁止 flatten 时误删
+      if (ch && !dfIsMediaBlock(ch) && !dfIsCommentBlock(ch)) textChildIds.push(ch.id);
     }
     if (textChildIds.length) {
       try { await dfEditorCommand("core.editor.deleteBlocks", null, textChildIds); } catch (eDel) { /* ignore */ }
@@ -1647,17 +1833,19 @@ async function updateEntry(blockId, payload) {
   }
   if (payload.liked !== undefined) patch.liked = !!payload.liked;
   if (payload.pinned !== undefined) patch.pinned = !!payload.pinned;
-  if (payload.comments !== undefined) {
-    patch.comments = Array.isArray(payload.comments) ? payload.comments : [];
-  }
+  // 评论主存虎鲸子块；updateEntry 不再把 comments 写进 overlay
   if (payload.isTutorial !== undefined) patch.isTutorial = !!payload.isTutorial;
   await setOverlay(id, patch);
   return dfGetBlock(id);
 }
 
-async function deleteEntry(blockId) {
+/**
+ * 删除条目：默认先快照进回收站再删块（借鉴批注插件）；opts.skipTrash / opts.purge 则直接删。
+ */
+async function deleteEntry(blockId, opts) {
   var id = dfBlockId(blockId);
   if (!id) return false;
+  opts = opts || {};
   var wasTutorial = false;
   try {
     var index0 = await dfLoadIndex();
@@ -1667,13 +1855,22 @@ async function deleteEntry(blockId) {
     if (String(stored || "") === String(id)) wasTutorial = true;
   } catch (eMark) { /* ignore */ }
 
+  if (!opts.skipTrash && !opts.purge) {
+    try {
+      await dfMoveEntryToTrash(id);
+    } catch (eTrash) {
+      console.error("[orca-diaryflow] trash snapshot failed, cancel delete", eTrash);
+      throw new Error("回收站快照失败，已取消删除以保数据：" + (eTrash && eTrash.message || eTrash));
+    }
+  }
+
   await dfWithEditor(async function () {
     await dfEditorCommand("core.editor.deleteBlocks", null, [id]);
   });
   var index = await dfLoadIndex();
   if (index.overlays[String(id)]) {
     delete index.overlays[String(id)];
-    await dfSaveIndex(index);
+    await dfSaveIndexQueued(index);
   }
   if (wasTutorial) {
     try {
@@ -1688,14 +1885,153 @@ async function deleteEntry(blockId) {
 
 async function setOverlay(blockId, patch) {
   var id = String(dfBlockId(blockId) || blockId);
-  var index = await dfLoadIndex();
-  var next = Object.assign({}, index.overlays[id] || {}, patch || {});
-  Object.keys(patch || {}).forEach(function (k) {
-    if (patch[k] == null) delete next[k];
+  return dfMutateIndex(function (index) {
+    var next = Object.assign({}, index.overlays[id] || {}, patch || {});
+    Object.keys(patch || {}).forEach(function (k) {
+      if (patch[k] == null) delete next[k];
+    });
+    index.overlays[id] = next;
+    return index.overlays[id];
   });
-  index.overlays[id] = next;
-  await dfSaveIndex(index);
-  return index.overlays[id];
+}
+
+async function dfCollectCommentsFromBlock(block) {
+  if (!block || !dfIsId(block.id)) return [];
+  try { await dfEnsureChildrenLoaded(block); } catch (e0) { /* ignore */ }
+  var kids = (block.children || []);
+  var out = [];
+  for (var i = 0; i < kids.length; i++) {
+    var c = orca.state.blocks[kids[i]] || await dfGetBlock(kids[i]);
+    if (!c || !dfIsCommentBlock(c)) continue;
+    var raw = "";
+    try { raw = dfPlainContentText(c) || ""; } catch (e1) { raw = ""; }
+    if (!raw) {
+      try { raw = dfContentToMarkdown(c.content || [], c) || ""; } catch (e2) { raw = ""; }
+    }
+    var parsed = dfParseCommentDisplayText(raw);
+    var author = dfProp(c, DF_COMMENT_AUTHOR_PROP);
+    var time = dfProp(c, DF_COMMENT_TIME_PROP);
+    var cid = dfProp(c, DF_COMMENT_ID_PROP);
+    out.push({
+      id: cid != null && String(cid) ? String(cid) : String(c.id),
+      blockId: c.id,
+      name: author != null && String(author) ? String(author) : (parsed.name || "我"),
+      text: parsed.text || String(raw || "").trim(),
+      time: time != null && String(time) ? String(time) : dfFmtCreated(c.created instanceof Date ? c.created : new Date(c.created || Date.now()))
+    });
+  }
+  return out;
+}
+
+async function dfInsertCommentBlock(entryId, comment) {
+  var id = dfBlockId(entryId);
+  if (!id) throw new Error("无效 blockId");
+  comment = comment || {};
+  var cid = String(comment.id || dfGenCommentId());
+  var name = String(comment.name || "我").trim() || "我";
+  var text = String(comment.text || "").trim();
+  if (!text) throw new Error("评论不能为空");
+  var time = String(comment.time || dfFmtCreated(new Date()));
+  var display = dfCommentDisplayText(name, text);
+  var newId = null;
+  await dfWithEditor(async function () {
+    var root = orca.state.blocks[id] || { id: id };
+    newId = await dfEditorCommand(
+      "core.editor.insertBlock",
+      null,
+      root,
+      "lastChild",
+      dfMarkdownLineToFragments(display),
+      { type: "text" }
+    );
+    if (!dfIsId(newId)) throw new Error("插入评论块失败");
+    await dfEditorCommand("core.editor.setProperties", null, [newId], [
+      { name: DF_COMMENT_PROP, type: DF_PROP_TEXT, value: "1" },
+      { name: DF_COMMENT_ID_PROP, type: DF_PROP_TEXT, value: cid },
+      { name: DF_COMMENT_AUTHOR_PROP, type: DF_PROP_TEXT, value: name },
+      { name: DF_COMMENT_TIME_PROP, type: DF_PROP_TEXT, value: time }
+    ]);
+  });
+  try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
+  return {
+    id: cid,
+    blockId: newId,
+    name: name,
+    text: text,
+    time: time
+  };
+}
+
+/** 新增评论：写入条目下的虎鲸子块，并清空 overlay.comments（避免双源） */
+async function addComment(entryId, comment) {
+  var saved = await dfInsertCommentBlock(entryId, comment);
+  await setOverlay(entryId, {
+    comments: [],
+    commentsStorage: "orca-blocks"
+  });
+  return saved;
+}
+
+async function deleteComment(entryId, commentId) {
+  var id = dfBlockId(entryId);
+  if (!id) throw new Error("无效 blockId");
+  var want = String(commentId || "");
+  if (!want) return false;
+  var block = await dfGetBlock(id);
+  var list = await dfCollectCommentsFromBlock(block || { id: id });
+  var hit = null;
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].id) === want || String(list[i].blockId) === want) {
+      hit = list[i];
+      break;
+    }
+  }
+  if (!hit || !dfIsId(hit.blockId)) {
+    // 兼容尚未迁移的 overlay 评论：只改 overlay
+    await dfMutateIndex(function (index) {
+      var key = String(id);
+      var ov = index.overlays[key] || {};
+      var next = (Array.isArray(ov.comments) ? ov.comments : []).filter(function (c) {
+        return String(c && c.id) !== want;
+      });
+      index.overlays[key] = Object.assign({}, ov, { comments: next });
+    });
+    return true;
+  }
+  await dfWithEditor(async function () {
+    await dfEditorCommand("core.editor.deleteBlocks", null, [hit.blockId]);
+  });
+  try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
+  try { delete orca.state.blocks[hit.blockId]; } catch (e1) { /* ignore */ }
+  return true;
+}
+
+/** 把 overlay 里的旧评论一次性迁到虎鲸子块 */
+async function migrateEntryComments(entryId) {
+  var id = dfBlockId(entryId);
+  if (!id) return { migrated: 0 };
+  var index = await dfLoadIndex();
+  var ov = (index.overlays && index.overlays[String(id)]) || {};
+  var pending = Array.isArray(ov.comments) ? ov.comments.filter(Boolean) : [];
+  var existing = await dfCollectCommentsFromBlock((await dfGetBlock(id)) || { id: id });
+  if (existing.length) {
+    if (pending.length) {
+      await setOverlay(id, { comments: [], commentsStorage: "orca-blocks" });
+    }
+    return { migrated: 0, already: existing.length };
+  }
+  if (!pending.length) return { migrated: 0 };
+  var n = 0;
+  for (var i = 0; i < pending.length; i++) {
+    try {
+      await dfInsertCommentBlock(id, pending[i]);
+      n++;
+    } catch (e) {
+      console.warn("[orca-diaryflow] migrate comment failed", pending[i] && pending[i].id, e);
+    }
+  }
+  await setOverlay(id, { comments: [], commentsStorage: "orca-blocks" });
+  return { migrated: n };
 }
 
 /**
@@ -1725,26 +2061,58 @@ async function updateEntryTime(blockId, date) {
   return { block: block, moved: moved, createdAt: d.getTime() };
 }
 
-/** 地点：双写 overlay + 块属性 df.location，并写入正文末行「地点：XXX」 */
+function dfIsLocationLineText(s) {
+  s = String(s || "").trim();
+  return /^地点\s*[:：]/.test(s) || /^📍/.test(s);
+}
+
+/** 收集条目树中表示「地点：…」的文字块（不含媒体 / 独立日记流子条目） */
+async function dfCollectLocationLineBlocks(root) {
+  var found = [];
+  if (!root || !dfIsId(root.id)) return found;
+  async function walk(b, isRoot) {
+    if (!b) return;
+    if (dfIsMediaBlock(b)) return;
+    if (dfIsCommentBlock(b)) return;
+    if (!isRoot && dfHasTag(b, DF_TAG)) return;
+    var plain = "";
+    try { plain = dfPlainContentText(b) || ""; } catch (e0) { plain = ""; }
+    var md = "";
+    try { md = dfContentToMarkdown(b.content || [], b) || ""; } catch (e1) { md = ""; }
+    var line = String(plain || md || "").replace(/\r\n/g, "\n").trim();
+    // 单行地点块；或整段唯一一行是地点
+    if (line && dfIsLocationLineText(line.split("\n")[0]) && line.split("\n").filter(Boolean).length <= 1) {
+      found.push(b);
+    }
+    var kids = b.children || [];
+    if (kids.length) {
+      var need = kids.filter(function (cid) { return !(orca.state.blocks && orca.state.blocks[cid]); });
+      if (need.length) {
+        try {
+          var got = await orca.invokeBackend("get-blocks", need);
+          if (Array.isArray(got)) got.forEach(function (x) { if (x && x.id) orca.state.blocks[x.id] = x; });
+        } catch (e2) { /* ignore */ }
+      }
+      for (var i = 0; i < kids.length; i++) {
+        var c = orca.state.blocks[kids[i]] || await dfGetBlock(kids[i]);
+        await walk(c, false);
+      }
+    }
+  }
+  await walk(root, true);
+  return found;
+}
+
+/**
+ * 地点：双写 overlay + 块属性 df.location，并定向更新/插入「地点：」子块。
+ * 禁止删光子树再 flatten（会丢嵌套大纲）。
+ */
 async function updateEntryLocation(blockId, location) {
   var id = dfBlockId(blockId);
   if (!id) throw new Error("无效 blockId");
   var loc = String(location == null ? "" : location).trim();
 
   await setOverlay(id, { location: loc });
-
-  var block0 = await dfGetBlock(id);
-  var tags = dfNormalizeUserTags(dfTagsOf(block0 || {}));
-  var text = await dfCollectEntryText(block0 || { id: id });
-  text = dfStripInlineTagText(text, tags.concat([DF_TAG]));
-  var lines = dfSplitEntryLines(text);
-  while (lines.length) {
-    var last = String(lines[lines.length - 1] || "").trim();
-    if (/^地点\s*[:：]/.test(last) || /^📍\s*/.test(last)) lines.pop();
-    else break;
-  }
-  if (loc) lines.push("地点：" + loc);
-  if (!lines.length) lines = [""];
 
   await dfWithEditor(async function () {
     if (loc) {
@@ -1759,41 +2127,57 @@ async function updateEntryLocation(blockId, location) {
       }
     }
 
-    await dfEditorCommand("core.editor.setBlocksContent", null, [{
-      id: id,
-      content: lines[0] ? dfMarkdownLineToFragments(lines[0]) : [{ t: "t", v: "" }]
-    }], false);
-
     var block = await dfGetBlock(id);
-    var kids = (block && block.children) || [];
-    var textChildIds = [];
-    for (var ci = 0; ci < kids.length; ci++) {
-      var ch = orca.state.blocks[kids[ci]] || await dfGetBlock(kids[ci]);
-      if (ch && !dfIsMediaBlock(ch)) textChildIds.push(ch.id);
-    }
-    if (textChildIds.length) {
-      try { await dfEditorCommand("core.editor.deleteBlocks", null, textChildIds); } catch (eDel2) { /* ignore */ }
-    }
-    var root = orca.state.blocks[id] || { id: id };
-    for (var li = 1; li < lines.length; li++) {
+    var locBlocks = await dfCollectLocationLineBlocks(block || { id: id });
+    var lineText = loc ? ("地点：" + loc) : "";
+
+    if (!loc) {
+      var toDel = [];
+      for (var di = 0; di < locBlocks.length; di++) {
+        var db = locBlocks[di];
+        if (!db || !dfIsId(db.id)) continue;
+        if (db.id === id) {
+          // 根块整段就是地点行：清空内容，保留块与子树
+          await dfEditorCommand("core.editor.setBlocksContent", null, [{
+            id: id,
+            content: [{ t: "t", v: "" }]
+          }], false);
+        } else {
+          toDel.push(db.id);
+        }
+      }
+      if (toDel.length) {
+        try { await dfEditorCommand("core.editor.deleteBlocks", null, toDel); } catch (eDel2) { /* ignore */ }
+      }
+    } else if (locBlocks.length) {
+      var primary = locBlocks[0];
+      await dfEditorCommand("core.editor.setBlocksContent", null, [{
+        id: primary.id,
+        content: dfMarkdownLineToFragments(lineText)
+      }], false);
+      var extras = [];
+      for (var ei = 1; ei < locBlocks.length; ei++) {
+        if (locBlocks[ei] && locBlocks[ei].id && locBlocks[ei].id !== id) extras.push(locBlocks[ei].id);
+      }
+      if (extras.length) {
+        try { await dfEditorCommand("core.editor.deleteBlocks", null, extras); } catch (eEx) { /* ignore */ }
+      }
+    } else {
+      var root = orca.state.blocks[id] || { id: id };
       await dfEditorCommand(
         "core.editor.insertBlock",
         null,
         root,
         "lastChild",
-        dfMarkdownLineToFragments(lines[li]),
+        dfMarkdownLineToFragments(lineText),
         { type: "text" }
       );
-    }
-    try { await dfEditorCommand("core.editor.insertTag", null, id, DF_TAG); } catch (eTag) { /* ignore */ }
-    for (var ti = 0; ti < tags.length; ti++) {
-      try { await dfEditorCommand("core.editor.insertTag", null, id, tags[ti]); } catch (eT) { /* ignore */ }
     }
   });
 
   try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
-  var block = await dfGetBlock(id);
-  return { block: block, location: loc };
+  var blockOut = await dfGetBlock(id);
+  return { block: blockOut, location: loc };
 }
 
 function dfNormalizeUserTags(tags) {
@@ -1841,11 +2225,19 @@ async function updateEntryTags(blockId, tags) {
 }
 
 async function collectUserTags() {
-  var feed = await listFeed({});
+  // 只扫带 #日记流 的块标签，不跑 listFeed / heal / 收正文
+  var blocks = [];
+  try {
+    blocks = (await orca.invokeBackend("get-blocks-with-tags", [DF_TAG])) || [];
+  } catch (e) {
+    console.warn("[orca-diaryflow] collectUserTags get-blocks-with-tags failed", e);
+    blocks = [];
+  }
+  if (!Array.isArray(blocks)) blocks = [];
   var set = new Set();
-  feed.items.forEach(function (it) {
-    (it.tags || []).forEach(function (t) { if (t) set.add(t); });
-  });
+  for (var i = 0; i < blocks.length; i++) {
+    dfNormalizeUserTags(dfTagsOf(blocks[i])).forEach(function (t) { set.add(t); });
+  }
   return Array.from(set).sort();
 }
 
@@ -2048,10 +2440,11 @@ async function ensureTutorialInserted() {
   if (foundId) {
     var block = await dfGetBlock(foundId);
     var thin = await dfTutorialBodyIsThin(block);
-    var curText = "";
-    try { curText = await dfCollectEntryText(block); } catch (eCur) { curText = ""; }
-    var needRefresh = thin || String(curText || "").replace(/\r\n/g, "\n").trim() !== DF_TUTORIAL_TEXT.trim();
-    if (needRefresh) {
+    var storedVer = await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_CONTENT_VER_KEY);
+    var verStale = String(storedVer || "") !== DF_TUTORIAL_CONTENT_VER;
+    // 正文残缺，或插件升级导致说明文案版本落后 → 同步内嵌教程
+    // （说明块由插件维护；用户手动删除后走 dismissed，不再自动出现）
+    if (thin || verStale) {
       await updateEntry(foundId, {
         text: DF_TUTORIAL_TEXT,
         tags: ["教程"],
@@ -2059,6 +2452,7 @@ async function ensureTutorialInserted() {
         isTutorial: true,
         skipTagStrip: true
       });
+      await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_CONTENT_VER_KEY, DF_TUTORIAL_CONTENT_VER);
     } else {
       await setOverlay(foundId, { pinned: true, isTutorial: true });
     }
@@ -2076,7 +2470,13 @@ async function ensureTutorialInserted() {
     }
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(foundId));
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
-    return { skipped: false, repaired: !!thin || needRefresh, refreshed: needRefresh, blockId: foundId };
+    return {
+      skipped: false,
+      repaired: !!thin,
+      refreshed: !!(thin || verStale),
+      contentVer: DF_TUTORIAL_CONTENT_VER,
+      blockId: foundId
+    };
   }
 
   var created = await createEntry({
@@ -2093,8 +2493,9 @@ async function ensureTutorialInserted() {
     await setOverlay(newId, { pinned: true, isTutorial: true });
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(newId));
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_CONTENT_VER_KEY, DF_TUTORIAL_CONTENT_VER);
   }
-  return { skipped: false, created: true, blockId: newId };
+  return { skipped: false, created: true, contentVer: DF_TUTORIAL_CONTENT_VER, blockId: newId };
 }
 
 async function migrateMomentsRecords(loadLegacyFn) {
@@ -2110,10 +2511,10 @@ async function migrateMomentsRecords(loadLegacyFn) {
   }
   if (!legacy || !Array.isArray(legacy.items) || !legacy.items.length) {
     await orca.plugins.setData(orcaPluginName, DF_MIGRATED_KEY, "true");
-    var emptyIdx = await dfLoadIndex();
-    if (legacy && legacy.config) emptyIdx.config = legacy.config;
-    emptyIdx.migratedFromMoments = true;
-    await dfSaveIndex(emptyIdx);
+    await dfMutateIndex(function (emptyIdx) {
+      if (legacy && legacy.config) emptyIdx.config = legacy.config;
+      emptyIdx.migratedFromMoments = true;
+    });
     return { skipped: true, count: 0 };
   }
 
@@ -2123,38 +2524,68 @@ async function migrateMomentsRecords(loadLegacyFn) {
     console.warn("[orca-diaryflow] backup moments-records failed", e);
   }
 
-  var index = await dfLoadIndex();
-  if (legacy.config) index.config = legacy.config;
+  // 已按 legacyId 写入的条目：失败重试时跳过，避免重复块
+  var doneLegacy = {};
+  try {
+    var idx0 = await dfLoadIndex();
+    Object.keys(idx0.overlays || {}).forEach(function (k) {
+      var ov = idx0.overlays[k];
+      if (ov && ov.legacyId != null) doneLegacy[String(ov.legacyId)] = true;
+    });
+  } catch (eDone) { /* ignore */ }
+
   var count = 0;
+  var commentsNote =
+    "评论主存为条目下 df.comment 子块；旧 overlay 评论会在打开时间线时迁移。";
   for (var i = 0; i < legacy.items.length; i++) {
     var it = legacy.items[i];
     if (!it) continue;
+    var legacyKey = it.id != null ? String(it.id) : "";
+    if (legacyKey && doneLegacy[legacyKey]) continue;
     try {
       var date = it.createdAt ? new Date(it.createdAt) : new Date(String(it.created || "").replace(" ", "T"));
       if (isNaN(date.getTime())) date = new Date();
       var text = it.text || "";
-      if (it.location) text = text + (text ? "\n" : "") + "📍 " + it.location;
-      if (Array.isArray(it.images) && it.images.length) {
-        text = text + (text ? "\n" : "") + it.images.map(function (s) { return String(s); }).join("\n");
-      }
-      var block = await createEntry({ date: date, text: text, tags: it.tags || [] });
+      if (it.location) text = text + (text ? "\n" : "") + "地点：" + it.location;
+      // 图片进 overlay / 块，不再把 URL 当正文行内联
+      var imgs = Array.isArray(it.images) ? it.images.filter(Boolean).slice(0, 9) : [];
+      var block = await createEntry({
+        date: date,
+        text: text,
+        tags: it.tags || [],
+        images: imgs,
+        location: it.location || ""
+      });
       var bid = dfBlockId(block);
       if (bid) {
-        index.overlays[String(bid)] = {
+        var cmts = Array.isArray(it.comments) ? it.comments : [];
+        for (var ci = 0; ci < cmts.length; ci++) {
+          try { await dfInsertCommentBlock(bid, cmts[ci]); } catch (eC) {
+            console.warn("[orca-diaryflow] migrate comment on create failed", eC);
+          }
+        }
+        await setOverlay(bid, {
           liked: !!it.liked,
           pinned: !!it.pinned,
-          comments: Array.isArray(it.comments) ? it.comments : [],
+          comments: [],
           location: it.location || "",
-          legacyId: it.id
-        };
+          images: imgs,
+          imagesPushedToOrca: false,
+          legacyId: it.id,
+          commentsStorage: "orca-blocks"
+        });
+        if (legacyKey) doneLegacy[legacyKey] = true;
         count++;
       }
     } catch (e2) {
       console.warn("[orca-diaryflow] migrate item failed", it && it.id, e2);
     }
   }
-  index.migratedFromMoments = true;
-  await dfSaveIndex(index);
+  await dfMutateIndex(function (index) {
+    if (legacy.config) index.config = legacy.config;
+    index.migratedFromMoments = true;
+    index.commentsStorageNote = commentsNote;
+  });
   await orca.plugins.setData(orcaPluginName, DF_MIGRATED_KEY, "true");
   return { skipped: false, count: count };
 }
@@ -2166,19 +2597,27 @@ var OrcaBlocks = {
   TUTORIAL_DISMISSED_KEY: DF_TUTORIAL_DISMISSED_KEY,
   TUTORIAL_ID_KEY: DF_TUTORIAL_ID_KEY,
   listFeed: listFeed,
+  healFeed: healFeed,
   createEntry: createEntry,
   updateEntry: updateEntry,
   updateEntryTime: updateEntryTime,
   updateEntryLocation: updateEntryLocation,
   updateEntryTags: updateEntryTags,
   deleteEntry: deleteEntry,
+  setEntryArchived: setEntryArchived,
+  listArchivedFeed: listArchivedFeed,
   setOverlay: setOverlay,
+  addComment: addComment,
+  deleteComment: deleteComment,
+  migrateEntryComments: migrateEntryComments,
+  collectCommentsFromBlock: dfCollectCommentsFromBlock,
+  mutateIndex: dfMutateIndex,
   collectUserTags: collectUserTags,
   openEntry: openEntry,
   ensureTutorialInserted: ensureTutorialInserted,
   migrateMomentsRecords: migrateMomentsRecords,
   loadIndex: dfLoadIndex,
-  saveIndex: dfSaveIndex,
+  saveIndex: dfSaveIndexQueued,
   getBlock: dfGetBlock,
   blockToFeedItem: dfBlockToFeedItem,
   tagsOf: dfTagsOf,

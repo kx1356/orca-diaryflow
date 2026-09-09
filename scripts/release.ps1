@@ -47,6 +47,11 @@ function New-LocalReleaseZip {
   New-Item -ItemType Directory -Path (Join-Path $pluginRoot "dist") -Force | Out-Null
   Copy-Item -Path "dist/index.js" -Destination (Join-Path $pluginRoot "dist/index.js")
   Copy-Item -Path "package.json" -Destination (Join-Path $pluginRoot "package.json")
+  if (Test-Path "plugin.json") {
+    Copy-Item -Path "plugin.json" -Destination (Join-Path $pluginRoot "plugin.json")
+  } else {
+    throw "plugin.json must be included in the release archive root."
+  }
   Copy-Item -Path "LICENSE" -Destination (Join-Path $pluginRoot "LICENSE")
   Copy-Item -Path "README.md" -Destination (Join-Path $pluginRoot "README.md")
 

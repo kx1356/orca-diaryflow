@@ -2,7 +2,7 @@
     "name": "orca-diaryflow",
     "author": "kx1356",
     "url": "https://github.com/kx1356/orca-diaryflow",
-    "version": "0.3.2",
+    "version": "0.3.8",
     "minAppVersion": "2.10.0",
     "script": "index.js",
     "description": {
@@ -10,10 +10,10 @@
         "zh_CN": "日记流：朋友圈式时间线，深度编辑跳转虎鲸"
     },
     "displayName": {
-        "default": "日记流",
+        "default": "Diary Flow",
         "zh_CN": "日记流"
     },
-    "icon": "icon.png",
+    "icon": "icon.svg",
     "backends": [],
     "i18n": [
         "zh_CN",

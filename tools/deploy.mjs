@@ -1,9 +1,14 @@
 import { copyFileSync, mkdirSync, existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const DEST = "C:/Users/i5156/Documents/orca/plugins/orca-diaryflow";
+const DEST =
+  process.env.ORCA_DIARYFLOW_DEST ||
+  (process.env.ORCA_PLUGINS_DIR
+    ? join(process.env.ORCA_PLUGINS_DIR, "orca-diaryflow")
+    : join(homedir(), "Documents", "orca", "plugins", "orca-diaryflow"));
 
 mkdirSync(join(DEST, "dist"), { recursive: true });
 copyFileSync(join(ROOT, "plugin.json"), join(DEST, "plugin.json"));

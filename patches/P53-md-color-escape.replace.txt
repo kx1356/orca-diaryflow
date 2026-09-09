@@ -1,0 +1,6 @@
+      s = s.replace(/\u0000COLOR\u0000/g, (m, i) => {
+        const p = colorPlaces.shift() || { c: "", txt: "" };
+        const safeTxt = esc(p.txt);
+        if (!/^[#\w(),.\s%-]+$/.test(p.c)) return safeTxt;
+        return `<span style="color:${esc(p.c)}">${safeTxt}</span>`;
+      });

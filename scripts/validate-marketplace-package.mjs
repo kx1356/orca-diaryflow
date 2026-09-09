@@ -69,17 +69,26 @@ function readPngDimensions(filePath) {
 
 function getIconInfo() {
   const svgPath = path.join(repoRoot, "icon.svg");
+  const pngPath = path.join(repoRoot, "icon.png");
+
+  // awesome-orcanote 推荐 SVG；有 icon.svg 时必须走 icon_svg，避免审核仍看到 PNG
   if (fs.existsSync(svgPath)) {
     return {
       type: "svg",
       path: svgPath,
-      content: fs.readFileSync(svgPath, "utf8").trim(),
+      content: fs.readFileSync(svgPath, "utf8")
+        .replace(/<!--[\s\S]*?-->/g, "")
+        .replace(/>\s+</g, "><")
+        .replace(/\s{2,}/g, " ")
+        .trim(),
     };
   }
 
-  const pngPath = path.join(repoRoot, "icon.png");
   if (fs.existsSync(pngPath)) {
     const { width, height } = readPngDimensions(pngPath);
+    warnings.push(
+      "未找到 icon.svg，将使用 icon_png。CONTRIBUTING 推荐 SVG（`node scripts/minify-svg.js`）。",
+    );
     return {
       type: "png",
       path: pngPath,
@@ -167,6 +176,22 @@ if (!iconInfo) {
   );
 }
 
+const pluginJsonPath = path.join(repoRoot, "plugin.json");
+if (!fs.existsSync(pluginJsonPath)) {
+  errors.push("缺少 plugin.json（本地安装与 release zip 均需）");
+} else {
+  try {
+    const pluginJson = JSON.parse(fs.readFileSync(pluginJsonPath, "utf8"));
+    if (iconInfo?.type === "svg" && pluginJson.icon && pluginJson.icon !== "icon.svg") {
+      errors.push(
+        `已有 icon.svg，但 plugin.json.icon 为 \`${pluginJson.icon}\`；应设为 \`icon.svg\`（集市审核按此判断）。`,
+      );
+    }
+  } catch (e) {
+    errors.push(`plugin.json 无法解析：${e.message}`);
+  }
+}
+
 if (errors.length > 0) {
   console.error("市场提交流程校验失败：\n");
   for (const error of errors) {
@@ -196,6 +221,7 @@ const pluginEntry = {
   zip: `${repositoryUrl}/releases/download/v${version}/${zipFileName}`,
   translations: {
     zh: {
+      ...(isNonEmptyString(translationsZh.name) ? { name: translationsZh.name } : {}),
       description: translationsZh.description,
       category: translationsZh.category,
     },

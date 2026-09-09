@@ -1,6 +1,6 @@
 {
   "name": "orca-plugin-diaryflow",
-  "version": "0.3.2",
+  "version": "0.3.8",
   "type": "module",
   "description": "Moments-style diary feed for Orca Note: timeline of #日记流 blocks, cover/avatar, tags, location, and deep edit in Orca journals.",
   "author": "kx1356",
@@ -29,13 +29,13 @@
   },
   "orcaNoteMarketplace": {
     "id": "orca-diaryflow",
-    "name": "日记流",
+    "name": "Diary Flow",
     "category": "Productivity",
     "artifactName": "orca-diaryflow",
     "translations": {
       "zh": {
         "name": "日记流",
-        "description": "朋友圈式日记时间流：展示带 #日记流 标签的日记块，支持封面/头像、标签筛选、地点、置顶与评论；新建与深度编辑跳转虎鲸日记页。",
+        "description": "朋友圈式日记时间流：#日记流 标签日记块时间线，封面/头像、标签筛选、地点、置顶、评论入库、归档柜、回收站、月份大纲；新建与深度编辑跳转虎鲸日记页。",
         "category": "效率工具"
       },
       "en": {

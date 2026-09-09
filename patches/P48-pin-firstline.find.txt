@@ -3,3 +3,24 @@
           return `<button class="mom-pin-group" data-action="jump-mid" data-id="${id}" style="grid-template-columns:repeat(1,88px)">
         <div class="mom-pin-thumb mom-pin-thumb-text"><span class="mom-pin-text mom-pin-text-${mode}">${esc(raw)}</span></div>
       </button>`;
+        }
+        const single = imgs.length <= 1;
+        const cols = getCols(imgs.length);
+        const size = single ? 88 : 44;
+        const show = imgs.slice(0, 4);
+        const extra = imgs.length > 4 ? imgs.length - 4 : 0;
+        const cells = show.map((src, idx) => {
+          const more = idx === 3 && extra > 0 ? `<div class="mom-pin-thumb-more">+${extra}</div>` : "";
+          const wrap = single ? ' class="mom-pin-thumb mom-pin-thumb-single"' : ' class="mom-pin-thumb"';
+          const isVid = isVideoSrc(src);
+          const imgAttrs = isVid
+            ? `class="mom-pin-thumb-video" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-vthumb="${esc(src)}"`
+            : `src="${esc(src)}" loading="lazy"`;
+          return `<div${wrap}><img ${imgAttrs} alt="\u7F6E\u9876">${more}</div>`;
+        }).join("");
+        return `<button class="mom-pin-group" data-action="jump-mid" data-id="${id}" style="grid-template-columns:repeat(${cols},${size}px)">${cells}</button>`;
+      }).join("");
+      return `<div class="mom-pin-strip" title="\u70B9\u51FB\u67E5\u770B\u7F6E\u9876\u52A8\u6001">
+    <span class="mom-pin-strip-label">\u7F6E\u9876</span>
+    <div class="mom-pin-strip-thumbs">${groups}</div>
+  </div>`;

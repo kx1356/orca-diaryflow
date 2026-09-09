@@ -1,7 +1,28 @@
           const raw0 = String(m.text || "\u7F6E\u9876");
           const raw = raw0.split(/\r?\n/).map((s) => s.trim()).find((s) => s) || "\u7F6E\u9876";
-          const preview = raw.length > 40 ? raw.slice(0, 40) + "\u2026" : raw;
-          const mode = preview.length <= 10 ? "center" : "flow";
-          return `<button class="mom-pin-group" data-action="jump-mid" data-id="${id}" style="grid-template-columns:repeat(1,88px)">
-        <div class="mom-pin-thumb mom-pin-thumb-text"><span class="mom-pin-text mom-pin-text-${mode}">${esc(preview)}</span></div>
+          const preview = raw.length > 28 ? raw.slice(0, 28) + "\u2026" : raw;
+          return `<button type="button" class="mom-pin-group mom-pin-group-text" data-action="jump-mid" data-id="${id}" title="${esc(preview)}">
+        <span class="mom-pin-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></span>
+        <span class="mom-pin-title">${esc(preview)}</span>
       </button>`;
+        }
+        const single = imgs.length <= 1;
+        const cols = getCols(imgs.length);
+        const size = single ? 40 : 28;
+        const show = imgs.slice(0, 4);
+        const extra = imgs.length > 4 ? imgs.length - 4 : 0;
+        const cells = show.map((src, idx) => {
+          const more = idx === 3 && extra > 0 ? `<div class="mom-pin-thumb-more">+${extra}</div>` : "";
+          const wrap = single ? ' class="mom-pin-thumb mom-pin-thumb-single"' : ' class="mom-pin-thumb"';
+          const isVid = isVideoSrc(src);
+          const imgAttrs = isVid
+            ? `class="mom-pin-thumb-video" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-vthumb="${esc(src)}"`
+            : `src="${esc(src)}" loading="lazy"`;
+          return `<div${wrap}><img ${imgAttrs} alt="\u7F6E\u9876">${more}</div>`;
+        }).join("");
+        return `<button type="button" class="mom-pin-group mom-pin-group-media" data-action="jump-mid" data-id="${id}" style="grid-template-columns:repeat(${cols},${size}px)">${cells}</button>`;
+      }).join("");
+      return `<div class="mom-pin-strip" title="\u70B9\u51FB\u67E5\u770B\u7F6E\u9876\u52A8\u6001">
+    <span class="mom-pin-strip-label">\u7F6E\u9876</span>
+    <div class="mom-pin-strip-thumbs">${groups}</div>
+  </div>`;
