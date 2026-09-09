@@ -1,0 +1,2 @@
+        img.src = globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.resolve(url) : url;
+        img.style.display = "";

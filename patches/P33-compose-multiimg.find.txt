@@ -1,0 +1,22 @@
+q("[data-imgfile]").addEventListener("change", (e) => {
+        const files = Array.from(e.target.files || []);
+        if (d.images.length + files.length > 9) {
+          ctx.showMessage("\u6700\u591A 9 \u9879\u56FE\u7247/\u89C6\u9891");
+          return;
+        }
+        files.forEach((file) => {
+          const isVid = file.type && file.type.startsWith("video/");
+          const proceed = (src) => {
+            if (src) d.images.push(src);
+            renderImgs();
+          };
+          if (isVid) {
+            ctx.showMessage && ctx.showMessage("\u89C6\u9891\u4E0A\u4F20\u4E2D\u2026");
+            saveVideoToAssets(file).then(proceed).catch(() => proceed(""));
+          } else {
+            ctx.showMessage && ctx.showMessage("\u56FE\u7247\u4E0A\u4F20\u4E2D\u2026");
+            saveImageToAssets(file).then(proceed).catch(() => proceed(""));
+          }
+        });
+        e.target.value = "";
+      });

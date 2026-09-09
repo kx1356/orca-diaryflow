@@ -1,0 +1,2 @@
+          <div class="mom-signature-tools">            <button class="mom-cover-tool" data-act="calendar" title="\u65E5\u8BB0\u6D41\u65E5\u5386">${ico("calendar")}<span>\u65E5\u5386</span></button>
+          </div>

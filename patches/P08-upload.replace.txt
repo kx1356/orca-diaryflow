@@ -1,6 +1,15 @@
     async function uploadDiaryflowFile(file) {
       const ext = (file.name && file.name.match(/\.([a-z0-9]+)$/i) || [, "bin"])[1].toLowerCase();
       const name = `df_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      // 优先写入当前仓库 assets（换库/重载后仍可 file:// 展示）
+      try {
+        const buf = await file.arrayBuffer();
+        const mime = (file.type && String(file.type)) || "application/octet-stream";
+        const uploaded = await orca.invokeBackend("upload-asset-binary", mime, buf);
+        if (uploaded) return uploaded;
+      } catch (e0) {
+        console.warn("[orca-diaryflow] upload-asset-binary failed, fallback dfasset", e0);
+      }
       try {
         return await globalThis.__DF_ASSETS.save(file, name);
       } catch (e) {

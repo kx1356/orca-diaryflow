@@ -1,0 +1,4 @@
+    function textHtml(it) {
+      const body = renderInlineMd(it.text || "");
+      return `<div class="north-luna-moments-item-text">${body || '<span class="north-luna-moments-no-text">[\u65E0\u6587\u5B57]</span>'}</div>`;
+    }

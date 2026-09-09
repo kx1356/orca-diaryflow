@@ -1,0 +1,3 @@
+      s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+      s = s.replace(/\u0000COLOR\u0000/g, (m, i) => {

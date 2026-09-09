@@ -1,0 +1,2 @@
+      s = s.replace(/__([^_\n]+)__/g, "<u>$1</u>");
+      s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a class="mom-md-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>');

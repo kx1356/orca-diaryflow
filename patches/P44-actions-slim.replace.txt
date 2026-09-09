@@ -1,0 +1,12 @@
+function actionsHtml(ctx, it) {
+      const mid = esc(it.id);
+      return `
+    <div class="north-luna-moments-item-actions">
+      <div class="north-luna-moments-action-bar">
+        <button class="north-luna-moments-action-btn" data-mid="${mid}" data-id="${mid}" data-action="toggle-comments" title="\u8BC4\u8BBA" aria-label="\u8BC4\u8BBA"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M12 3c-5 0-9 3.6-9 8 0 2.5 1.3 4.7 3.4 6.1L5.5 21l4.3-2.3c.7.2 1.4.3 2.2.3 5 0 9-3.6 9-8s-4-8-9-8z"></path></svg></button>
+        <button class="north-luna-moments-action-btn" data-mid="${mid}" data-id="${mid}" data-action="edit" title="\u5728\u864E\u9CB8\u4E2D\u7F16\u8F91" aria-label="\u5728\u864E\u9CB8\u4E2D\u7F16\u8F91">${ico("edit", 15)}</button>
+        <button class="north-luna-moments-action-btn" data-mid="${mid}" data-id="${mid}" data-action="time" title="\u4FEE\u6539\u65F6\u95F4" aria-label="\u4FEE\u6539\u65F6\u95F4">${ico("clock", 15)}</button>
+        <button type="button" class="north-luna-moments-action-btn orca-df-more-btn" data-mid="${mid}" data-id="${mid}" data-action="more" title="\u66F4\u591A" aria-label="\u66F4\u591A" aria-haspopup="menu"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+      </div>
+    </div>`;
+    }

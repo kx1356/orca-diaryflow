@@ -1,0 +1,3 @@
+        <div class="mom-signature" hidden>
+          <div class="mom-signature-tools" hidden></div>
+        </div>

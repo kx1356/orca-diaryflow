@@ -1,0 +1,22 @@
+    function mediaHtml(it) {
+      const all = (it.images || []).filter(Boolean);
+      let html = "";
+      if (all.length) {
+        const total = all.length;
+        const items = all.slice(0, 9);
+        const extra = total > 9 ? total - 9 : 0;
+        // 4 张及以上统一九宫格（3 列）；超出 9 张时第 9 格叠 +N
+        const gridClass = items.length === 1 ? "single" : items.length === 2 ? "double" : items.length === 3 ? "triple" : "nine";
+        const cells = items.map((src, i) => {
+          const more = extra > 0 && i === items.length - 1;
+          if (isVideoSrc(src)) {
+            const inner = `<video class="north-luna-moments-grid-video-el" src="${esc(src)}#t=0.1" data-vthumb="${esc(src)}" muted playsinline preload="metadata"></video><span class="north-luna-moments-grid-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>${more ? `<span class="north-luna-moments-grid-more-badge">+${extra}</span>` : ""}`;
+            return `<div class="north-luna-moments-grid-cel north-luna-moments-grid-video${more ? " north-luna-moments-grid-more" : ""}" data-action="play-vid" data-src="${esc(src)}" data-idx="${i}" title="${more ? `\u8FD8\u6709 ${extra} \u9879` : "\u64AD\u653E\u89C6\u9891"}">${inner}</div>`;
+          }
+          if (more) {
+            return `<div class="north-luna-moments-grid-cel north-luna-moments-grid-more" data-action="show-img" data-src="${esc(src)}" data-idx="${i}" title="\u8FD8\u6709 ${extra} \u9879"><img class="north-luna-moments-grid-img" src="${esc(src)}" data-kind="image" alt="media" loading="lazy" decoding="async"><span class="north-luna-moments-grid-more-badge">+${extra}</span></div>`;
+          }
+          return `<img class="north-luna-moments-grid-img" src="${esc(src)}" data-kind="image" data-action="show-img" data-src="${esc(src)}" data-idx="${i}" alt="media" loading="lazy" decoding="async">`;
+        }).join("");
+        html += `<div class="north-luna-moments-media"><div class="north-luna-moments-image-grid ${gridClass}">${cells}</div></div>`;
+      }

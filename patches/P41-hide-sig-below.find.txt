@@ -1,0 +1,4 @@
+        <div class="mom-signature">
+          <div class="mom-signature-tools" hidden></div>
+          <div class="mom-signature-text">${esc(cfg.signature)}</div>
+        </div>

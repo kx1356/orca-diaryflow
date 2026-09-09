@@ -1,10 +1,45 @@
 {
-  "name": "orca-diaryflow",
-  "version": "0.1.0",
+  "name": "orca-plugin-diaryflow",
+  "version": "0.3.0",
   "type": "module",
-  "description": "日记流：清爽的记录与回顾视图，支持图文与评论互动（Orca Note 版）",
+  "description": "Moments-style diary feed for Orca Note: timeline of #日记流 blocks, cover/avatar, tags, location, and deep edit in Orca journals.",
   "author": "kx1356",
-  "private": true,
+  "license": "MIT",
+  "keywords": [
+    "orca-note",
+    "orca-plugin",
+    "diary",
+    "moments",
+    "journal",
+    "timeline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kx1356/orca-diaryflow.git"
+  },
+  "homepage": "https://github.com/kx1356/orca-diaryflow",
+  "bugs": {
+    "url": "https://github.com/kx1356/orca-diaryflow/issues"
+  },
+  "private": false,
+  "scripts": {
+    "build": "node build.mjs",
+    "deploy": "node tools/deploy.mjs",
+    "validate:marketplace": "node scripts/validate-marketplace-package.mjs"
+  },
+  "orcaNoteMarketplace": {
+    "id": "orca-diaryflow",
+    "name": "Diary Flow",
+    "category": "Productivity",
+    "artifactName": "orca-diaryflow",
+    "translations": {
+      "zh": {
+        "name": "日记流",
+        "description": "朋友圈式日记时间流：展示带 #日记流 标签的日记块，支持封面/头像、标签筛选、地点、置顶与评论；新建与深度编辑跳转虎鲸日记页。",
+        "category": "效率工具"
+      }
+    }
+  },
   "peerDependencies": {
     "react": "^18.2.0",
     "valtio": "^1.13.2"

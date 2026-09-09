@@ -1,0 +1,4 @@
+      <div class="mom-fab-stack${ctx.plugin && ctx.plugin.isMobile ? " is-mobile" : ""}">
+        <button class="mom-outline-fab" data-action="open-outline" title="\u6708\u4EFD\u5927\u7EB2">${ico("outline", 18)}</button>
+        <button class="mom-outline-fab" data-action="open-editor" title="\u53D1\u8868\u65E5\u8BB0">${ico("edit", 18)}</button>
+      </div>

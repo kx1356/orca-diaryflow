@@ -1,0 +1,4 @@
+      s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+      s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a class="mom-md-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      s = s.replace(/\u0000COLOR\u0000/g, (m, i) => {

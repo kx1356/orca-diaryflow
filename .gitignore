@@ -11,3 +11,6 @@ Thumbs.db
 # workspace
 .vscode/
 .idea/
+
+# marketplace packaging
+release/

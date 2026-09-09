@@ -1,0 +1,10 @@
+    function avatarHtml(avatar, nickname) {
+      if (avatar) {
+        const resolved = globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.resolve(avatar) : avatar;
+        const blank = !resolved
+          || resolved === "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+          || (typeof resolved === "string" && resolved.indexOf("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP") === 0);
+        if (!blank) return `<img class="mom-avatar" src="${esc(avatar)}" alt="" decoding="async">`;
+      }
+      return `  <div class="mom-avatar mom-avatar-ph">${esc((nickname || "\u6708").slice(0, 1))}</div>`;
+    }

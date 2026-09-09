@@ -1,0 +1,13 @@
+    function mediaHtml(it) {
+      const items = (it.images || []).filter(Boolean);
+      let html = "";
+      if (items.length) {
+        const gridClass = items.length === 1 ? "single" : items.length === 2 ? "double" : items.length === 3 ? "triple" : items.length <= 4 ? "four" : "nine";
+        const cells = items.map((src, i) => {
+          if (isVideoSrc(src)) {
+            return `<div class="north-luna-moments-grid-cel north-luna-moments-grid-video" data-action="play-vid" data-src="${esc(src)}" data-idx="${i}" title="\u64AD\u653E\u89C6\u9891"><video class="north-luna-moments-grid-video-el" src="${esc(src)}#t=0.1" data-vthumb="${esc(src)}" muted playsinline preload="metadata"></video><span class="north-luna-moments-grid-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div>`;
+          }
+          return `<img class="north-luna-moments-grid-img" src="${esc(src)}" data-kind="image" data-action="show-img" data-src="${esc(src)}" data-idx="${i}" alt="media" loading="lazy" decoding="async">`;
+        }).join("");
+        html += `<div class="north-luna-moments-media"><div class="north-luna-moments-image-grid ${gridClass}">${cells}</div></div>`;
+      }

@@ -1,0 +1,79 @@
+    function textHtml(it) {
+      let raw = it.text || "";
+      try {
+        const OB = globalThis.__DF_ORCA_BLOCKS;
+        if (OB && typeof OB.stripInlineTagText === "function") {
+          raw = OB.stripInlineTagText(raw, it.tags || []);
+        } else {
+          raw = String(raw).replace(/\uFF03/g, "#").replace(/#[^\s#，,、]+/g, "").replace(/[\s]*[,，、]+[\s]*/g, " ").trim();
+        }
+      } catch (e) {
+        raw = String(raw).replace(/\uFF03/g, "#").replace(/#[^\s#，,、]+/g, "").replace(/[\s]*[,，、]+[\s]*/g, " ").trim();
+      }
+      const body = renderFeedMd(raw);
+      return `<div class="north-luna-moments-item-text">${body || '<span class="north-luna-moments-no-text">[\u65E0\u6587\u5B57]</span>'}</div>`;
+    }
+    function renderFeedMd(raw) {
+      const lines = String(raw || "").replace(/\r\n/g, "\n").split("\n");
+      let html = "";
+      let i = 0;
+      const stack = [];
+      const listRe = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
+      const closeTo = (depth) => {
+        while (stack.length && stack[stack.length - 1].depth > depth) {
+          html += stack.pop().ordered ? "</ol>" : "</ul>";
+        }
+      };
+      while (i < lines.length) {
+        const line = lines[i];
+        if (/^```/.test(line)) {
+          closeTo(-1);
+          const code = [];
+          i++;
+          while (i < lines.length && !/^```/.test(lines[i])) {
+            code.push(esc(lines[i]));
+            i++;
+          }
+          if (i < lines.length) i++;
+          html += `<pre class="orca-df-md-code"><code>${code.join("\n")}</code></pre>`;
+          continue;
+        }
+        const hm = line.match(/^(#{1,6})\s+(.*)$/);
+        if (hm) {
+          closeTo(-1);
+          html += `<div class="orca-df-md-h orca-df-md-h${hm[1].length}">${renderInlineMd(hm[2])}</div>`;
+          i++;
+          continue;
+        }
+        if (/^>\s?/.test(line)) {
+          closeTo(-1);
+          html += `<blockquote class="orca-df-md-quote">${renderInlineMd(line.replace(/^>\s?/, ""))}</blockquote>`;
+          i++;
+          continue;
+        }
+        const lm = line.match(listRe);
+        if (lm) {
+          const depth = Math.floor(String(lm[1] || "").replace(/\t/g, "  ").length / 2);
+          const ordered = /^\d+\./.test(lm[2]);
+          closeTo(depth);
+          const top = stack[stack.length - 1];
+          if (!top || top.depth < depth) {
+            html += ordered ? `<ol class="orca-df-md-ol">` : `<ul class="orca-df-md-ul">`;
+            stack.push({ depth, ordered });
+          } else if (top.depth === depth && top.ordered !== ordered) {
+            html += stack.pop().ordered ? "</ol>" : "</ul>";
+            html += ordered ? `<ol class="orca-df-md-ol">` : `<ul class="orca-df-md-ul">`;
+            stack.push({ depth, ordered });
+          }
+          html += `<li class="orca-df-md-li">${renderInlineMd(lm[3])}</li>`;
+          i++;
+          continue;
+        }
+        closeTo(-1);
+        if (!String(line).trim()) html += `<div class="orca-df-md-gap"></div>`;
+        else html += `<div class="orca-df-md-p">${renderInlineMd(line)}</div>`;
+        i++;
+      }
+      closeTo(-1);
+      return html;
+    }

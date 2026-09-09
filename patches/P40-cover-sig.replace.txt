@@ -1,0 +1,6 @@
+        <div class="mom-cover-signature">${esc(cfg.signature || "")}</div>
+        <span class="mom-cover-stats">${stats}</span>
+        <div class="mom-cover-actions">
+          <button class="mom-cover-settings mom-cover-cal" data-act="calendar" title="\u65E5\u8BB0\u6D41\u65E5\u5386">${ico("calendar", 18)}</button>
+          <button class="mom-cover-settings" data-action="open-settings" title="\u65E5\u8BB0\u6D41\u8BBE\u7F6E">${ico("settings", 18)}</button>
+        </div>

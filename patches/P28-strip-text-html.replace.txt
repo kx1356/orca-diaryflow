@@ -1,0 +1,15 @@
+    function textHtml(it) {
+      let raw = it.text || "";
+      try {
+        const OB = globalThis.__DF_ORCA_BLOCKS;
+        if (OB && typeof OB.stripInlineTagText === "function") {
+          raw = OB.stripInlineTagText(raw, it.tags || []);
+        } else {
+          raw = String(raw).replace(/\uFF03/g, "#").replace(/#[^\s#，,、]+/g, "").replace(/[\s]*[,，、]+[\s]*/g, " ").trim();
+        }
+      } catch (e) {
+        raw = String(raw).replace(/\uFF03/g, "#").replace(/#[^\s#，,、]+/g, "").replace(/[\s]*[,，、]+[\s]*/g, " ").trim();
+      }
+      const body = renderInlineMd(raw);
+      return `<div class="north-luna-moments-item-text">${body || '<span class="north-luna-moments-no-text">[\u65E0\u6587\u5B57]</span>'}</div>`;
+    }

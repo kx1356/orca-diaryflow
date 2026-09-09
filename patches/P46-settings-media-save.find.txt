@@ -1,0 +1,25 @@
+        if (t.matches("[data-avatar]")) {
+          const f = (t.files || [])[0];
+          if (!f) return;
+          const url = await saveImageToAssets(f);
+          if (url) {
+            cfg.avatar = url;
+            ctx.showMessage("\u5934\u50CF\u5DF2\u66F4\u65B0");
+          }
+        } else if (t.matches("[data-cover]")) {
+          const f = (t.files || [])[0];
+          if (!f) return;
+          const url = await saveImageToAssets(f);
+          if (url) {
+            cfg.cover = url;
+            ctx.showMessage("\u5C01\u9762\u5DF2\u66F4\u65B0");
+          }
+        } else if (t.matches("[data-lockbg]")) {
+          const f = (t.files || [])[0];
+          if (!f) return;
+          const url = await saveImageToAssets(f);
+          if (url) {
+            cfg.lockBg = url;
+            ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u5DF2\u66F4\u65B0");
+          }
+        }
