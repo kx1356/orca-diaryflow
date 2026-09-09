@@ -7,9 +7,31 @@ var DF_TAG = "日记流";
 var DF_INDEX_KEY = "moments-index";
 var DF_BACKUP_KEY = "moments-records-backup";
 var DF_MIGRATED_KEY = "moments-migrated";
+var DF_TUTORIAL_KEY = "tutorial-inserted-v1"; // 兼容旧标记；现以 dismissed / blockId 为准
+var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
+var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
 var DF_PROP_TEXT = 1; // PropType.Text
+
+var DF_TUTORIAL_TITLE = "日记流 · 使用说明";
+
+/** 插件内嵌使用说明正文（勿写 #标签字样，避免 strip 误伤；勿用 - 前缀以免卡片当列表符显示） */
+var DF_TUTORIAL_TEXT = [
+  DF_TUTORIAL_TITLE,
+  "本条由日记流插件自动置顶写入今日日记；手动删除后不再自动出现。",
+  "—— 基本用法 ——",
+  "右下角「+」：在今日日记新建一条，并跳转虎鲸编辑",
+  "点卡片正文或「打开」：在虎鲸中深度编辑该条目",
+  "封面区：设置封面、头像与签名",
+  "底栏「地点」：写入正文末行「地点：…」，并同步属性",
+  "「⋯」展开：置顶、改标签、打开虎鲸、删除",
+  "FAB 标签按钮：按用户标签筛选时间线；同步按钮可手动刷新",
+  "—— 重要规则 ——",
+  "只有带「日记流」标签的日记块才会进入时间线",
+  "日记流以展示为主；正文编辑以虎鲸日记页为准，改完会自动同步",
+  "条目日期跟随所属日记页；换日期请用卡片改时间（会移动到对应日记）"
+].join("\n");
 
 function dfIsId(v) {
   return typeof v === "number" && isFinite(v) && v > 0;
@@ -1454,20 +1476,23 @@ async function createEntry(opts) {
   opts = opts || {};
   var date = opts.date instanceof Date ? opts.date : new Date(opts.date || Date.now());
   var extraTags = opts.tags || [];
-  var text = dfStripInlineTagText(opts.text != null ? String(opts.text) : "", extraTags);
+  var raw = opts.text != null ? String(opts.text) : "";
+  var text = opts.skipTagStrip
+    ? raw.replace(/\uFF03/g, "#").replace(/\r\n/g, "\n").trim()
+    : dfStripInlineTagText(raw, extraTags);
   var lines = dfSplitEntryLines(text);
   if (!lines.length) lines = [""];
   var journal = await dfEnsureJournal(date);
   var newId = null;
   var keepFocus = !!(opts.focusBeforeTags || opts.keepEditorFocus);
+  // 先插标题 + 标签；正文子块另开一轮写入，避免 insertTag 后同组插入被吃掉
   await dfWithEditor(async function () {
-    // 首行：打 #日记流 + 用户标签；空正文传 null，让虎鲸按「仅标签」结构渲染（标签前可打字）
     var firstContent = lines[0] ? dfMarkdownLineToFragments(lines[0]) : null;
     newId = await dfEditorCommand(
       "core.editor.insertBlock",
       null,
       orca.state.blocks[journal.id] || journal,
-      "lastChild",
+      opts.firstChild ? "firstChild" : "lastChild",
       firstContent,
       { type: "text" }
     );
@@ -1479,19 +1504,45 @@ async function createEntry(opts) {
         try { await dfEditorCommand("core.editor.insertTag", null, newId, t); } catch (e) { /* ignore */ }
       }
     }
-    // 其余行：作为首行子块，图片也挂在同一棵树上
-    var root = orca.state.blocks[newId] || { id: newId };
-    for (var li = 1; li < lines.length; li++) {
-      await dfEditorCommand(
-        "core.editor.insertBlock",
-        null,
-        root,
-        "lastChild",
-        dfMarkdownLineToFragments(lines[li]),
-        { type: "text" }
-      );
-    }
   }, date, { keepFocus: keepFocus });
+
+  if (lines.length > 1 && dfIsId(newId)) {
+    try {
+      await dfWithEditor(async function () {
+        var root = orca.state.blocks[newId] || { id: newId };
+        // 清掉 insertTag 可能留下的空子块，再写入正文
+        var kids = (root.children || []);
+        var emptyIds = [];
+        for (var ki = 0; ki < kids.length; ki++) {
+          var ch = orca.state.blocks[kids[ki]] || await dfGetBlock(kids[ki]);
+          if (!ch || dfIsMediaBlock(ch)) continue;
+          var plain = dfPlainContentText(ch);
+          if (!plain || !String(plain).trim()) emptyIds.push(ch.id);
+        }
+        if (emptyIds.length) {
+          try { await dfEditorCommand("core.editor.deleteBlocks", null, emptyIds); } catch (e0) { /* ignore */ }
+        }
+        root = orca.state.blocks[newId] || { id: newId };
+        for (var li = 1; li < lines.length; li++) {
+          await dfEditorCommand(
+            "core.editor.insertBlock",
+            null,
+            root,
+            "lastChild",
+            dfMarkdownLineToFragments(lines[li]),
+            { type: "text" }
+          );
+        }
+      }, date, { keepFocus: keepFocus });
+    } catch (eBody) {
+      console.warn("[orca-diaryflow] createEntry body lines failed, fallback updateEntry", eBody);
+      try {
+        await updateEntry(newId, { text: text, tags: extraTags });
+      } catch (e2) {
+        console.warn("[orca-diaryflow] createEntry updateEntry fallback failed", e2);
+      }
+    }
+  }
 
   var orcaImgs = [];
   if (opts.images && opts.images.length) {
@@ -1500,14 +1551,15 @@ async function createEntry(opts) {
     }
   }
 
-  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.comments) {
+  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.comments || opts.isTutorial) {
     await setOverlay(newId, {
       location: opts.location || "",
       images: orcaImgs.length ? orcaImgs : (Array.isArray(opts.images) ? opts.images.slice(0, 9) : []),
       imagesPushedToOrca: orcaImgs.length > 0,
       liked: !!opts.liked,
       pinned: !!opts.pinned,
-      comments: Array.isArray(opts.comments) ? opts.comments : []
+      comments: Array.isArray(opts.comments) ? opts.comments : [],
+      isTutorial: !!opts.isTutorial
     });
   }
   if (opts.location && String(opts.location).trim()) {
@@ -1533,7 +1585,10 @@ async function updateEntry(blockId, payload) {
   var wantTags = (payload.tags || []).map(function (t) {
     return String(t || "").replace(/^#/, "").trim();
   }).filter(function (t) { return t && t !== DF_TAG; });
-  var text = dfStripInlineTagText(payload.text != null ? String(payload.text) : "", wantTags);
+  var raw = payload.text != null ? String(payload.text) : "";
+  var text = payload.skipTagStrip
+    ? raw.replace(/\uFF03/g, "#").replace(/\r\n/g, "\n").trim()
+    : dfStripInlineTagText(raw, wantTags);
   var lines = dfSplitEntryLines(text);
   if (!lines.length) lines = [""];
 
@@ -1595,6 +1650,7 @@ async function updateEntry(blockId, payload) {
   if (payload.comments !== undefined) {
     patch.comments = Array.isArray(payload.comments) ? payload.comments : [];
   }
+  if (payload.isTutorial !== undefined) patch.isTutorial = !!payload.isTutorial;
   await setOverlay(id, patch);
   return dfGetBlock(id);
 }
@@ -1602,6 +1658,15 @@ async function updateEntry(blockId, payload) {
 async function deleteEntry(blockId) {
   var id = dfBlockId(blockId);
   if (!id) return false;
+  var wasTutorial = false;
+  try {
+    var index0 = await dfLoadIndex();
+    var ov0 = index0.overlays[String(id)] || {};
+    if (ov0.isTutorial) wasTutorial = true;
+    var stored = await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_ID_KEY);
+    if (String(stored || "") === String(id)) wasTutorial = true;
+  } catch (eMark) { /* ignore */ }
+
   await dfWithEditor(async function () {
     await dfEditorCommand("core.editor.deleteBlocks", null, [id]);
   });
@@ -1609,6 +1674,14 @@ async function deleteEntry(blockId) {
   if (index.overlays[String(id)]) {
     delete index.overlays[String(id)];
     await dfSaveIndex(index);
+  }
+  if (wasTutorial) {
+    try {
+      await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_DISMISSED_KEY, "true");
+      await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, null);
+    } catch (e2) {
+      console.warn("[orca-diaryflow] mark tutorial dismissed failed", e2);
+    }
   }
   return true;
 }
@@ -1900,6 +1973,130 @@ async function openEntry(blockId, panelId, opts) {
   return opened;
 }
 
+function dfLooksLikeTutorialBlock(block) {
+  if (!block) return false;
+  if (dfHasTag(block, "教程")) return true;
+  var plain = dfPlainContentText(block) || "";
+  var md = "";
+  try { md = dfContentToMarkdown(block.content || [], block) || ""; } catch (e) { /* ignore */ }
+  var head = String(plain || md || "").trim();
+  return head.indexOf(DF_TUTORIAL_TITLE) === 0 || head === DF_TUTORIAL_TITLE;
+}
+
+async function dfTutorialBodyIsThin(block) {
+  if (!block) return true;
+  var rooted = null;
+  try { rooted = await dfLoadBlockTree(block.id); } catch (e) { rooted = block; }
+  var text = "";
+  try { text = await dfCollectEntryText(rooted || block); } catch (e2) {
+    text = dfPlainContentText(block) || "";
+  }
+  var lines = dfSplitEntryLines(text);
+  if (lines.length < 3) return true;
+  var body = lines.slice(1).join("\n").trim();
+  return body.length < 20;
+}
+
+/**
+ * 打开插件时确保使用说明存在：置顶、写入今日日记顶部。
+ * 手动删除后写入 dismissed，不再自动插入；未删除则每次打开都会补齐/补正文。
+ */
+async function ensureTutorialInserted() {
+  var dismissed = await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_DISMISSED_KEY);
+  if (dismissed === true || dismissed === "true" || dismissed === 1) {
+    return { skipped: true, reason: "dismissed" };
+  }
+
+  var today = new Date();
+  var index = await dfLoadIndex();
+  var foundId = null;
+
+  var storedId = dfBlockId(await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_ID_KEY));
+  if (storedId) {
+    var storedBlock = await dfGetBlock(storedId);
+    if (storedBlock) foundId = storedId;
+  }
+  if (!foundId && index && index.overlays) {
+    var keys = Object.keys(index.overlays);
+    for (var i = 0; i < keys.length; i++) {
+      if (index.overlays[keys[i]] && index.overlays[keys[i]].isTutorial) {
+        var bid = dfBlockId(keys[i]);
+        if (bid && (await dfGetBlock(bid))) {
+          foundId = bid;
+          break;
+        }
+      }
+    }
+  }
+  if (!foundId) {
+    // 扫今日日记：找回仅有标题、无正文的旧教程块
+    try {
+      var journal = await dfEnsureJournal(today);
+      var kids = (journal && journal.children) || [];
+      for (var j = 0; j < kids.length; j++) {
+        var ch = orca.state.blocks[kids[j]] || await dfGetBlock(kids[j]);
+        if (ch && dfHasTag(ch, DF_TAG) && dfLooksLikeTutorialBlock(ch)) {
+          foundId = ch.id;
+          break;
+        }
+      }
+    } catch (eScan) {
+      console.warn("[orca-diaryflow] scan tutorial in journal failed", eScan);
+    }
+  }
+
+  if (foundId) {
+    var block = await dfGetBlock(foundId);
+    var thin = await dfTutorialBodyIsThin(block);
+    var curText = "";
+    try { curText = await dfCollectEntryText(block); } catch (eCur) { curText = ""; }
+    var needRefresh = thin || String(curText || "").replace(/\r\n/g, "\n").trim() !== DF_TUTORIAL_TEXT.trim();
+    if (needRefresh) {
+      await updateEntry(foundId, {
+        text: DF_TUTORIAL_TEXT,
+        tags: ["教程"],
+        pinned: true,
+        isTutorial: true,
+        skipTagStrip: true
+      });
+    } else {
+      await setOverlay(foundId, { pinned: true, isTutorial: true });
+    }
+    // 挪到今日日记顶部
+    try {
+      var j2 = await dfEnsureJournal(today);
+      var b2 = await dfGetBlock(foundId);
+      if (b2 && dfIsId(j2.id) && (b2.parent !== j2.id || (j2.children && j2.children[0] !== foundId))) {
+        await dfWithEditor(async function () {
+          await dfEditorCommand("core.editor.moveBlocks", null, [foundId], j2.id, "firstChild");
+        }, today);
+      }
+    } catch (eMove) {
+      console.warn("[orca-diaryflow] move tutorial to journal top failed", eMove);
+    }
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(foundId));
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
+    return { skipped: false, repaired: !!thin || needRefresh, refreshed: needRefresh, blockId: foundId };
+  }
+
+  var created = await createEntry({
+    date: today,
+    text: DF_TUTORIAL_TEXT,
+    tags: ["教程"],
+    pinned: true,
+    isTutorial: true,
+    firstChild: true,
+    skipTagStrip: true
+  });
+  var newId = dfBlockId(created);
+  if (newId) {
+    await setOverlay(newId, { pinned: true, isTutorial: true });
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(newId));
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
+  }
+  return { skipped: false, created: true, blockId: newId };
+}
+
 async function migrateMomentsRecords(loadLegacyFn) {
   var flag = await orca.plugins.getData(orcaPluginName, DF_MIGRATED_KEY);
   if (flag === true || flag === "true" || flag === 1) {
@@ -1965,6 +2162,9 @@ async function migrateMomentsRecords(loadLegacyFn) {
 var OrcaBlocks = {
   TAG: DF_TAG,
   INDEX_KEY: DF_INDEX_KEY,
+  TUTORIAL_KEY: DF_TUTORIAL_KEY,
+  TUTORIAL_DISMISSED_KEY: DF_TUTORIAL_DISMISSED_KEY,
+  TUTORIAL_ID_KEY: DF_TUTORIAL_ID_KEY,
   listFeed: listFeed,
   createEntry: createEntry,
   updateEntry: updateEntry,
@@ -1975,6 +2175,7 @@ var OrcaBlocks = {
   setOverlay: setOverlay,
   collectUserTags: collectUserTags,
   openEntry: openEntry,
+  ensureTutorialInserted: ensureTutorialInserted,
   migrateMomentsRecords: migrateMomentsRecords,
   loadIndex: dfLoadIndex,
   saveIndex: dfSaveIndex,

@@ -1,0 +1,24 @@
+    function uploadCover(ctx) {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/jpeg,image/png,image/webp,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.gif,.bmp";
+      input.onchange = async () => {
+        const f = (input.files || [])[0];
+        if (input.parentNode) input.remove();
+        if (!f) return;
+        ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u4E2D\u2026");
+        try {
+          const path = await uploadAsset(f);
+          if (!path) {
+            ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u5931\u8D25");
+            return;
+          }
+          setCover(ctx, path);
+        } catch (e) {
+          console.warn("[orca-diaryflow] cover upload", e);
+          ctx.showMessage && ctx.showMessage((e && e.message) || "\u5C01\u9762\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
+        }
+      };
+      document.body.appendChild(input);
+      input.click();
+    }

@@ -1,0 +1,63 @@
+    function compressImage(file, maxDim, quality) {
+      maxDim = maxDim || 1920;
+      quality = quality || 0.85;
+      return new Promise((resolve) => {
+        if (!file.type || !file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") {
+          resolve(file);
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.width;
+          let h = img.height;
+          const scale = Math.min(1, maxDim / Math.max(w, h, 1));
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          const outType = file.type === "image/png" ? "image/png" : "image/jpeg";
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            const ext = outType === "image/png" ? "png" : "jpg";
+            resolve(new File([blob], (file.name || "image").replace(/\.[^.]+$/, "") + "." + ext, { type: outType }));
+          }, outType, quality);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve(file);
+        };
+        img.src = url;
+      });
+    }
+    async function uploadDiaryflowFile(file) {
+      const ext = (file.name && file.name.match(/\.([a-z0-9]+)$/i) || [, "bin"])[1].toLowerCase();
+      const name = `df_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      // 优先写入当前仓库 assets（换库/重载后仍可 file:// 展示）
+      try {
+        const buf = await file.arrayBuffer();
+        const mime = (file.type && String(file.type)) || "application/octet-stream";
+        const uploaded = await orca.invokeBackend("upload-asset-binary", mime, buf);
+        if (uploaded) return uploaded;
+      } catch (e0) {
+        console.warn("[orca-diaryflow] upload-asset-binary failed, fallback dfasset", e0);
+      }
+      try {
+        return await globalThis.__DF_ASSETS.save(file, name);
+      } catch (e) {
+        console.error("[orca-diaryflow] asset save failed", e);
+      }
+      return null;
+    }
+    async function saveImageToAssets(file) {
+      const compressed = await compressImage(file);
+      const uploaded = await uploadDiaryflowFile(compressed);
+      if (uploaded) return uploaded;
+      return readAsDataURL(file);
+    }

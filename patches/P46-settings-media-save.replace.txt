@@ -1,33 +1,56 @@
         if (t.matches("[data-avatar]")) {
           const f = (t.files || [])[0];
           if (!f) return;
-          const url = await saveImageToAssets(f);
-          if (url) {
-            cfg.avatar = url;
-            ctx.showMessage("\u5934\u50CF\u5DF2\u66F4\u65B0");
-            try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e0) {}
-            await ctx.save();
-            ctx.reApp();
+          try {
+            ctx.showMessage && ctx.showMessage("\u5934\u50CF\u4E0A\u4F20\u4E2D\u2026");
+            const url = await saveImageToAssets(f, { maxDim: 640, quality: 0.9 });
+            if (url) {
+              cfg.avatar = url;
+              ctx.showMessage("\u5934\u50CF\u5DF2\u66F4\u65B0");
+              try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e0) {}
+              await ctx.save();
+              ctx.reApp();
+            } else {
+              ctx.showMessage && ctx.showMessage("\u5934\u50CF\u4E0A\u4F20\u5931\u8D25");
+            }
+          } catch (eAv) {
+            console.warn("[orca-diaryflow] avatar upload", eAv);
+            ctx.showMessage && ctx.showMessage((eAv && eAv.message) || "\u5934\u50CF\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
           }
         } else if (t.matches("[data-cover]")) {
           const f = (t.files || [])[0];
           if (!f) return;
-          const url = await saveImageToAssets(f);
-          if (url) {
-            cfg.cover = url;
-            ctx.showMessage("\u5C01\u9762\u5DF2\u66F4\u65B0");
-            try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e1) {}
-            await ctx.save();
-            ctx.reApp();
+          try {
+            ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u4E2D\u2026");
+            const url = await saveImageToAssets(f, { maxDim: 1920, quality: 0.85 });
+            if (url) {
+              cfg.cover = url;
+              ctx.showMessage("\u5C01\u9762\u5DF2\u66F4\u65B0");
+              try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e1) {}
+              await ctx.save();
+              ctx.reApp();
+            } else {
+              ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u5931\u8D25");
+            }
+          } catch (eCv) {
+            console.warn("[orca-diaryflow] cover upload", eCv);
+            ctx.showMessage && ctx.showMessage((eCv && eCv.message) || "\u5C01\u9762\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
           }
         } else if (t.matches("[data-lockbg]")) {
           const f = (t.files || [])[0];
           if (!f) return;
-          const url = await saveImageToAssets(f);
-          if (url) {
-            cfg.lockBg = url;
-            ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u5DF2\u66F4\u65B0");
-            try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e2) {}
-            await ctx.save();
+          try {
+            const url = await saveImageToAssets(f, { maxDim: 1920, quality: 0.85 });
+            if (url) {
+              cfg.lockBg = url;
+              ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u5DF2\u66F4\u65B0");
+              try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e2) {}
+              await ctx.save();
+            } else {
+              ctx.showMessage && ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u4E0A\u4F20\u5931\u8D25");
+            }
+          } catch (eLk) {
+            console.warn("[orca-diaryflow] lockbg upload", eLk);
+            ctx.showMessage && ctx.showMessage((eLk && eLk.message) || "\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
           }
         }

@@ -1,0 +1,117 @@
+    function dfImageExtOf(file) {
+      const m = file && file.name && String(file.name).match(/\.([a-z0-9]+)$/i);
+      if (m) return m[1].toLowerCase();
+      const t = String((file && file.type) || "").toLowerCase();
+      if (t === "image/jpeg" || t === "image/jpg") return "jpg";
+      if (t === "image/png") return "png";
+      if (t === "image/webp") return "webp";
+      if (t === "image/gif") return "gif";
+      if (t === "image/bmp") return "bmp";
+      return "jpg";
+    }
+    function dfIsUnsupportedImage(file) {
+      const t = String((file && file.type) || "").toLowerCase();
+      const n = String((file && file.name) || "").toLowerCase();
+      if (t.includes("heic") || t.includes("heif") || /\.heic$|\.heif$/i.test(n)) return "HEIC/HEIF";
+      if (t.includes("tiff") || /\.tiff?$/i.test(n)) return "TIFF";
+      return "";
+    }
+    /** 解码并压成 JPG/PNG；头像建议 maxDim=512。失败抛错（不再静默回传原文件） */
+    function compressImage(file, maxDim, quality) {
+      maxDim = maxDim || 1920;
+      quality = quality == null ? 0.85 : quality;
+      return new Promise((resolve, reject) => {
+        const bad = dfIsUnsupportedImage(file);
+        if (bad) {
+          reject(new Error("\u6682\u4E0D\u652F\u6301 " + bad + "\uFF0C\u8BF7\u5148\u8F6C\u4E3A JPG/PNG/WebP"));
+          return;
+        }
+        const type = String((file && file.type) || "").toLowerCase();
+        if (type === "image/svg+xml" || /\.svg$/i.test(file && file.name || "")) {
+          reject(new Error("\u6682\u4E0D\u652F\u6301 SVG \u4F5C\u4E3A\u5934\u50CF/\u5C01\u9762\uFF0C\u8BF7\u7528 JPG/PNG"));
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.naturalWidth || img.width || 0;
+          let h = img.naturalHeight || img.height || 0;
+          if (!w || !h) {
+            reject(new Error("\u56FE\u7247\u5C3A\u5BF8\u65E0\u6548\uFF0C\u8BF7\u6362\u4E00\u5F20 JPG/PNG"));
+            return;
+          }
+          const scale = Math.min(1, maxDim / Math.max(w, h, 1));
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+          let canvas;
+          try {
+            canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx2d = canvas.getContext("2d");
+            if (!ctx2d) throw new Error("no 2d");
+            // 透明 PNG 铺白底再出 JPG，避免黑底
+            if (type !== "image/png") {
+              ctx2d.fillStyle = "#fff";
+              ctx2d.fillRect(0, 0, w, h);
+            }
+            ctx2d.drawImage(img, 0, 0, w, h);
+          } catch (eDraw) {
+            reject(new Error("\u56FE\u7247\u8FC7\u5927\u6216\u65E0\u6CD5\u89E3\u7801\uFF0C\u8BF7\u538B\u7F29\u540E\u91CD\u8BD5"));
+            return;
+          }
+          // 统一出 JPEG（兼容性最好）；原图为 PNG 且不太大时保留 PNG
+          const keepPng = type === "image/png" && file.size < 2 * 1024 * 1024 && maxDim <= 1024;
+          const outType = keepPng ? "image/png" : "image/jpeg";
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error("\u56FE\u7247\u8F6C\u7801\u5931\u8D25\uFF0C\u8BF7\u6362 JPG/PNG \u91CD\u8BD5"));
+              return;
+            }
+            const ext = outType === "image/png" ? "png" : "jpg";
+            const base = String((file && file.name) || "image").replace(/\.[^.]+$/, "") || "image";
+            resolve(new File([blob], base + "." + ext, { type: outType }));
+          }, outType, quality);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("\u65E0\u6CD5\u8BFB\u53D6\u8BE5\u56FE\u7247\uFF08\u683C\u5F0F\u4E0D\u652F\u6301\u6216\u5DF2\u635F\u574F\uFF09\uFF0C\u8BF7\u7528 JPG/PNG/WebP"));
+        };
+        img.src = url;
+      });
+    }
+    async function uploadDiaryflowFile(file) {
+      const ext = dfImageExtOf(file);
+      const name = `df_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      // 优先写入当前仓库 assets（换库/重载后仍可 file:// 展示）
+      try {
+        const buf = await file.arrayBuffer();
+        let mime = (file.type && String(file.type)) || "";
+        if (!mime || mime === "application/octet-stream") {
+          mime = ext === "png" ? "image/png"
+            : ext === "webp" ? "image/webp"
+            : ext === "gif" ? "image/gif"
+            : "image/jpeg";
+        }
+        const uploaded = await orca.invokeBackend("upload-asset-binary", mime, buf);
+        if (uploaded) return uploaded;
+      } catch (e0) {
+        console.warn("[orca-diaryflow] upload-asset-binary failed, fallback dfasset", e0);
+      }
+      try {
+        return await globalThis.__DF_ASSETS.save(file, name);
+      } catch (e) {
+        console.error("[orca-diaryflow] asset save failed", e);
+      }
+      return null;
+    }
+    async function saveImageToAssets(file, opts) {
+      opts = opts || {};
+      const maxDim = opts.maxDim || 1920;
+      const quality = opts.quality == null ? 0.85 : opts.quality;
+      const compressed = await compressImage(file, maxDim, quality);
+      const uploaded = await uploadDiaryflowFile(compressed);
+      if (uploaded) return uploaded;
+      return readAsDataURL(compressed);
+    }

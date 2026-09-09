@@ -1,0 +1,5 @@
+          const raw = String(m.text || "\u7F6E\u9876").slice(0, 80);
+          const mode = raw.length <= 10 ? "center" : "flow";
+          return `<button class="mom-pin-group" data-action="jump-mid" data-id="${id}" style="grid-template-columns:repeat(1,88px)">
+        <div class="mom-pin-thumb mom-pin-thumb-text"><span class="mom-pin-text mom-pin-text-${mode}">${esc(raw)}</span></div>
+      </button>`;

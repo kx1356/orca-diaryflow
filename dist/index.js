@@ -208,7 +208,7 @@ var require_render = __commonJS({
         const blank = !resolved
           || resolved === "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
           || (typeof resolved === "string" && resolved.indexOf("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP") === 0);
-        if (!blank) return `<img class="mom-avatar" src="${esc(avatar)}" alt="" decoding="async">`;
+        if (!blank) return `<img class="mom-avatar" src="${esc(resolved)}" alt="" decoding="async">`;
       }
       return `  <div class="mom-avatar mom-avatar-ph">${esc((nickname || "\u6708").slice(0, 1))}</div>`;
     }
@@ -237,7 +237,8 @@ var require_render = __commonJS({
       return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
     }
     function coverHtml(cfg, items) {
-      const cover = cfg.cover ? `<img class="mom-cover-img" data-cover-img src="${esc(cfg.cover)}" alt="cover" loading="lazy" decoding="async" fetchpriority="low">` : `<div class="mom-cover-default" data-cover-img></div>`;
+      const coverSrc = cfg.cover ? (globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.resolve(cfg.cover) : cfg.cover) : "";
+      const cover = coverSrc ? `<img class="mom-cover-img" data-cover-img src="${esc(coverSrc)}" alt="cover" loading="lazy" decoding="async" fetchpriority="low">` : `<div class="mom-cover-default" data-cover-img></div>`;
       const total = (items || []).length;
       const now = new Date();
       const monthCnt = (items || []).filter((it) => {
@@ -304,10 +305,12 @@ var require_render = __commonJS({
         const imgs = (m.images || []).filter(Boolean);
         const id = esc(m.id);
         if (!imgs.length) {
-          const raw = String(m.text || "\u7F6E\u9876").slice(0, 80);
-          const mode = raw.length <= 10 ? "center" : "flow";
+          const raw0 = String(m.text || "\u7F6E\u9876");
+          const raw = raw0.split(/\r?\n/).map((s) => s.trim()).find((s) => s) || "\u7F6E\u9876";
+          const preview = raw.length > 40 ? raw.slice(0, 40) + "\u2026" : raw;
+          const mode = preview.length <= 10 ? "center" : "flow";
           return `<button class="mom-pin-group" data-action="jump-mid" data-id="${id}" style="grid-template-columns:repeat(1,88px)">
-        <div class="mom-pin-thumb mom-pin-thumb-text"><span class="mom-pin-text mom-pin-text-${mode}">${esc(raw)}</span></div>
+        <div class="mom-pin-thumb mom-pin-thumb-text"><span class="mom-pin-text mom-pin-text-${mode}">${esc(preview)}</span></div>
       </button>`;
         }
         const single = imgs.length <= 1;
@@ -1558,51 +1561,102 @@ var require_editor = __commonJS({
       }, { once: true });
     }
     const ASSET_PREFIX = "dfasset://media/";
+    function dfImageExtOf(file) {
+      const m = file && file.name && String(file.name).match(/\.([a-z0-9]+)$/i);
+      if (m) return m[1].toLowerCase();
+      const t = String((file && file.type) || "").toLowerCase();
+      if (t === "image/jpeg" || t === "image/jpg") return "jpg";
+      if (t === "image/png") return "png";
+      if (t === "image/webp") return "webp";
+      if (t === "image/gif") return "gif";
+      if (t === "image/bmp") return "bmp";
+      return "jpg";
+    }
+    function dfIsUnsupportedImage(file) {
+      const t = String((file && file.type) || "").toLowerCase();
+      const n = String((file && file.name) || "").toLowerCase();
+      if (t.includes("heic") || t.includes("heif") || /\.heic$|\.heif$/i.test(n)) return "HEIC/HEIF";
+      if (t.includes("tiff") || /\.tiff?$/i.test(n)) return "TIFF";
+      return "";
+    }
+    /** 解码并压成 JPG/PNG；头像建议 maxDim=512。失败抛错（不再静默回传原文件） */
     function compressImage(file, maxDim, quality) {
       maxDim = maxDim || 1920;
-      quality = quality || 0.85;
-      return new Promise((resolve) => {
-        if (!file.type || !file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") {
-          resolve(file);
+      quality = quality == null ? 0.85 : quality;
+      return new Promise((resolve, reject) => {
+        const bad = dfIsUnsupportedImage(file);
+        if (bad) {
+          reject(new Error("\u6682\u4E0D\u652F\u6301 " + bad + "\uFF0C\u8BF7\u5148\u8F6C\u4E3A JPG/PNG/WebP"));
+          return;
+        }
+        const type = String((file && file.type) || "").toLowerCase();
+        if (type === "image/svg+xml" || /\.svg$/i.test(file && file.name || "")) {
+          reject(new Error("\u6682\u4E0D\u652F\u6301 SVG \u4F5C\u4E3A\u5934\u50CF/\u5C01\u9762\uFF0C\u8BF7\u7528 JPG/PNG"));
           return;
         }
         const url = URL.createObjectURL(file);
         const img = new Image();
         img.onload = () => {
           URL.revokeObjectURL(url);
-          let w = img.width;
-          let h = img.height;
+          let w = img.naturalWidth || img.width || 0;
+          let h = img.naturalHeight || img.height || 0;
+          if (!w || !h) {
+            reject(new Error("\u56FE\u7247\u5C3A\u5BF8\u65E0\u6548\uFF0C\u8BF7\u6362\u4E00\u5F20 JPG/PNG"));
+            return;
+          }
           const scale = Math.min(1, maxDim / Math.max(w, h, 1));
           w = Math.max(1, Math.round(w * scale));
           h = Math.max(1, Math.round(h * scale));
-          const canvas = document.createElement("canvas");
-          canvas.width = w;
-          canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-          const outType = file.type === "image/png" ? "image/png" : "image/jpeg";
+          let canvas;
+          try {
+            canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx2d = canvas.getContext("2d");
+            if (!ctx2d) throw new Error("no 2d");
+            // 透明 PNG 铺白底再出 JPG，避免黑底
+            if (type !== "image/png") {
+              ctx2d.fillStyle = "#fff";
+              ctx2d.fillRect(0, 0, w, h);
+            }
+            ctx2d.drawImage(img, 0, 0, w, h);
+          } catch (eDraw) {
+            reject(new Error("\u56FE\u7247\u8FC7\u5927\u6216\u65E0\u6CD5\u89E3\u7801\uFF0C\u8BF7\u538B\u7F29\u540E\u91CD\u8BD5"));
+            return;
+          }
+          // 统一出 JPEG（兼容性最好）；原图为 PNG 且不太大时保留 PNG
+          const keepPng = type === "image/png" && file.size < 2 * 1024 * 1024 && maxDim <= 1024;
+          const outType = keepPng ? "image/png" : "image/jpeg";
           canvas.toBlob((blob) => {
             if (!blob) {
-              resolve(file);
+              reject(new Error("\u56FE\u7247\u8F6C\u7801\u5931\u8D25\uFF0C\u8BF7\u6362 JPG/PNG \u91CD\u8BD5"));
               return;
             }
             const ext = outType === "image/png" ? "png" : "jpg";
-            resolve(new File([blob], (file.name || "image").replace(/\.[^.]+$/, "") + "." + ext, { type: outType }));
+            const base = String((file && file.name) || "image").replace(/\.[^.]+$/, "") || "image";
+            resolve(new File([blob], base + "." + ext, { type: outType }));
           }, outType, quality);
         };
         img.onerror = () => {
           URL.revokeObjectURL(url);
-          resolve(file);
+          reject(new Error("\u65E0\u6CD5\u8BFB\u53D6\u8BE5\u56FE\u7247\uFF08\u683C\u5F0F\u4E0D\u652F\u6301\u6216\u5DF2\u635F\u574F\uFF09\uFF0C\u8BF7\u7528 JPG/PNG/WebP"));
         };
         img.src = url;
       });
     }
     async function uploadDiaryflowFile(file) {
-      const ext = (file.name && file.name.match(/\.([a-z0-9]+)$/i) || [, "bin"])[1].toLowerCase();
+      const ext = dfImageExtOf(file);
       const name = `df_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       // 优先写入当前仓库 assets（换库/重载后仍可 file:// 展示）
       try {
         const buf = await file.arrayBuffer();
-        const mime = (file.type && String(file.type)) || "application/octet-stream";
+        let mime = (file.type && String(file.type)) || "";
+        if (!mime || mime === "application/octet-stream") {
+          mime = ext === "png" ? "image/png"
+            : ext === "webp" ? "image/webp"
+            : ext === "gif" ? "image/gif"
+            : "image/jpeg";
+        }
         const uploaded = await orca.invokeBackend("upload-asset-binary", mime, buf);
         if (uploaded) return uploaded;
       } catch (e0) {
@@ -1615,11 +1669,14 @@ var require_editor = __commonJS({
       }
       return null;
     }
-    async function saveImageToAssets(file) {
-      const compressed = await compressImage(file);
+    async function saveImageToAssets(file, opts) {
+      opts = opts || {};
+      const maxDim = opts.maxDim || 1920;
+      const quality = opts.quality == null ? 0.85 : opts.quality;
+      const compressed = await compressImage(file, maxDim, quality);
       const uploaded = await uploadDiaryflowFile(compressed);
       if (uploaded) return uploaded;
-      return readAsDataURL(file);
+      return readAsDataURL(compressed);
     }
     async function uploadAsset(file) {
       return saveImageToAssets(file);
@@ -1665,18 +1722,23 @@ var require_editor = __commonJS({
     function uploadCover(ctx) {
       const input = document.createElement("input");
       input.type = "file";
-      input.accept = "image/*";
+      input.accept = "image/jpeg,image/png,image/webp,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.gif,.bmp";
       input.onchange = async () => {
         const f = (input.files || [])[0];
         if (input.parentNode) input.remove();
         if (!f) return;
         ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u4E2D\u2026");
-        const path = await uploadAsset(f);
-        if (!path) {
-          ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u5931\u8D25");
-          return;
+        try {
+          const path = await uploadAsset(f);
+          if (!path) {
+            ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u5931\u8D25");
+            return;
+          }
+          setCover(ctx, path);
+        } catch (e) {
+          console.warn("[orca-diaryflow] cover upload", e);
+          ctx.showMessage && ctx.showMessage((e && e.message) || "\u5C01\u9762\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
         }
-        setCover(ctx, path);
       };
       document.body.appendChild(input);
       input.click();
@@ -1934,8 +1996,8 @@ var require_editor = __commonJS({
         <label class="mom-field">\u7B7E\u540D<input class="mom-inp" data-sig value="${esc(cfg.signature || "")}"></label>
         <div class="mom-field">
           <span>\u5934\u50CF</span>
-          <label class="mom-btn mom-btn-small">\u4E0A\u4F20\u5934\u50CF<input type="file" accept="image/*" hidden data-avatar></label>
-          <span class="mom-hint">\u5C06\u4FDD\u5B58\u81F3\u65E5\u8BB0\u6D41\u4E13\u5C5E\u76EE\u5F55\uFF0C\u5EFA\u8BAE\u5C0F\u56FE</span>
+          <label class="mom-btn mom-btn-small">\u4E0A\u4F20\u5934\u50CF<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,.jpg,.jpeg,.png,.webp,.gif,.bmp" hidden data-avatar></label>
+          <span class="mom-hint">\u5EFA\u8BAE JPG/PNG/WebP\uFF1B\u4E0D\u652F\u6301 HEIC</span>
         </div>
         <div class="mom-field">
           <span>\u5C01\u9762</span>
@@ -1974,34 +2036,57 @@ var require_editor = __commonJS({
         if (t.matches("[data-avatar]")) {
           const f = (t.files || [])[0];
           if (!f) return;
-          const url = await saveImageToAssets(f);
-          if (url) {
-            cfg.avatar = url;
-            ctx.showMessage("\u5934\u50CF\u5DF2\u66F4\u65B0");
-            try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e0) {}
-            await ctx.save();
-            ctx.reApp();
+          try {
+            ctx.showMessage && ctx.showMessage("\u5934\u50CF\u4E0A\u4F20\u4E2D\u2026");
+            const url = await saveImageToAssets(f, { maxDim: 640, quality: 0.9 });
+            if (url) {
+              cfg.avatar = url;
+              ctx.showMessage("\u5934\u50CF\u5DF2\u66F4\u65B0");
+              try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e0) {}
+              await ctx.save();
+              ctx.reApp();
+            } else {
+              ctx.showMessage && ctx.showMessage("\u5934\u50CF\u4E0A\u4F20\u5931\u8D25");
+            }
+          } catch (eAv) {
+            console.warn("[orca-diaryflow] avatar upload", eAv);
+            ctx.showMessage && ctx.showMessage((eAv && eAv.message) || "\u5934\u50CF\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
           }
         } else if (t.matches("[data-cover]")) {
           const f = (t.files || [])[0];
           if (!f) return;
-          const url = await saveImageToAssets(f);
-          if (url) {
-            cfg.cover = url;
-            ctx.showMessage("\u5C01\u9762\u5DF2\u66F4\u65B0");
-            try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e1) {}
-            await ctx.save();
-            ctx.reApp();
+          try {
+            ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u4E2D\u2026");
+            const url = await saveImageToAssets(f, { maxDim: 1920, quality: 0.85 });
+            if (url) {
+              cfg.cover = url;
+              ctx.showMessage("\u5C01\u9762\u5DF2\u66F4\u65B0");
+              try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e1) {}
+              await ctx.save();
+              ctx.reApp();
+            } else {
+              ctx.showMessage && ctx.showMessage("\u5C01\u9762\u4E0A\u4F20\u5931\u8D25");
+            }
+          } catch (eCv) {
+            console.warn("[orca-diaryflow] cover upload", eCv);
+            ctx.showMessage && ctx.showMessage((eCv && eCv.message) || "\u5C01\u9762\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
           }
         } else if (t.matches("[data-lockbg]")) {
           const f = (t.files || [])[0];
           if (!f) return;
-          const url = await saveImageToAssets(f);
-          if (url) {
-            cfg.lockBg = url;
-            ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u5DF2\u66F4\u65B0");
-            try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e2) {}
-            await ctx.save();
+          try {
+            const url = await saveImageToAssets(f, { maxDim: 1920, quality: 0.85 });
+            if (url) {
+              cfg.lockBg = url;
+              ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u5DF2\u66F4\u65B0");
+              try { if (globalThis.__DF_ASSETS) await globalThis.__DF_ASSETS.hydrate({ config: cfg, items: [] }); } catch (e2) {}
+              await ctx.save();
+            } else {
+              ctx.showMessage && ctx.showMessage("\u9501\u5C4F\u80CC\u666F\u4E0A\u4F20\u5931\u8D25");
+            }
+          } catch (eLk) {
+            console.warn("[orca-diaryflow] lockbg upload", eLk);
+            ctx.showMessage && ctx.showMessage((eLk && eLk.message) || "\u4E0D\u652F\u6301\u8BE5\u683C\u5F0F");
           }
         }
       });
@@ -2054,9 +2139,31 @@ var DF_TAG = "日记流";
 var DF_INDEX_KEY = "moments-index";
 var DF_BACKUP_KEY = "moments-records-backup";
 var DF_MIGRATED_KEY = "moments-migrated";
+var DF_TUTORIAL_KEY = "tutorial-inserted-v1"; // 兼容旧标记；现以 dismissed / blockId 为准
+var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
+var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
 var DF_PROP_TEXT = 1; // PropType.Text
+
+var DF_TUTORIAL_TITLE = "日记流 · 使用说明";
+
+/** 插件内嵌使用说明正文（勿写 #标签字样，避免 strip 误伤；勿用 - 前缀以免卡片当列表符显示） */
+var DF_TUTORIAL_TEXT = [
+  DF_TUTORIAL_TITLE,
+  "本条由日记流插件自动置顶写入今日日记；手动删除后不再自动出现。",
+  "—— 基本用法 ——",
+  "右下角「+」：在今日日记新建一条，并跳转虎鲸编辑",
+  "点卡片正文或「打开」：在虎鲸中深度编辑该条目",
+  "封面区：设置封面、头像与签名",
+  "底栏「地点」：写入正文末行「地点：…」，并同步属性",
+  "「⋯」展开：置顶、改标签、打开虎鲸、删除",
+  "FAB 标签按钮：按用户标签筛选时间线；同步按钮可手动刷新",
+  "—— 重要规则 ——",
+  "只有带「日记流」标签的日记块才会进入时间线",
+  "日记流以展示为主；正文编辑以虎鲸日记页为准，改完会自动同步",
+  "条目日期跟随所属日记页；换日期请用卡片改时间（会移动到对应日记）"
+].join("\n");
 
 function dfIsId(v) {
   return typeof v === "number" && isFinite(v) && v > 0;
@@ -3501,20 +3608,23 @@ async function createEntry(opts) {
   opts = opts || {};
   var date = opts.date instanceof Date ? opts.date : new Date(opts.date || Date.now());
   var extraTags = opts.tags || [];
-  var text = dfStripInlineTagText(opts.text != null ? String(opts.text) : "", extraTags);
+  var raw = opts.text != null ? String(opts.text) : "";
+  var text = opts.skipTagStrip
+    ? raw.replace(/\uFF03/g, "#").replace(/\r\n/g, "\n").trim()
+    : dfStripInlineTagText(raw, extraTags);
   var lines = dfSplitEntryLines(text);
   if (!lines.length) lines = [""];
   var journal = await dfEnsureJournal(date);
   var newId = null;
   var keepFocus = !!(opts.focusBeforeTags || opts.keepEditorFocus);
+  // 先插标题 + 标签；正文子块另开一轮写入，避免 insertTag 后同组插入被吃掉
   await dfWithEditor(async function () {
-    // 首行：打 #日记流 + 用户标签；空正文传 null，让虎鲸按「仅标签」结构渲染（标签前可打字）
     var firstContent = lines[0] ? dfMarkdownLineToFragments(lines[0]) : null;
     newId = await dfEditorCommand(
       "core.editor.insertBlock",
       null,
       orca.state.blocks[journal.id] || journal,
-      "lastChild",
+      opts.firstChild ? "firstChild" : "lastChild",
       firstContent,
       { type: "text" }
     );
@@ -3526,19 +3636,45 @@ async function createEntry(opts) {
         try { await dfEditorCommand("core.editor.insertTag", null, newId, t); } catch (e) { /* ignore */ }
       }
     }
-    // 其余行：作为首行子块，图片也挂在同一棵树上
-    var root = orca.state.blocks[newId] || { id: newId };
-    for (var li = 1; li < lines.length; li++) {
-      await dfEditorCommand(
-        "core.editor.insertBlock",
-        null,
-        root,
-        "lastChild",
-        dfMarkdownLineToFragments(lines[li]),
-        { type: "text" }
-      );
-    }
   }, date, { keepFocus: keepFocus });
+
+  if (lines.length > 1 && dfIsId(newId)) {
+    try {
+      await dfWithEditor(async function () {
+        var root = orca.state.blocks[newId] || { id: newId };
+        // 清掉 insertTag 可能留下的空子块，再写入正文
+        var kids = (root.children || []);
+        var emptyIds = [];
+        for (var ki = 0; ki < kids.length; ki++) {
+          var ch = orca.state.blocks[kids[ki]] || await dfGetBlock(kids[ki]);
+          if (!ch || dfIsMediaBlock(ch)) continue;
+          var plain = dfPlainContentText(ch);
+          if (!plain || !String(plain).trim()) emptyIds.push(ch.id);
+        }
+        if (emptyIds.length) {
+          try { await dfEditorCommand("core.editor.deleteBlocks", null, emptyIds); } catch (e0) { /* ignore */ }
+        }
+        root = orca.state.blocks[newId] || { id: newId };
+        for (var li = 1; li < lines.length; li++) {
+          await dfEditorCommand(
+            "core.editor.insertBlock",
+            null,
+            root,
+            "lastChild",
+            dfMarkdownLineToFragments(lines[li]),
+            { type: "text" }
+          );
+        }
+      }, date, { keepFocus: keepFocus });
+    } catch (eBody) {
+      console.warn("[orca-diaryflow] createEntry body lines failed, fallback updateEntry", eBody);
+      try {
+        await updateEntry(newId, { text: text, tags: extraTags });
+      } catch (e2) {
+        console.warn("[orca-diaryflow] createEntry updateEntry fallback failed", e2);
+      }
+    }
+  }
 
   var orcaImgs = [];
   if (opts.images && opts.images.length) {
@@ -3547,14 +3683,15 @@ async function createEntry(opts) {
     }
   }
 
-  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.comments) {
+  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.comments || opts.isTutorial) {
     await setOverlay(newId, {
       location: opts.location || "",
       images: orcaImgs.length ? orcaImgs : (Array.isArray(opts.images) ? opts.images.slice(0, 9) : []),
       imagesPushedToOrca: orcaImgs.length > 0,
       liked: !!opts.liked,
       pinned: !!opts.pinned,
-      comments: Array.isArray(opts.comments) ? opts.comments : []
+      comments: Array.isArray(opts.comments) ? opts.comments : [],
+      isTutorial: !!opts.isTutorial
     });
   }
   if (opts.location && String(opts.location).trim()) {
@@ -3580,7 +3717,10 @@ async function updateEntry(blockId, payload) {
   var wantTags = (payload.tags || []).map(function (t) {
     return String(t || "").replace(/^#/, "").trim();
   }).filter(function (t) { return t && t !== DF_TAG; });
-  var text = dfStripInlineTagText(payload.text != null ? String(payload.text) : "", wantTags);
+  var raw = payload.text != null ? String(payload.text) : "";
+  var text = payload.skipTagStrip
+    ? raw.replace(/\uFF03/g, "#").replace(/\r\n/g, "\n").trim()
+    : dfStripInlineTagText(raw, wantTags);
   var lines = dfSplitEntryLines(text);
   if (!lines.length) lines = [""];
 
@@ -3642,6 +3782,7 @@ async function updateEntry(blockId, payload) {
   if (payload.comments !== undefined) {
     patch.comments = Array.isArray(payload.comments) ? payload.comments : [];
   }
+  if (payload.isTutorial !== undefined) patch.isTutorial = !!payload.isTutorial;
   await setOverlay(id, patch);
   return dfGetBlock(id);
 }
@@ -3649,6 +3790,15 @@ async function updateEntry(blockId, payload) {
 async function deleteEntry(blockId) {
   var id = dfBlockId(blockId);
   if (!id) return false;
+  var wasTutorial = false;
+  try {
+    var index0 = await dfLoadIndex();
+    var ov0 = index0.overlays[String(id)] || {};
+    if (ov0.isTutorial) wasTutorial = true;
+    var stored = await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_ID_KEY);
+    if (String(stored || "") === String(id)) wasTutorial = true;
+  } catch (eMark) { /* ignore */ }
+
   await dfWithEditor(async function () {
     await dfEditorCommand("core.editor.deleteBlocks", null, [id]);
   });
@@ -3656,6 +3806,14 @@ async function deleteEntry(blockId) {
   if (index.overlays[String(id)]) {
     delete index.overlays[String(id)];
     await dfSaveIndex(index);
+  }
+  if (wasTutorial) {
+    try {
+      await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_DISMISSED_KEY, "true");
+      await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, null);
+    } catch (e2) {
+      console.warn("[orca-diaryflow] mark tutorial dismissed failed", e2);
+    }
   }
   return true;
 }
@@ -3947,6 +4105,130 @@ async function openEntry(blockId, panelId, opts) {
   return opened;
 }
 
+function dfLooksLikeTutorialBlock(block) {
+  if (!block) return false;
+  if (dfHasTag(block, "教程")) return true;
+  var plain = dfPlainContentText(block) || "";
+  var md = "";
+  try { md = dfContentToMarkdown(block.content || [], block) || ""; } catch (e) { /* ignore */ }
+  var head = String(plain || md || "").trim();
+  return head.indexOf(DF_TUTORIAL_TITLE) === 0 || head === DF_TUTORIAL_TITLE;
+}
+
+async function dfTutorialBodyIsThin(block) {
+  if (!block) return true;
+  var rooted = null;
+  try { rooted = await dfLoadBlockTree(block.id); } catch (e) { rooted = block; }
+  var text = "";
+  try { text = await dfCollectEntryText(rooted || block); } catch (e2) {
+    text = dfPlainContentText(block) || "";
+  }
+  var lines = dfSplitEntryLines(text);
+  if (lines.length < 3) return true;
+  var body = lines.slice(1).join("\n").trim();
+  return body.length < 20;
+}
+
+/**
+ * 打开插件时确保使用说明存在：置顶、写入今日日记顶部。
+ * 手动删除后写入 dismissed，不再自动插入；未删除则每次打开都会补齐/补正文。
+ */
+async function ensureTutorialInserted() {
+  var dismissed = await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_DISMISSED_KEY);
+  if (dismissed === true || dismissed === "true" || dismissed === 1) {
+    return { skipped: true, reason: "dismissed" };
+  }
+
+  var today = new Date();
+  var index = await dfLoadIndex();
+  var foundId = null;
+
+  var storedId = dfBlockId(await orca.plugins.getData(orcaPluginName, DF_TUTORIAL_ID_KEY));
+  if (storedId) {
+    var storedBlock = await dfGetBlock(storedId);
+    if (storedBlock) foundId = storedId;
+  }
+  if (!foundId && index && index.overlays) {
+    var keys = Object.keys(index.overlays);
+    for (var i = 0; i < keys.length; i++) {
+      if (index.overlays[keys[i]] && index.overlays[keys[i]].isTutorial) {
+        var bid = dfBlockId(keys[i]);
+        if (bid && (await dfGetBlock(bid))) {
+          foundId = bid;
+          break;
+        }
+      }
+    }
+  }
+  if (!foundId) {
+    // 扫今日日记：找回仅有标题、无正文的旧教程块
+    try {
+      var journal = await dfEnsureJournal(today);
+      var kids = (journal && journal.children) || [];
+      for (var j = 0; j < kids.length; j++) {
+        var ch = orca.state.blocks[kids[j]] || await dfGetBlock(kids[j]);
+        if (ch && dfHasTag(ch, DF_TAG) && dfLooksLikeTutorialBlock(ch)) {
+          foundId = ch.id;
+          break;
+        }
+      }
+    } catch (eScan) {
+      console.warn("[orca-diaryflow] scan tutorial in journal failed", eScan);
+    }
+  }
+
+  if (foundId) {
+    var block = await dfGetBlock(foundId);
+    var thin = await dfTutorialBodyIsThin(block);
+    var curText = "";
+    try { curText = await dfCollectEntryText(block); } catch (eCur) { curText = ""; }
+    var needRefresh = thin || String(curText || "").replace(/\r\n/g, "\n").trim() !== DF_TUTORIAL_TEXT.trim();
+    if (needRefresh) {
+      await updateEntry(foundId, {
+        text: DF_TUTORIAL_TEXT,
+        tags: ["教程"],
+        pinned: true,
+        isTutorial: true,
+        skipTagStrip: true
+      });
+    } else {
+      await setOverlay(foundId, { pinned: true, isTutorial: true });
+    }
+    // 挪到今日日记顶部
+    try {
+      var j2 = await dfEnsureJournal(today);
+      var b2 = await dfGetBlock(foundId);
+      if (b2 && dfIsId(j2.id) && (b2.parent !== j2.id || (j2.children && j2.children[0] !== foundId))) {
+        await dfWithEditor(async function () {
+          await dfEditorCommand("core.editor.moveBlocks", null, [foundId], j2.id, "firstChild");
+        }, today);
+      }
+    } catch (eMove) {
+      console.warn("[orca-diaryflow] move tutorial to journal top failed", eMove);
+    }
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(foundId));
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
+    return { skipped: false, repaired: !!thin || needRefresh, refreshed: needRefresh, blockId: foundId };
+  }
+
+  var created = await createEntry({
+    date: today,
+    text: DF_TUTORIAL_TEXT,
+    tags: ["教程"],
+    pinned: true,
+    isTutorial: true,
+    firstChild: true,
+    skipTagStrip: true
+  });
+  var newId = dfBlockId(created);
+  if (newId) {
+    await setOverlay(newId, { pinned: true, isTutorial: true });
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(newId));
+    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
+  }
+  return { skipped: false, created: true, blockId: newId };
+}
+
 async function migrateMomentsRecords(loadLegacyFn) {
   var flag = await orca.plugins.getData(orcaPluginName, DF_MIGRATED_KEY);
   if (flag === true || flag === "true" || flag === 1) {
@@ -4012,6 +4294,9 @@ async function migrateMomentsRecords(loadLegacyFn) {
 var OrcaBlocks = {
   TAG: DF_TAG,
   INDEX_KEY: DF_INDEX_KEY,
+  TUTORIAL_KEY: DF_TUTORIAL_KEY,
+  TUTORIAL_DISMISSED_KEY: DF_TUTORIAL_DISMISSED_KEY,
+  TUTORIAL_ID_KEY: DF_TUTORIAL_ID_KEY,
   listFeed: listFeed,
   createEntry: createEntry,
   updateEntry: updateEntry,
@@ -4022,6 +4307,7 @@ var OrcaBlocks = {
   setOverlay: setOverlay,
   collectUserTags: collectUserTags,
   openEntry: openEntry,
+  ensureTutorialInserted: ensureTutorialInserted,
   migrateMomentsRecords: migrateMomentsRecords,
   loadIndex: dfLoadIndex,
   saveIndex: dfSaveIndex,
@@ -5371,6 +5657,24 @@ function orcaRememberPanelWidth(targetId) {
   if (isNaN(w) || w <= 0) return;
   try { dfSetData(DF_PANEL_W_KEY, Math.round(w * 100) / 100); } catch (e) {}
 }
+/** 打开面板后：确保插件自带使用说明存在（未手动删除则每次补齐） */
+function orcaMaybeInsertTutorial() {
+  if (!OrcaBlocks || typeof OrcaBlocks.ensureTutorialInserted !== "function") return;
+  orcaWhenReady(function () {
+    OrcaBlocks.ensureTutorialInserted().then(function (res) {
+      if (!res || res.skipped) return;
+      orcaMuteFeedSync(2500);
+      return orcaRefreshFeed().then(function () {
+        if (orcaCtx && typeof orcaCtx.reApp === "function") orcaCtx.reApp();
+        if (res.created) orcaShowMessage("已插入使用说明（置顶）");
+        else if (res.repaired) orcaShowMessage("已补全使用说明正文");
+      });
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] insert tutorial failed", e);
+    });
+  });
+}
+
 function orcaOpenPanel() {
   try {
     var active = orca.state.activePanel;
@@ -5400,6 +5704,7 @@ function orcaOpenPanel() {
       if (vp && !vp.wide) vp.wide = true;
     } catch (e) {}
     setTimeout(function () { try { orca.nav.switchFocusTo(targetId); } catch (e) {} }, 80);
+    orcaMaybeInsertTutorial();
   } catch (e) {
     console.error("[orca-diaryflow] openPanel", e);
   }

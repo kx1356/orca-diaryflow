@@ -1,0 +1,2 @@
+      const coverSrc = cfg.cover ? (globalThis.__DF_ASSETS ? globalThis.__DF_ASSETS.resolve(cfg.cover) : cfg.cover) : "";
+      const cover = coverSrc ? `<img class="mom-cover-img" data-cover-img src="${esc(coverSrc)}" alt="cover" loading="lazy" decoding="async" fetchpriority="low">` : `<div class="mom-cover-default" data-cover-img></div>`;

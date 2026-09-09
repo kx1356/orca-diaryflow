@@ -14,6 +14,7 @@
 1. 从 [Releases](https://github.com/kx1356/orca-diaryflow/releases) 下载 zip
 2. 解压到虎鲸 `plugins` 目录（如 `Documents/orca/plugins/`）
 3. 重启虎鲸并在设置中启用「日记流」
+4. 打开日记流面板：会把置顶「使用说明」写入今日日记顶部（手动删除后不再自动出现）
 
 ## 开发
 

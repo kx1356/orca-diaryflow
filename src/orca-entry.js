@@ -1326,6 +1326,24 @@ function orcaRememberPanelWidth(targetId) {
   if (isNaN(w) || w <= 0) return;
   try { dfSetData(DF_PANEL_W_KEY, Math.round(w * 100) / 100); } catch (e) {}
 }
+/** 打开面板后：确保插件自带使用说明存在（未手动删除则每次补齐） */
+function orcaMaybeInsertTutorial() {
+  if (!OrcaBlocks || typeof OrcaBlocks.ensureTutorialInserted !== "function") return;
+  orcaWhenReady(function () {
+    OrcaBlocks.ensureTutorialInserted().then(function (res) {
+      if (!res || res.skipped) return;
+      orcaMuteFeedSync(2500);
+      return orcaRefreshFeed().then(function () {
+        if (orcaCtx && typeof orcaCtx.reApp === "function") orcaCtx.reApp();
+        if (res.created) orcaShowMessage("已插入使用说明（置顶）");
+        else if (res.repaired) orcaShowMessage("已补全使用说明正文");
+      });
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] insert tutorial failed", e);
+    });
+  });
+}
+
 function orcaOpenPanel() {
   try {
     var active = orca.state.activePanel;
@@ -1355,6 +1373,7 @@ function orcaOpenPanel() {
       if (vp && !vp.wide) vp.wide = true;
     } catch (e) {}
     setTimeout(function () { try { orca.nav.switchFocusTo(targetId); } catch (e) {} }, 80);
+    orcaMaybeInsertTutorial();
   } catch (e) {
     console.error("[orca-diaryflow] openPanel", e);
   }

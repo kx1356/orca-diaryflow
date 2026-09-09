@@ -89,7 +89,12 @@ const patches = [
   { block: "render", name: "P44-actions-slim" },
   { block: "editor", name: "P45-cover-resolve" },
   { block: "editor", name: "P46-settings-media-save" },
-  { block: "render", name: "P47-avatar-blank" }
+  { block: "render", name: "P47-avatar-blank" },
+  { block: "render", name: "P48-pin-firstline" },
+  { block: "editor", name: "P49-avatar-image-robust" },
+  { block: "render", name: "P50-cover-resolve-src" },
+  { block: "editor", name: "P51-cover-upload-catch" },
+  { block: "editor", name: "P52-avatar-accept" }
 ];
 
 function applyPatch(block, name, all) {
@@ -878,7 +883,7 @@ if (existsSync(marketIcon)) {
   copyFileSync(SRC_ICON, join(ROOT, "icon.png"));
 }
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 const REPO_URL = "https://github.com/kx1356/orca-diaryflow";
 
 // plugin.json（mreader 同款格式；文件夹名仍为 orca-diaryflow）
@@ -924,7 +929,7 @@ const pkgMeta = {
   },
   orcaNoteMarketplace: {
     id: "orca-diaryflow",
-    name: "Diary Flow",
+    name: "日记流",
     category: "Productivity",
     artifactName: "orca-diaryflow",
     translations: {
@@ -933,6 +938,12 @@ const pkgMeta = {
         description:
           "朋友圈式日记时间流：展示带 #日记流 标签的日记块，支持封面/头像、标签筛选、地点、置顶与评论；新建与深度编辑跳转虎鲸日记页。",
         category: "效率工具"
+      },
+      en: {
+        name: "Diary Flow",
+        description:
+          "Moments-style diary feed: timeline of #日记流 journal blocks with cover/avatar, tags, location, pin and comments.",
+        category: "Productivity"
       }
     }
   },
