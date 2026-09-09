@@ -56,9 +56,11 @@ function New-LocalReleaseZip {
 
   if (Test-Path "icon.svg") {
     Copy-Item -Path "icon.svg" -Destination (Join-Path $pluginRoot "icon.svg")
-  } elseif (Test-Path "icon.png") {
+  }
+  if (Test-Path "icon.png") {
     Copy-Item -Path "icon.png" -Destination (Join-Path $pluginRoot "icon.png")
-  } else {
+  }
+  if (-not (Test-Path (Join-Path $pluginRoot "icon.svg")) -and -not (Test-Path (Join-Path $pluginRoot "icon.png"))) {
     throw "icon.png or icon.svg not found at repository root."
   }
 

@@ -9,6 +9,9 @@ mkdirSync(join(DEST, "dist"), { recursive: true });
 copyFileSync(join(ROOT, "plugin.json"), join(DEST, "plugin.json"));
 copyFileSync(join(ROOT, "package.json"), join(DEST, "package.json"));
 copyFileSync(join(ROOT, "icon.png"), join(DEST, "icon.png"));
+if (existsSync(join(ROOT, "icon.svg"))) {
+  copyFileSync(join(ROOT, "icon.svg"), join(DEST, "icon.svg"));
+}
 copyFileSync(join(ROOT, "dist", "index.js"), join(DEST, "dist", "index.js"));
 
 console.log("deployed to", DEST);

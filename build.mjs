@@ -875,7 +875,7 @@ const out = [
 
 mkdirSync(join(ROOT, "dist"), { recursive: true });
 writeFileSync(join(ROOT, "dist", "index.js"), out);
-// 集市图标优先：保留本地 ≤80px 的 icon.png / icon-market.png，勿被思源源图覆盖
+// 集市图标：优先保留本地 icon-market.png（≤80）/ icon.png，勿被思源源图覆盖；SVG 单独保留
 const marketIcon = join(ROOT, "icon-market.png");
 if (existsSync(marketIcon)) {
   copyFileSync(marketIcon, join(ROOT, "icon.png"));
@@ -883,7 +883,7 @@ if (existsSync(marketIcon)) {
   copyFileSync(SRC_ICON, join(ROOT, "icon.png"));
 }
 
-const VERSION = "0.3.1";
+const VERSION = "0.3.2";
 const REPO_URL = "https://github.com/kx1356/orca-diaryflow";
 
 // plugin.json（mreader 同款格式；文件夹名仍为 orca-diaryflow）
