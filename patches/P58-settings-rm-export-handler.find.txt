@@ -1,0 +1,8 @@
+        if (e.target.closest("[data-export]")) {
+          const kind = e.target.closest("[data-export]").dataset.export;
+          try {
+            await exp.export(ctx, kind);
+          } catch (err) {
+            ctx.showMessage("\u5BFC\u51FA\u5931\u8D25: " + err.message);
+          }
+        }

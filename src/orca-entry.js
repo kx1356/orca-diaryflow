@@ -6,7 +6,7 @@
 var ORCA_PANEL_TYPE = "orca-diaryflow.panel";
 var ORCA_BTN_ID = "orca-diaryflow.button";
 var ORCA_SIDETOOL_ID = "orca-diaryflow.sidetool";
-var ORCA_STYLE_ID = "orca-diaryflow-style-v34";
+var ORCA_STYLE_ID = "orca-diaryflow-style-v39";
 var orcaPluginName = "";
 var orcaRegisteredPanel = false;
 var orcaReady = false;
@@ -471,6 +471,9 @@ async function orcaRefreshFeed(opts) {
 
 function orcaApplyFeedWindow(cfg) {
   var all = orcaFeedAllItems || [];
+  if (typeof orcaToolsQuickFilterItems === "function" && orcaCtx && orcaCtx.filters) {
+    all = orcaToolsQuickFilterItems(all, orcaCtx.filters);
+  }
   var limit = Math.max(ORCA_FEED_PAGE_SIZE, Number(orcaFeedLimit) || ORCA_FEED_PAGE_SIZE);
   orcaFeedLimit = limit;
   var visible = all.slice(0, limit);
@@ -546,7 +549,7 @@ async function orcaManualRefreshFeed(ctx) {
 function orcaBuildCtx() {
   var c = {
     plugin: orcaShim,
-    filters: { kw: "", tags: [] },
+    filters: { kw: "", tags: [], hasImage: false, hasLocation: false, pinnedOnly: false },
     view: "feed",
     calYear: new Date().getFullYear(),
     mounts: [],
@@ -700,38 +703,14 @@ function orcaEnhanceFeedDom(el, ctx) {
     if (first) stack.insertBefore(syncBtn, first);
     else stack.appendChild(syncBtn);
   }
-  if (stack && !stack.querySelector("[data-df-act=open-trash]")) {
-    var trashBtn = document.createElement("button");
-    trashBtn.type = "button";
-    trashBtn.className = "mom-outline-fab orca-df-trash-fab";
-    trashBtn.setAttribute("data-df-act", "open-trash");
-    trashBtn.title = "回收站";
-    trashBtn.setAttribute("aria-label", "回收站");
-    trashBtn.innerHTML =
-      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
-      '<span class="orca-df-trash-fab-count" hidden>0</span>';
-    var syncEl = stack.querySelector("[data-df-act=refresh-feed]");
-    if (syncEl && syncEl.nextSibling) stack.insertBefore(trashBtn, syncEl.nextSibling);
-    else if (syncEl) stack.appendChild(trashBtn);
-    else stack.appendChild(trashBtn);
+  // 回收站 / 归档柜 / 搜索已并入「工具」；清掉旧版独立 FAB
+  if (stack) {
+    stack.querySelectorAll("[data-df-act=open-trash], [data-df-act=open-archive], [data-df-act=open-search]").forEach(function (n) {
+      n.remove();
+    });
   }
-  if (stack && !stack.querySelector("[data-df-act=open-archive]")) {
-    var archBtn = document.createElement("button");
-    archBtn.type = "button";
-    archBtn.className = "mom-outline-fab orca-df-archive-fab";
-    archBtn.setAttribute("data-df-act", "open-archive");
-    archBtn.title = "归档柜";
-    archBtn.setAttribute("aria-label", "归档柜");
-    archBtn.innerHTML =
-      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg>' +
-      '<span class="orca-df-archive-fab-count" hidden>0</span>';
-    var trashEl = stack.querySelector("[data-df-act=open-trash]");
-    if (trashEl && trashEl.nextSibling) stack.insertBefore(archBtn, trashEl.nextSibling);
-    else if (trashEl) stack.appendChild(archBtn);
-    else stack.appendChild(archBtn);
-  }
-  orcaRefreshTrashFab(ctx, el);
-  orcaRefreshArchiveFab(ctx, el);
+  if (typeof orcaEnhanceToolsUi === "function") orcaEnhanceToolsUi(el, ctx);
+  orcaRefreshToolsFab(ctx, el);
   // FAB 标签筛选高亮
   var tagFab = el.querySelector(".mom-tag-fab, [data-action=open-tag-filter]");
   if (tagFab) {
@@ -739,7 +718,7 @@ function orcaEnhanceFeedDom(el, ctx) {
     tagFab.classList.toggle("is-on", on);
     tagFab.title = on ? ("标签筛选 · #" + ctx.filters.tags[0]) : "标签筛选";
   }
-  // 标签筛选条（面板内关键词搜索已移除，改用虎鲸自带搜索）
+  // 标签筛选条
   if (!el.querySelector(".orca-df-tagbar")) {
     OrcaBlocks.collectUserTags().then(function (tags) {
       if (!el.isConnected) return;
@@ -754,6 +733,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         (active ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-tag">全部</button>' : "");
       var list = el.querySelector(".mom-list") || el.querySelector("[data-list]");
       if (list && list.parentNode) list.parentNode.insertBefore(bar, list);
+      if (typeof orcaEnhanceToolsUi === "function") orcaEnhanceToolsUi(el, ctx);
     }).catch(function () {});
   }
   // 卡片：精简底栏；「⋯」内联展开图标（置顶 / 标签 / 打开 / 删除）
@@ -825,6 +805,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         '<button type="button" class="north-luna-moments-action-btn' + (it.pinned ? " active is-on" : "") + '" data-action="pin" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(pinTitle) + '" aria-label="' + orcaEsc(pinTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v4l1 1 1-1v-4h5v-2l-2-2z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="归档" aria-label="归档"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-tag-btn' + (userTags.length ? " is-on" : "") + '" data-action="tag" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(tagTitle) + '" aria-label="' + orcaEsc(tagTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21.4 11.6l-9-9C12 2.2 11.5 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .5.2 1 .6 1.4l9 9c.4.4.9.6 1.4.6s1-.2 1.4-.6l7-7c.4-.4.6-.9.6-1.4 0-.5-.2-1-.6-1.4zM6.5 8C5.7 8 5 7.3 5 6.5S5.7 5 6.5 5 8 5.7 8 6.5 7.3 8 6.5 8z"></path></svg></button>' +
+        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="管理图片" aria-label="管理图片"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
         (bid && isFinite(Number(bid))
           ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="在虎鲸中打开" aria-label="在虎鲸中打开"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
@@ -1449,18 +1430,26 @@ function orcaDeleteComment(ctx, btn) {
     });
 }
 
-function orcaRefreshTrashFab(ctx, root) {
-  if (!OrcaBlocks || typeof OrcaBlocks.trashCount !== "function") return;
+function orcaRefreshToolsFab(ctx, root) {
   var scope = root || (ctx && ctx.container) || document;
-  OrcaBlocks.trashCount().then(function (n) {
+  var pTrash = (OrcaBlocks && typeof OrcaBlocks.trashCount === "function")
+    ? OrcaBlocks.trashCount()
+    : Promise.resolve(0);
+  var pArch = (OrcaBlocks && typeof OrcaBlocks.listArchivedFeed === "function")
+    ? OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
+      return (feed && feed.items && feed.items.length) || 0;
+    })
+    : Promise.resolve(0);
+  Promise.all([pTrash, pArch]).then(function (arr) {
+    var n = (Number(arr[0]) || 0) + (Number(arr[1]) || 0);
     var nodes = (scope.querySelectorAll
-      ? scope.querySelectorAll(".orca-df-trash-fab")
+      ? scope.querySelectorAll(".orca-df-tools-fab")
       : []);
     if (!nodes.length && typeof document !== "undefined") {
-      nodes = document.querySelectorAll(".orca-df-scope .orca-df-trash-fab");
+      nodes = document.querySelectorAll(".orca-df-scope .orca-df-tools-fab");
     }
     Array.prototype.forEach.call(nodes, function (btn) {
-      var badge = btn.querySelector(".orca-df-trash-fab-count");
+      var badge = btn.querySelector(".orca-df-tools-fab-count");
       if (!badge) return;
       if (n > 0) {
         badge.hidden = false;
@@ -1471,6 +1460,14 @@ function orcaRefreshTrashFab(ctx, root) {
       }
     });
   }).catch(function () { /* ignore */ });
+}
+
+function orcaRefreshTrashFab(ctx, root) {
+  orcaRefreshToolsFab(ctx, root);
+}
+
+function orcaRefreshArchiveFab(ctx, root) {
+  orcaRefreshToolsFab(ctx, root);
 }
 
 function orcaTrashFormatTime(ts) {
@@ -1823,31 +1820,6 @@ function orcaOpenMonthOutline(ctx) {
   document.addEventListener("keydown", onKey, true);
 }
 
-function orcaRefreshArchiveFab(ctx, root) {
-  if (!OrcaBlocks || typeof OrcaBlocks.listArchivedFeed !== "function") return;
-  var scope = root || (ctx && ctx.container) || document;
-  OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
-    var n = (feed && feed.items && feed.items.length) || 0;
-    var nodes = (scope.querySelectorAll
-      ? scope.querySelectorAll(".orca-df-archive-fab")
-      : []);
-    if (!nodes.length && typeof document !== "undefined") {
-      nodes = document.querySelectorAll(".orca-df-scope .orca-df-archive-fab");
-    }
-    Array.prototype.forEach.call(nodes, function (btn) {
-      var badge = btn.querySelector(".orca-df-archive-fab-count");
-      if (!badge) return;
-      if (n > 0) {
-        badge.hidden = false;
-        badge.textContent = n > 99 ? "99+" : String(n);
-      } else {
-        badge.hidden = true;
-        badge.textContent = "0";
-      }
-    });
-  }).catch(function () { /* ignore */ });
-}
-
 function orcaCloseArchiveDialog() {
   var old = document.querySelector(".orca-df-archive-backdrop");
   if (old) old.remove();
@@ -1957,6 +1929,9 @@ function orcaOpenArchiveDialog(ctx) {
 }
 
 function orcaHandleDfAct(ctx, act, btn) {
+  if (typeof orcaHandleToolsAct === "function" && orcaHandleToolsAct(ctx, act, btn)) {
+    return;
+  }
   if (act === "refresh-feed") {
     orcaManualRefreshFeed(ctx);
     return;
@@ -1972,6 +1947,7 @@ function orcaHandleDfAct(ctx, act, btn) {
   if (act === "clear-tag") {
     ctx.filters.tags = [];
     ctx.filters.kw = "";
+    if (typeof orcaToolsClearQuickFilters === "function") orcaToolsClearQuickFilters(ctx.filters);
     orcaRefreshFeed().then(function () { ctx.reApp(); });
     return;
   }

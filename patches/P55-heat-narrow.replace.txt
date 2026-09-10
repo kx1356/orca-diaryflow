@@ -1,0 +1,11 @@
+      const applyWidth = (mode) => {
+        // 热度必须设明确 width：仅 maxWidth + auto 会收缩，界面看起来「没变化」
+        if (mode === "heatmap") {
+          const w = Math.min(680, Math.floor(window.innerWidth * 0.96));
+          content.style.width = w + "px";
+          content.style.maxWidth = w + "px";
+        } else {
+          content.style.width = "auto";
+          content.style.maxWidth = "420px";
+        }
+      };

@@ -1,0 +1,50 @@
+    // 热力图模式：53 列周视图
+    function calBuildHeat(ctx, year) {
+      const { dayCounts } = calGridStats(ctx, year);
+      const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+      const startDate = calStartDate(year);
+      const weeks = calWeeks(year, startDate);
+      let columns = "";
+      for (let w = 0; w < weeks; w++) {
+        let cells = "";
+        for (let d = 0; d < 7; d++) {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() + w * 7 + d);
+          if (date.getFullYear() === year) {
+            const key = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`;
+            const count = dayCounts[key] || 0;
+            let level = 0;
+            if (count >= 1) level = 2;
+            if (count >= 3) level = 3;
+            if (count >= 5) level = 4;
+            const tip = count > 0 ? `${date.getMonth() + 1}月${date.getDate()}日: ${count}条` : `${date.getMonth() + 1}月${date.getDate()}日`;
+            const dateAttr = count > 0 ? ` data-date="${key}"` : "";
+            cells += `<div class="mom-calendar-cell level-${level}"${dateAttr} title="${tip}"></div>`;
+          } else {
+            cells += `<div class="mom-calendar-cell level-empty"></div>`;
+          }
+        }
+        columns += `<div class="mom-calendar-column">${cells}</div>`;
+      }
+      const msW = new Array(12).fill(-1);
+      const meW = new Array(12).fill(-1);
+      for (let w = 0; w < weeks; w++) {
+        for (let d = 0; d < 7; d++) {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() + w * 7 + d);
+          if (date.getFullYear() === year) {
+            const m2 = date.getMonth();
+            if (msW[m2] === -1) msW[m2] = w;
+            meW[m2] = w;
+          }
+        }
+      }
+      const labels = [];
+      for (let m2 = 0; m2 < 12; m2++) {
+        if (msW[m2] !== -1) {
+          const mid = (msW[m2] + meW[m2]) / 2;
+          labels.push(`<span class="mom-calendar-month-label" style="left:${(mid + 0.5) / weeks * 100}%">${monthNames[m2]}</span>`);
+        }
+      }
+      return `<div class="mom-calendar-columns">${columns}</div><div class="mom-calendar-months">${labels.join("")}</div>`;
+    }

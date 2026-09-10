@@ -1,0 +1,4 @@
+      const applyWidth = (mode) => {
+        content.style.maxWidth = mode === "photo" ? "420px" : "1200px";
+        content.style.width = mode === "photo" ? "auto" : "94%";
+      };

@@ -1,0 +1,998 @@
+// ============================================================
+// src/orca-tools.js — 统计 / 导出 / 回顾 / 搜索 / 布局 / 快捷筛选 / 多图管理
+// ============================================================
+
+var DF_LAYOUT_KEY = "layout-preset";
+var DF_LAYOUT_DEFAULT = "cozy";
+
+function orcaToolsEsc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function orcaToolsItemDay(it) {
+  var raw = String((it && (it.created || it.createdAt)) || "").trim();
+  var m = raw.match(/(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
+  if (m) {
+    return m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2);
+  }
+  var d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+  return "";
+}
+
+function orcaToolsItemTitle(it) {
+  var t = String((it && it.text) || "").replace(/\r\n/g, "\n").split("\n").map(function (s) {
+    return s.trim();
+  }).filter(Boolean)[0] || "(无标题)";
+  return t.slice(0, 80);
+}
+
+function orcaToolsQuickFilterItems(items, filters) {
+  filters = filters || {};
+  return (items || []).filter(function (it) {
+    if (!it) return false;
+    if (filters.pinnedOnly && !it.pinned) return false;
+    if (filters.hasImage && !(it.images && it.images.length)) return false;
+    if (filters.hasLocation && !(it.location && String(it.location).trim())) return false;
+    return true;
+  });
+}
+
+function orcaToolsHasQuickFilters(filters) {
+  filters = filters || {};
+  return !!(filters.pinnedOnly || filters.hasImage || filters.hasLocation);
+}
+
+function orcaToolsClearQuickFilters(filters) {
+  if (!filters) return;
+  filters.pinnedOnly = false;
+  filters.hasImage = false;
+  filters.hasLocation = false;
+}
+
+function orcaToolsComputeStats(items) {
+  items = items || [];
+  var now = new Date();
+  var y = now.getFullYear();
+  var ym = y + "-" + ("0" + (now.getMonth() + 1)).slice(-2);
+  var byYear = {};
+  var byMonth = {};
+  var byTag = {};
+  var days = {};
+  var withImg = 0;
+  var withLoc = 0;
+  var pinned = 0;
+  items.forEach(function (it) {
+    var day = orcaToolsItemDay(it);
+    if (day) {
+      days[day] = true;
+      var yy = day.slice(0, 4);
+      var mm = day.slice(0, 7);
+      byYear[yy] = (byYear[yy] || 0) + 1;
+      byMonth[mm] = (byMonth[mm] || 0) + 1;
+    }
+    if (it.images && it.images.length) withImg++;
+    if (it.location && String(it.location).trim()) withLoc++;
+    if (it.pinned) pinned++;
+    (it.tags || []).forEach(function (t) {
+      if (!t || t === "日记流") return;
+      byTag[t] = (byTag[t] || 0) + 1;
+    });
+  });
+  var dayList = Object.keys(days).sort();
+  var streak = 0;
+  function hasDay(d) { return !!days[d]; }
+  function shiftDay(base, n) {
+    var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+  var cursor = 0;
+  if (hasDay(shiftDay(now, 0))) cursor = 0;
+  else if (hasDay(shiftDay(now, -1))) cursor = -1;
+  else cursor = null;
+  if (cursor != null) {
+    while (hasDay(shiftDay(now, cursor - streak))) streak++;
+  }
+  var tagRows = Object.keys(byTag).map(function (k) {
+    return { tag: k, count: byTag[k] };
+  }).sort(function (a, b) { return b.count - a.count; }).slice(0, 12);
+  var yearRows = Object.keys(byYear).sort().reverse().map(function (k) {
+    return { year: k, count: byYear[k] };
+  });
+  var monthRows = Object.keys(byMonth).sort().reverse().slice(0, 12).map(function (k) {
+    return { month: k, count: byMonth[k] };
+  });
+  return {
+    total: items.length,
+    yearCount: byYear[String(y)] || 0,
+    monthCount: byMonth[ym] || 0,
+    activeDays: dayList.length,
+    streak: streak,
+    withImg: withImg,
+    withLoc: withLoc,
+    pinned: pinned,
+    tagRows: tagRows,
+    yearRows: yearRows,
+    monthRows: monthRows
+  };
+}
+
+function orcaToolsBuildMarkdown(items, cfg) {
+  cfg = cfg || {};
+  var lines = ["# 日记流 · " + (cfg.nickname || ""), "", "共 " + items.length + " 条", ""];
+  var lastMonth = "";
+  items.forEach(function (it) {
+    var day = orcaToolsItemDay(it);
+    var month = day ? day.slice(0, 7) : "";
+    if (month && month !== lastMonth) {
+      lastMonth = month;
+      lines.push("", "## " + month.replace("-", "年") + "月", "");
+    }
+    lines.push("### " + (it.created || day || "") + (it.pinned ? " [置顶]" : ""));
+    if (it.location) lines.push("地点：" + it.location);
+    var tags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
+    if (tags.length) lines.push("标签：" + tags.map(function (t) { return "#" + t; }).join(" "));
+    if (it.text) lines.push("", it.text, "");
+    (it.images || []).forEach(function (src, i) {
+      lines.push("![图" + (i + 1) + "](" + src + ")");
+    });
+    if (it.comments && it.comments.length) {
+      it.comments.forEach(function (c) {
+        lines.push("> " + (c.name || "我") + ": " + (c.text || ""));
+      });
+    }
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+function orcaToolsDownloadBlob(filename, blob) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () {
+    try { URL.revokeObjectURL(url); } catch (e) {}
+    a.remove();
+  }, 1500);
+}
+
+function orcaToolsDownloadText(filename, text, mime) {
+  orcaToolsDownloadBlob(filename, new Blob([text], { type: mime || "text/plain;charset=utf-8" }));
+}
+
+function orcaToolsCrc32(buf) {
+  var table = orcaToolsCrc32._t;
+  if (!table) {
+    table = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    orcaToolsCrc32._t = table;
+  }
+  var crc = 0xffffffff;
+  for (var i = 0; i < buf.length; i++) {
+    crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function orcaToolsUtf8(str) {
+  return new TextEncoder().encode(String(str || ""));
+}
+
+/** MS-DOS 时间/日期（ZIP 必填；全 0 会显示成 1601/1/1） */
+function orcaToolsZipDosTime(date) {
+  var d = date instanceof Date ? date : new Date(date || Date.now());
+  if (isNaN(d.getTime())) d = new Date();
+  var year = d.getFullYear();
+  if (year < 1980) year = 1980;
+  if (year > 2107) year = 2107;
+  var dosTime = ((d.getHours() & 31) << 11) | ((d.getMinutes() & 63) << 5) | ((d.getSeconds() / 2) & 31);
+  var dosDate = (((year - 1980) & 127) << 9) | (((d.getMonth() + 1) & 15) << 5) | (d.getDate() & 31);
+  return { time: dosTime, date: dosDate };
+}
+
+function orcaToolsZipStore(files) {
+  // 无压缩 ZIP（STORE）；GP bit11=UTF-8 文件名，避免 WinRAR 中文乱码
+  var parts = [];
+  var central = [];
+  var offset = 0;
+  var FLAG_UTF8 = 0x0800;
+  function u16(n) { return new Uint8Array([n & 255, (n >>> 8) & 255]); }
+  function u32(n) {
+    return new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
+  }
+  function concat(arrs) {
+    var len = 0;
+    arrs.forEach(function (a) { len += a.length; });
+    var out = new Uint8Array(len);
+    var p = 0;
+    arrs.forEach(function (a) { out.set(a, p); p += a.length; });
+    return out;
+  }
+  var nowDos = orcaToolsZipDosTime(new Date());
+  files.forEach(function (f) {
+    var name = orcaToolsUtf8(f.name || "file.md");
+    var data = typeof f.data === "string" ? orcaToolsUtf8(f.data) : (f.data || new Uint8Array(0));
+    var crc = orcaToolsCrc32(data);
+    var dos = f.mtime ? orcaToolsZipDosTime(f.mtime) : nowDos;
+    var local = concat([
+      u32(0x04034b50), u16(20), u16(FLAG_UTF8), u16(0), u16(dos.time), u16(dos.date),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0),
+      name, data
+    ]);
+    parts.push(local);
+    central.push(concat([
+      u32(0x02014b50), u16(20), u16(20), u16(FLAG_UTF8), u16(0), u16(dos.time), u16(dos.date),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0),
+      u16(0), u16(0), u32(0), u32(offset), name
+    ]));
+    offset += local.length;
+  });
+  var centralBlob = concat(central);
+  var end = concat([
+    u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+    u32(centralBlob.length), u32(offset), u16(0)
+  ]);
+  return concat(parts.concat([centralBlob, end]));
+}
+
+async function orcaToolsLoadItems(opts) {
+  opts = opts || {};
+  if (!OrcaBlocks) return [];
+  var feed = await OrcaBlocks.listFeed({
+    kw: opts.kw || "",
+    tags: opts.tags || [],
+    skipHeal: true,
+    preferLive: true,
+    fullText: opts.fullText !== false
+  });
+  var items = feed.items || [];
+  if (opts.applyQuick && opts.filters) {
+    items = orcaToolsQuickFilterItems(items, opts.filters);
+  }
+  return items;
+}
+
+function orcaToolsCloseBackdrop(sel) {
+  var old = document.querySelector(sel);
+  if (old) old.remove();
+}
+
+function orcaToolsBindEsc(closeFn) {
+  function onKey(e) {
+    if (e.key === "Escape") {
+      closeFn();
+      document.removeEventListener("keydown", onKey, true);
+    }
+  }
+  document.addEventListener("keydown", onKey, true);
+  return onKey;
+}
+
+function orcaCloseToolsDialog() {
+  orcaToolsCloseBackdrop(".orca-df-tools-backdrop");
+}
+
+function orcaOpenToolsHub(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="日记流工具">' +
+    '<div class="orca-df-tools-head"><span>工具</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="archive"><b>归档柜</b><span data-df-tools-arch-hint>已归档条目</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="trash"><b>回收站</b><span data-df-tools-trash-hint>删除后约保留 30 天</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="search"><b>搜索</b><span>在日记流内按关键词筛选</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="stats"><b>统计</b><span>年/月计数、连续打卡、标签分布</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="export"><b>导出</b><span>Markdown / 按月 zip / JSON 备份</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="recap"><b>回顾</b><span>去年今日、随机一条</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="layout"><b>布局</b><span>封面高度：紧凑 / 舒适 / 高封面</span></button>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var archHint = host.querySelector("[data-df-tools-arch-hint]");
+  var trashHint = host.querySelector("[data-df-tools-trash-hint]");
+  if (OrcaBlocks && typeof OrcaBlocks.listArchivedFeed === "function") {
+    OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
+      var n = (feed && feed.items && feed.items.length) || 0;
+      if (archHint) archHint.textContent = n ? ("共 " + n + " 条已归档") : "暂无归档";
+    }).catch(function () {});
+  }
+  if (OrcaBlocks && typeof OrcaBlocks.trashCount === "function") {
+    OrcaBlocks.trashCount().then(function (n) {
+      if (trashHint) trashHint.textContent = n ? ("共 " + n + " 条 · 约保留 30 天") : "回收站为空";
+    }).catch(function () {});
+  }
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-df-tools]");
+    if (!btn || !host.contains(btn)) return;
+    var act = btn.getAttribute("data-df-tools");
+    if (act === "close") { orcaCloseToolsDialog(); return; }
+    orcaCloseToolsDialog();
+    if (act === "archive") orcaOpenArchiveDialog(ctx);
+    else if (act === "trash") orcaOpenTrashDialog(ctx);
+    else if (act === "stats") orcaOpenStatsDialog(ctx);
+    else if (act === "export") orcaOpenExportDialog(ctx);
+    else if (act === "recap") orcaOpenRecapDialog(ctx);
+    else if (act === "search") orcaOpenSearchDialog(ctx);
+    else if (act === "layout") orcaOpenLayoutDialog(ctx);
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaOpenStatsDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="日记流统计">' +
+    '<div class="orca-df-tools-head"><span>统计</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
+  document.body.appendChild(host);
+  var body = host.querySelector(".orca-df-tools-body");
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) orcaCloseToolsDialog();
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  orcaToolsLoadItems({ fullText: false }).then(function (items) {
+    var s = orcaToolsComputeStats(items);
+    function cardsHtml(rows, labelFn) {
+      if (!rows || !rows.length) return '<div class="orca-df-tools-muted">暂无</div>';
+      return '<div class="orca-df-stats-grid">' + rows.map(function (r) {
+        return '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + r.count +
+          '</div><div class="orca-df-stats-l">' + orcaToolsEsc(labelFn(r)) + "</div></div>";
+      }).join("") + "</div>";
+    }
+    body.innerHTML =
+      '<div class="orca-df-stats-grid">' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.total + '</div><div class="orca-df-stats-l">全部</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.yearCount + '</div><div class="orca-df-stats-l">今年</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.monthCount + '</div><div class="orca-df-stats-l">本月</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.streak + '</div><div class="orca-df-stats-l">连续打卡（天）</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.activeDays + '</div><div class="orca-df-stats-l">有记录天数</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withImg + '</div><div class="orca-df-stats-l">含图</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withLoc + '</div><div class="orca-df-stats-l">含地点</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.pinned + '</div><div class="orca-df-stats-l">置顶</div></div>' +
+      "</div>" +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">年份</div>' +
+      cardsHtml(s.yearRows, function (r) { return r.year + " 年"; }) +
+      "</div>" +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">近月</div>' +
+      cardsHtml(s.monthRows, function (r) {
+        var m = String(r.month || "").match(/^(\d{4})-(\d{2})$/);
+        return m ? (m[1] + "年" + Number(m[2]) + "月") : r.month;
+      }) +
+      "</div>" +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">标签分布</div>' +
+      (s.tagRows.map(function (r) {
+        return '<div class="orca-df-tools-row"><span>#' + orcaToolsEsc(r.tag) + '</span><b>' + r.count + '</b></div>';
+      }).join("") || '<div class="orca-df-tools-muted">暂无用户标签</div>') +
+      "</div>";
+  }).catch(function () {
+    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+  });
+}
+
+function orcaOpenExportDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="导出日记流">' +
+    '<div class="orca-df-tools-head"><span>导出</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">导出会拉取全文；按月 zip 为无压缩 Markdown 包。</p>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="md-all">导出全部 Markdown</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="md-filter">导出当前筛选 Markdown</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="zip-month">按月打包 zip</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="json">导出 JSON 备份</button>' +
+    '<div class="orca-df-tools-status" hidden></div>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var status = host.querySelector(".orca-df-tools-status");
+  var busy = false;
+  function setStatus(t) {
+    status.hidden = !t;
+    status.textContent = t || "";
+  }
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    var close = e.target.closest("[data-df-tools=close]");
+    if (close) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-exp]");
+    if (!btn || busy) return;
+    var act = btn.getAttribute("data-df-exp");
+    busy = true;
+    setStatus("准备中…");
+    var filters = (ctx && ctx.filters) || {};
+    var useFilter = act === "md-filter";
+    orcaToolsLoadItems({
+      kw: useFilter ? (filters.kw || "") : "",
+      tags: useFilter ? (filters.tags || []) : [],
+      filters: filters,
+      applyQuick: useFilter,
+      fullText: true
+    }).then(function (items) {
+      var cfg = (ctx && ctx.data && ctx.data().config) || {};
+      if (act === "md-all" || act === "md-filter") {
+        orcaToolsDownloadText(
+          "日记流_" + (act === "md-filter" ? "筛选_" : "") + Date.now() + ".md",
+          orcaToolsBuildMarkdown(items, cfg),
+          "text/markdown;charset=utf-8"
+        );
+        setStatus("已下载 " + items.length + " 条 Markdown");
+        orcaShowMessage("已导出 Markdown（" + items.length + " 条）");
+        return;
+      }
+      if (act === "json") {
+        orcaToolsDownloadText(
+          "日记流_backup_" + Date.now() + ".json",
+          JSON.stringify({ exportedAt: new Date().toISOString(), config: cfg, items: items }, null, 2),
+          "application/json;charset=utf-8"
+        );
+        setStatus("已下载 JSON（" + items.length + " 条）");
+        orcaShowMessage("已导出 JSON 备份");
+        return;
+      }
+      if (act === "zip-month") {
+        var groups = {};
+        items.forEach(function (it) {
+          var day = orcaToolsItemDay(it);
+          var key = day ? day.slice(0, 7) : "unknown";
+          (groups[key] = groups[key] || []).push(it);
+        });
+        var files = Object.keys(groups).sort().map(function (k) {
+          var mtime = null;
+          var m = String(k).match(/^(\d{4})-(\d{2})$/);
+          if (m) mtime = new Date(Number(m[1]), Number(m[2]) - 1, 15, 12, 0, 0);
+          return {
+            name: "日记流_" + k + ".md",
+            data: orcaToolsBuildMarkdown(groups[k], cfg),
+            mtime: mtime
+          };
+        });
+        if (!files.length) files = [{ name: "empty.md", data: "# 日记流\n\n暂无条目\n" }];
+        var zip = orcaToolsZipStore(files);
+        orcaToolsDownloadBlob("日记流_按月_" + Date.now() + ".zip", new Blob([zip], { type: "application/zip" }));
+        setStatus("已打包 " + files.length + " 个月份文件");
+        orcaShowMessage("已导出按月 zip");
+      }
+    }).catch(function (err) {
+      setStatus("失败：" + String(err && err.message || err));
+      orcaShowMessage("导出失败");
+    }).then(function () { busy = false; });
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaOpenRecapDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="回顾">' +
+    '<div class="orca-df-tools-head"><span>回顾</span>' +
+    '<div class="orca-df-tools-head-tools">' +
+    '<button type="button" class="orca-df-tools-mini" data-df-recap="last-year">去年今日</button>' +
+    '<button type="button" class="orca-df-tools-mini" data-df-recap="random">随机一条</button>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button>' +
+    "</div></div>" +
+    '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
+  document.body.appendChild(host);
+  var body = host.querySelector(".orca-df-tools-body");
+  var allItems = [];
+  function renderList(list, emptyText) {
+    if (!list.length) {
+      body.innerHTML = '<div class="orca-df-tools-muted">' + orcaToolsEsc(emptyText || "暂无") + "</div>";
+      return;
+    }
+    body.innerHTML = list.map(function (it) {
+      var bid = it.blockId || it.id;
+      return (
+        '<div class="orca-df-tools-entry">' +
+        '<div class="orca-df-tools-entry-main">' +
+        '<div class="orca-df-tools-entry-t">' + orcaToolsEsc(orcaToolsItemTitle(it)) + "</div>" +
+        '<div class="orca-df-tools-muted">' + orcaToolsEsc(it.created || orcaToolsItemDay(it) || "") +
+        (it.location ? (" · " + orcaToolsEsc(it.location)) : "") + "</div></div>" +
+        '<button type="button" class="orca-df-tools-mini" data-df-recap="open" data-block-id="' + orcaToolsEsc(String(bid)) + '">打开</button>' +
+        "</div>"
+      );
+    }).join("");
+  }
+  function lastYearToday() {
+    var now = new Date();
+    var key = ("0" + (now.getMonth() + 1)).slice(-2) + "-" + ("0" + now.getDate()).slice(-2);
+    var y = now.getFullYear() - 1;
+    return allItems.filter(function (it) {
+      var day = orcaToolsItemDay(it);
+      return day && day.slice(0, 4) === String(y) && day.slice(5) === key;
+    });
+  }
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-recap]");
+    if (!btn) return;
+    var act = btn.getAttribute("data-df-recap");
+    if (act === "open") {
+      var bid = Number(btn.getAttribute("data-block-id"));
+      if (bid && typeof orcaOpenInOrca === "function") orcaOpenInOrca(bid);
+      return;
+    }
+    if (act === "last-year") {
+      renderList(lastYearToday(), "去年今日没有日记");
+      return;
+    }
+    if (act === "random") {
+      if (!allItems.length) {
+        renderList([], "暂无日记");
+        return;
+      }
+      var pick = allItems[Math.floor(Math.random() * allItems.length)];
+      renderList([pick], "");
+    }
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  orcaToolsLoadItems({ fullText: false }).then(function (items) {
+    allItems = items || [];
+    var ly = lastYearToday();
+    if (ly.length) renderList(ly, "");
+    else renderList([], "去年今日没有日记 — 可点「随机一条」");
+  }).catch(function () {
+    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+  });
+}
+
+function orcaOpenSearchDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  var cur = (ctx && ctx.filters && ctx.filters.kw) || "";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="搜索日记流">' +
+    '<div class="orca-df-tools-head"><span>搜索</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<label class="orca-df-tools-label">关键词（匹配日记流条目正文）</label>' +
+    '<input class="orca-df-tools-input" type="search" data-df-search-input placeholder="例如：旅行 / 心情" value="' + orcaToolsEsc(cur) + '" />' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-search="apply">在日记流中筛选</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-search="clear">清除关键词</button>' +
+    "</div>" +
+    '<p class="orca-df-tools-muted">也可使用虎鲸全局搜索；此处仅限带「日记流」标签的条目。</p>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var input = host.querySelector("[data-df-search-input]");
+  setTimeout(function () { try { input.focus(); input.select(); } catch (e) {} }, 30);
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  function apply(kw) {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.kw = kw || "";
+    orcaCloseToolsDialog();
+    orcaRefreshFeed().then(function () {
+      if (ctx.reApp) ctx.reApp();
+      orcaShowMessage(kw ? ("已筛选：" + kw) : "已清除搜索");
+    });
+  }
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-search]");
+    if (!btn) return;
+    var act = btn.getAttribute("data-df-search");
+    if (act === "apply") apply(String(input.value || "").trim());
+    else if (act === "clear") apply("");
+  });
+  host.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && e.target === input) {
+      e.preventDefault();
+      apply(String(input.value || "").trim());
+    }
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaToolsLayoutLabel(p) {
+  if (p === "compact") return "紧凑";
+  if (p === "tall") return "高封面";
+  return "舒适";
+}
+
+async function orcaToolsGetLayout() {
+  try {
+    var v = await dfGetData(DF_LAYOUT_KEY);
+    if (v === "compact" || v === "tall" || v === "cozy") return v;
+  } catch (e) {}
+  return DF_LAYOUT_DEFAULT;
+}
+
+async function orcaToolsSetLayout(preset) {
+  if (preset !== "compact" && preset !== "tall" && preset !== "cozy") preset = DF_LAYOUT_DEFAULT;
+  await dfSetData(DF_LAYOUT_KEY, preset);
+  return preset;
+}
+
+function orcaApplyLayoutToMounts(preset) {
+  preset = preset || DF_LAYOUT_DEFAULT;
+  (document.querySelectorAll(".orca-df-scope") || []).forEach(function (el) {
+    el.classList.remove("orca-df-layout-cozy", "orca-df-layout-compact", "orca-df-layout-tall");
+    el.classList.add("orca-df-layout-" + preset);
+  });
+}
+
+function orcaOpenLayoutDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="布局预设">' +
+    '<div class="orca-df-tools-head"><span>布局</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">窄屏可选手「紧凑」缩小封面；宽屏可用「高封面」。</p>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-layout="compact">紧凑 — 矮封面、更密列表</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-layout="cozy">舒适 — 默认</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-layout="tall">高封面 — 更强氛围</button>' +
+    '<div class="orca-df-tools-status" data-df-layout-status></div>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var status = host.querySelector("[data-df-layout-status]");
+  orcaToolsGetLayout().then(function (cur) {
+    status.textContent = "当前：" + orcaToolsLayoutLabel(cur);
+    host.querySelectorAll("[data-df-layout]").forEach(function (b) {
+      b.classList.toggle("is-on", b.getAttribute("data-df-layout") === cur);
+    });
+  });
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-layout]");
+    if (!btn) return;
+    var preset = btn.getAttribute("data-df-layout");
+    orcaToolsSetLayout(preset).then(function (p) {
+      orcaApplyLayoutToMounts(p);
+      status.textContent = "当前：" + orcaToolsLayoutLabel(p);
+      host.querySelectorAll("[data-df-layout]").forEach(function (b) {
+        b.classList.toggle("is-on", b.getAttribute("data-df-layout") === p);
+      });
+      orcaShowMessage("布局已设为「" + orcaToolsLayoutLabel(p) + "」");
+      if (ctx && ctx.reApp) ctx.reApp();
+    });
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaCloseImagesDialog() {
+  orcaToolsCloseBackdrop(".orca-df-images-backdrop");
+}
+
+function orcaOpenImagesDialog(ctx, item) {
+  if (!item || !OrcaBlocks) {
+    orcaShowMessage("找不到条目");
+    return;
+  }
+  orcaCloseImagesDialog();
+  var bid = item.blockId || item.id;
+  var host = document.createElement("div");
+  host.className = "orca-df-images-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="管理图片">' +
+    '<div class="orca-df-tools-head"><span>图片（最多 9 张）</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-img="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<div class="orca-df-img-list"></div>' +
+    '<div class="orca-df-img-progress"><div class="orca-df-img-progress-bar" style="width:0%"></div></div>' +
+    '<div class="orca-df-tools-muted orca-df-img-status">可添加、排序；失败可重试后保存</div>' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn" data-df-img="add">添加图片</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-img="retry">重试失败</button>' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-img="save">保存到日记</button>' +
+    "</div>" +
+    '<input type="file" accept="image/*" multiple hidden data-df-img-file />' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var listEl = host.querySelector(".orca-df-img-list");
+  var bar = host.querySelector(".orca-df-img-progress-bar");
+  var status = host.querySelector(".orca-df-img-status");
+  var fileInput = host.querySelector("[data-df-img-file]");
+  var rows = (item.images || []).filter(Boolean).slice(0, 9).map(function (src) {
+    return { src: src, status: "ready", error: "" };
+  });
+  var busy = false;
+
+  function setProgress(done, total) {
+    var pct = total ? Math.round((done / total) * 100) : 0;
+    bar.style.width = pct + "%";
+  }
+
+  function render() {
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="orca-df-tools-muted">暂无图片</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function (r, i) {
+      var thumb = r.preview || r.src || "";
+      var st = r.status === "error" ? ("失败" + (r.error ? "：" + r.error : "")) :
+        r.status === "uploading" ? "上传中…" :
+          r.status === "pending" ? "等待上传" : "就绪";
+      return (
+        '<div class="orca-df-img-row" data-idx="' + i + '">' +
+        '<img class="orca-df-img-thumb" src="' + orcaToolsEsc(thumb) + '" alt="" />' +
+        '<div class="orca-df-img-meta"><div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div></div>" +
+        '<div class="orca-df-img-acts">' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>上</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>下</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="rm" data-idx="' + i + '">删</button>' +
+        "</div></div>"
+      );
+    }).join("");
+  }
+
+  async function uploadOne(row) {
+    if (!row || row.status === "ready") return row;
+    row.status = "uploading";
+    render();
+    try {
+      var asset = null;
+      if (typeof OrcaBlocks.srcToOrcaAsset === "function") {
+        asset = await OrcaBlocks.srcToOrcaAsset(row.src);
+      }
+      if (!asset) throw new Error("上传失败");
+      row.src = asset;
+      row.preview = asset;
+      row.status = "ready";
+      row.error = "";
+    } catch (e) {
+      row.status = "error";
+      row.error = String(e && e.message || e || "失败");
+    }
+    render();
+    return row;
+  }
+
+  async function uploadPending() {
+    var pending = rows.filter(function (r) { return r.status === "pending" || r.status === "error"; });
+    var done = 0;
+    setProgress(0, pending.length || 1);
+    for (var i = 0; i < pending.length; i++) {
+      await uploadOne(pending[i]);
+      done++;
+      setProgress(done, pending.length);
+    }
+    status.textContent = pending.length
+      ? ("上传完成：成功 " + rows.filter(function (r) { return r.status === "ready"; }).length +
+        " / 失败 " + rows.filter(function (r) { return r.status === "error"; }).length)
+      : "无需上传";
+  }
+
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseImagesDialog();
+  });
+  host.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-df-img]");
+    if (!btn || !host.contains(btn)) return;
+    var act = btn.getAttribute("data-df-img");
+    if (act === "close") { orcaCloseImagesDialog(); return; }
+    if (act === "add") { fileInput.click(); return; }
+    var idx = Number(btn.getAttribute("data-idx"));
+    if (act === "rm" && isFinite(idx)) {
+      if (rows[idx] && rows[idx].preview && String(rows[idx].preview).indexOf("blob:") === 0) {
+        try { URL.revokeObjectURL(rows[idx].preview); } catch (e2) {}
+      }
+      rows.splice(idx, 1);
+      render();
+      return;
+    }
+    if (act === "up" && isFinite(idx) && idx > 0) {
+      var t = rows[idx - 1]; rows[idx - 1] = rows[idx]; rows[idx] = t;
+      render();
+      return;
+    }
+    if (act === "down" && isFinite(idx) && idx < rows.length - 1) {
+      var t2 = rows[idx + 1]; rows[idx + 1] = rows[idx]; rows[idx] = t2;
+      render();
+      return;
+    }
+    if (busy) return;
+    if (act === "retry") {
+      busy = true;
+      rows.forEach(function (r) { if (r.status === "error") r.status = "pending"; });
+      uploadPending().then(function () { busy = false; });
+      return;
+    }
+    if (act === "save") {
+      busy = true;
+      status.textContent = "保存中…";
+      uploadPending().then(function () {
+        var failed = rows.filter(function (r) { return r.status === "error"; });
+        if (failed.length) {
+          status.textContent = "仍有 " + failed.length + " 张失败，可重试后再保存";
+          busy = false;
+          return null;
+        }
+        var imgs = rows.filter(function (r) { return r.status === "ready"; }).map(function (r) { return r.src; }).slice(0, 9);
+        return OrcaBlocks.updateEntry(bid, { images: imgs });
+      }).then(function (res) {
+        if (res == null) return;
+        item.images = rows.filter(function (r) { return r.status === "ready"; }).map(function (r) { return r.src; }).slice(0, 9);
+        orcaShowMessage("图片已保存");
+        orcaCloseImagesDialog();
+        return orcaRefreshFeed({ keepLimit: true, skipHeal: true, preferLive: true }).then(function () {
+          if (ctx && ctx.reApp) ctx.reApp();
+        });
+      }).catch(function (err) {
+        status.textContent = "保存失败：" + String(err && err.message || err);
+        orcaShowMessage("保存图片失败");
+      }).then(function () { busy = false; });
+    }
+  });
+  fileInput.addEventListener("change", function () {
+    var files = Array.prototype.slice.call(fileInput.files || []);
+    fileInput.value = "";
+    var room = 9 - rows.length;
+    if (room <= 0) {
+      orcaShowMessage("最多 9 张图");
+      return;
+    }
+    files.slice(0, room).forEach(function (f) {
+      var url = URL.createObjectURL(f);
+      rows.push({ src: url, preview: url, status: "pending", error: "" });
+    });
+    render();
+    if (busy) return;
+    busy = true;
+    uploadPending().then(function () { busy = false; });
+  });
+  orcaToolsBindEsc(orcaCloseImagesDialog);
+  render();
+}
+
+function orcaEnhanceToolsUi(el, ctx) {
+  if (!el) return;
+  var stack = el.querySelector(".mom-fab-stack");
+  if (stack) {
+    stack.querySelectorAll("[data-df-act=open-trash], [data-df-act=open-archive], [data-df-act=open-search]").forEach(function (n) {
+      n.remove();
+    });
+  }
+  if (stack && !stack.querySelector("[data-df-act=open-tools]")) {
+    var toolsBtn = document.createElement("button");
+    toolsBtn.type = "button";
+    toolsBtn.className = "mom-outline-fab orca-df-tools-fab";
+    toolsBtn.setAttribute("data-df-act", "open-tools");
+    toolsBtn.title = "工具（归档/回收站/搜索/统计/导出…）";
+    toolsBtn.setAttribute("aria-label", "工具");
+    toolsBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>' +
+      '<span class="orca-df-tools-fab-count" hidden>0</span>';
+    var syncEl = stack.querySelector("[data-df-act=refresh-feed]");
+    if (syncEl && syncEl.nextSibling) stack.insertBefore(toolsBtn, syncEl.nextSibling);
+    else if (syncEl) stack.appendChild(toolsBtn);
+    else stack.appendChild(toolsBtn);
+  }
+  if (stack) {
+    var toolsEl = stack.querySelector("[data-df-act=open-tools]");
+    if (toolsEl) {
+      var kwOn = !!(ctx.filters && ctx.filters.kw);
+      toolsEl.classList.toggle("is-on", kwOn);
+      if (!toolsEl.querySelector(".orca-df-tools-fab-count")) {
+        var badge = document.createElement("span");
+        badge.className = "orca-df-tools-fab-count";
+        badge.hidden = true;
+        badge.textContent = "0";
+        toolsEl.appendChild(badge);
+      }
+    }
+  }
+
+  // 快捷筛选条
+  var quick = el.querySelector(".orca-df-quickbar");
+  if (!quick) {
+    quick = document.createElement("div");
+    quick.className = "orca-df-quickbar";
+    var tagbar = el.querySelector(".orca-df-tagbar");
+    var list = el.querySelector(".mom-list") || el.querySelector("[data-list]");
+    if (tagbar && tagbar.parentNode) tagbar.parentNode.insertBefore(quick, tagbar.nextSibling);
+    else if (list && list.parentNode) list.parentNode.insertBefore(quick, list);
+    else el.appendChild(quick);
+  }
+  var f = ctx.filters || {};
+  var hasQ = orcaToolsHasQuickFilters(f);
+  quick.innerHTML =
+    '<span class="orca-df-tagbar-label">筛选</span>' +
+    '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">有图</button>' +
+    '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">有地点</button>' +
+    '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">仅置顶</button>' +
+    (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">清除筛选</button>' : "") +
+    (f.kw ? '<span class="orca-df-quick-kw">搜索：' + orcaToolsEsc(f.kw) + "</span>" : "");
+
+  orcaToolsGetLayout().then(function (p) {
+    if (!el.isConnected) return;
+    el.classList.remove("orca-df-layout-cozy", "orca-df-layout-compact", "orca-df-layout-tall");
+    el.classList.add("orca-df-layout-" + p);
+  }).catch(function () {});
+}
+
+function orcaHandleToolsAct(ctx, act, btn) {
+  if (act === "open-tools") {
+    orcaOpenToolsHub(ctx);
+    return true;
+  }
+  if (act === "open-search") {
+    orcaOpenSearchDialog(ctx);
+    return true;
+  }
+  if (act === "open-stats") {
+    orcaOpenStatsDialog(ctx);
+    return true;
+  }
+  if (act === "quick-image") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.hasImage = !ctx.filters.hasImage;
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "quick-location") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.hasLocation = !ctx.filters.hasLocation;
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "quick-pinned") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.pinnedOnly = !ctx.filters.pinnedOnly;
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "clear-quick") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    orcaToolsClearQuickFilters(ctx.filters);
+    ctx.filters.kw = "";
+    orcaRefreshFeed().then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "manage-images") {
+    var id = btn.getAttribute("data-id") || btn.getAttribute("data-mid");
+    var it = ((ctx.data() && ctx.data().items) || []).find(function (x) {
+      return String(x.id) === String(id);
+    });
+    if (!it && orcaFeedAllItems) {
+      it = orcaFeedAllItems.find(function (x) { return String(x.id) === String(id); });
+    }
+    orcaOpenImagesDialog(ctx, it);
+    return true;
+  }
+  return false;
+}

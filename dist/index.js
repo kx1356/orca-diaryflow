@@ -1,4 +1,4 @@
-// orca-diaryflow v0.3.8 — light compose + Orca blocks (plan C)
+// orca-diaryflow v0.3.16 — light compose + Orca blocks (plan C)
 // Orca Note adaptation: panel, plugin-file media, block store, tags/refs/search
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -1281,34 +1281,12 @@ var require_editor = __commonJS({
       };
       return `<div class="mom-calendar-photo-twocol">${Array.from({ length: 12 }, (_, i) => renderMonth(i)).join("")}</div>`;
     }
-    // 热力图模式：53 列周视图
+    // 热力图模式：上半年 / 下半年两行周视图（窄屏友好，GitHub 式色阶）
     function calBuildHeat(ctx, year) {
       const { dayCounts } = calGridStats(ctx, year);
       const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
       const startDate = calStartDate(year);
       const weeks = calWeeks(year, startDate);
-      let columns = "";
-      for (let w = 0; w < weeks; w++) {
-        let cells = "";
-        for (let d = 0; d < 7; d++) {
-          const date = new Date(startDate);
-          date.setDate(startDate.getDate() + w * 7 + d);
-          if (date.getFullYear() === year) {
-            const key = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`;
-            const count = dayCounts[key] || 0;
-            let level = 0;
-            if (count >= 1) level = 2;
-            if (count >= 3) level = 3;
-            if (count >= 5) level = 4;
-            const tip = count > 0 ? `${date.getMonth() + 1}月${date.getDate()}日: ${count}条` : `${date.getMonth() + 1}月${date.getDate()}日`;
-            const dateAttr = count > 0 ? ` data-date="${key}"` : "";
-            cells += `<div class="mom-calendar-cell level-${level}"${dateAttr} title="${tip}"></div>`;
-          } else {
-            cells += `<div class="mom-calendar-cell level-empty"></div>`;
-          }
-        }
-        columns += `<div class="mom-calendar-column">${cells}</div>`;
-      }
       const msW = new Array(12).fill(-1);
       const meW = new Array(12).fill(-1);
       for (let w = 0; w < weeks; w++) {
@@ -1322,14 +1300,56 @@ var require_editor = __commonJS({
           }
         }
       }
-      const labels = [];
-      for (let m2 = 0; m2 < 12; m2++) {
-        if (msW[m2] !== -1) {
-          const mid = (msW[m2] + meW[m2]) / 2;
-          labels.push(`<span class="mom-calendar-month-label" style="left:${(mid + 0.5) / weeks * 100}%">${monthNames[m2]}</span>`);
+      const heatLevel = (count) => {
+        if (count >= 5) return 4;
+        if (count >= 3) return 3;
+        if (count >= 2) return 2;
+        if (count >= 1) return 1;
+        return 0;
+      };
+      const buildHalf = (m0, m1, caption) => {
+        let w0 = Infinity;
+        let w1 = -1;
+        for (let m2 = m0; m2 <= m1; m2++) {
+          if (msW[m2] !== -1) {
+            w0 = Math.min(w0, msW[m2]);
+            w1 = Math.max(w1, meW[m2]);
+          }
         }
-      }
-      return `<div class="mom-calendar-columns">${columns}</div><div class="mom-calendar-months">${labels.join("")}</div>`;
+        if (!isFinite(w0) || w1 < 0) {
+          return `<div class="mom-calendar-heat-half"><div class="mom-calendar-heat-caption">${caption}</div><div class="mom-calendar-heat-empty">暂无记录</div></div>`;
+        }
+        let columns = "";
+        for (let w = w0; w <= w1; w++) {
+          let cells = "";
+          for (let d = 0; d < 7; d++) {
+            const date = new Date(startDate);
+            date.setDate(startDate.getDate() + w * 7 + d);
+            const inHalf = date.getFullYear() === year && date.getMonth() >= m0 && date.getMonth() <= m1;
+            if (inHalf) {
+              const key = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`;
+              const count = dayCounts[key] || 0;
+              const level = heatLevel(count);
+              const tip = count > 0 ? `${date.getMonth() + 1}月${date.getDate()}日: ${count}条` : `${date.getMonth() + 1}月${date.getDate()}日`;
+              const dateAttr = count > 0 ? ` data-date="${key}"` : "";
+              cells += `<div class="mom-calendar-cell level-${level}"${dateAttr} title="${tip}"></div>`;
+            } else {
+              cells += `<div class="mom-calendar-cell level-empty"></div>`;
+            }
+          }
+          columns += `<div class="mom-calendar-column">${cells}</div>`;
+        }
+        const halfWeeks = w1 - w0 + 1;
+        const labels = [];
+        for (let m2 = m0; m2 <= m1; m2++) {
+          if (msW[m2] === -1) continue;
+          const mid = (msW[m2] + meW[m2]) / 2;
+          const left = (mid - w0 + 0.5) / halfWeeks * 100;
+          labels.push(`<span class="mom-calendar-month-label" style="left:${left}%">${monthNames[m2]}</span>`);
+        }
+        return `<div class="mom-calendar-heat-half"><div class="mom-calendar-heat-caption">${caption}</div><div class="mom-calendar-columns">${columns}</div><div class="mom-calendar-months">${labels.join("")}</div></div>`;
+      };
+      return `<div class="mom-calendar-heat-wrap">${buildHalf(0, 5, "上半年")}${buildHalf(6, 11, "下半年")}</div>`;
     }
     function openCalendarModal(ctx) {
       ctx.calMode = ctx.calMode || "photo";
@@ -1367,8 +1387,15 @@ var require_editor = __commonJS({
       const yearSel = overlay.querySelector("[data-cal-year]");
       yearSel.innerHTML = sortedYears.map((y) => `<option value="${y}"${y === ctx.calYear ? " selected" : ""}>${y}年</option>`).join("");
       const applyWidth = (mode) => {
-        content.style.maxWidth = mode === "photo" ? "420px" : "1200px";
-        content.style.width = mode === "photo" ? "auto" : "94%";
+        // 热度必须设明确 width：仅 maxWidth + auto 会收缩，界面看起来「没变化」
+        if (mode === "heatmap") {
+          const w = Math.min(680, Math.floor(window.innerWidth * 0.96));
+          content.style.width = w + "px";
+          content.style.maxWidth = w + "px";
+        } else {
+          content.style.width = "auto";
+          content.style.maxWidth = "420px";
+        }
       };
       const scrollCurMonth = () => {
         if (ctx.calMode !== "photo") return;
@@ -1990,7 +2017,7 @@ var require_editor = __commonJS({
       const overlay = overlayBase("mom-settings");
       overlay.innerHTML = `
     <div class="mom-modal">
-      <div class="mom-modal-head"><span>\u8BBE\u7F6E\u4E0E\u5BFC\u51FA</span><button class="mom-modal-x" data-x>\u2715</button></div>
+      <div class="mom-modal-head"><span>\u8BBE\u7F6E</span><button class="mom-modal-x" data-x>\u2715</button></div>
       <div class="mom-modal-body">
         <label class="mom-field">\u6635\u79F0<input class="mom-inp" data-nick value="${esc(cfg.nickname || "")}"></label>
         <label class="mom-field">\u7B7E\u540D<input class="mom-inp" data-sig value="${esc(cfg.signature || "")}"></label>
@@ -2010,14 +2037,7 @@ var require_editor = __commonJS({
           <label class="mom-btn mom-btn-small">\u4E0A\u4F20\u9501\u5C4F\u80CC\u666F<input type="file" accept="image/*" hidden data-lockbg></label>
           ${cfg.lockBg ? `<span class="mom-hint">\u5DF2\u8BBE\u7F6E\u80CC\u666F\uFF0C\u91CD\u65B0\u4E0A\u4F20\u53EF\u66FF\u6362</span>` : ""}
         </div>
-        <div class="mom-field mom-field-col">
-          <span>\u5BFC\u51FA</span>
-          <div class="mom-btn-row">
-            <button class="mom-btn mom-btn-small" data-export="md">Markdown</button>
-            <button class="mom-btn mom-btn-small" data-export="word">Word</button>
-            <button class="mom-btn mom-btn-small" data-export="json">JSON \u5907\u4EFD</button>
-          </div>
-        </div>
+
         </div>
       <div class="mom-modal-foot">
         <button class="mom-btn" data-x>\u5173\u95ED</button>
@@ -2103,14 +2123,7 @@ var require_editor = __commonJS({
           ctx.save().then(() => ctx.reApp());
           overlay.remove();
         }
-        if (e.target.closest("[data-export]")) {
-          const kind = e.target.closest("[data-export]").dataset.export;
-          try {
-            await exp.export(ctx, kind);
-          } catch (err) {
-            ctx.showMessage("\u5BFC\u51FA\u5931\u8D25: " + err.message);
-          }
-        }
+
       });
     }
     function overlayBase(cls) {
@@ -2144,7 +2157,7 @@ var DF_TUTORIAL_KEY = "tutorial-inserted-v1"; // 兼容旧标记；现以 dismis
 var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
 var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
 /** 使用说明正文版本：改 DF_TUTORIAL_TEXT 时必须递增，已有说明块会按此同步 */
-var DF_TUTORIAL_CONTENT_VER = "0.3.7";
+var DF_TUTORIAL_CONTENT_VER = "0.3.15";
 var DF_TUTORIAL_CONTENT_VER_KEY = "tutorial-content-ver";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
@@ -2167,8 +2180,11 @@ var DF_TUTORIAL_TEXT = [
   "封面区：设置封面、头像与签名",
   "底栏「地点」：写入正文末行「地点：…」，并同步属性",
   "评论：写入该条目下的虎鲸子块，可在日记页看到",
-  "「⋯」展开：置顶、归档、改标签、打开虎鲸、删除（进回收站）",
-  "FAB：标签筛选、月份大纲、回收站、归档柜；列表底部可「加载更多」",
+  "「⋯」展开：置顶、归档、改标签、管理图片、打开虎鲸、删除（进回收站）",
+  "FAB：同步、工具、标签筛选、月份大纲；列表底部可「加载更多」",
+  "—— 筛选与工具 ——",
+  "工具：归档柜、回收站、搜索、统计、导出、回顾、布局",
+  "快捷筛选：有图 / 有地点 / 仅置顶；布局可选紧凑 / 舒适 / 高封面（窄屏建议紧凑）",
   "—— 重要规则 ——",
   "只有带「日记流」标签的日记块才会进入时间线",
   "月份大纲可按年份定位，再点月份跳到时间线对应分组",
@@ -4757,6 +4773,7 @@ var OrcaBlocks = {
   markdownLineToFragments: dfMarkdownLineToFragments,
   contentToMarkdown: dfContentToMarkdown,
   syncImagesToBlock: dfSyncImagesToBlock,
+  srcToOrcaAsset: dfSrcToOrcaAsset,
   resolveOrcaAssetSrc: dfResolveOrcaAssetSrc,
   hasTag: dfHasTag
 };
@@ -5070,8 +5087,1009 @@ async function purgeExpiredTrash() {
 })();
 
 
+// ===== Orca tools (stats/export/recap/search/layout/images) =====
+// ============================================================
+// src/orca-tools.js — 统计 / 导出 / 回顾 / 搜索 / 布局 / 快捷筛选 / 多图管理
+// ============================================================
+
+var DF_LAYOUT_KEY = "layout-preset";
+var DF_LAYOUT_DEFAULT = "cozy";
+
+function orcaToolsEsc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function orcaToolsItemDay(it) {
+  var raw = String((it && (it.created || it.createdAt)) || "").trim();
+  var m = raw.match(/(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
+  if (m) {
+    return m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2);
+  }
+  var d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+  return "";
+}
+
+function orcaToolsItemTitle(it) {
+  var t = String((it && it.text) || "").replace(/\r\n/g, "\n").split("\n").map(function (s) {
+    return s.trim();
+  }).filter(Boolean)[0] || "(无标题)";
+  return t.slice(0, 80);
+}
+
+function orcaToolsQuickFilterItems(items, filters) {
+  filters = filters || {};
+  return (items || []).filter(function (it) {
+    if (!it) return false;
+    if (filters.pinnedOnly && !it.pinned) return false;
+    if (filters.hasImage && !(it.images && it.images.length)) return false;
+    if (filters.hasLocation && !(it.location && String(it.location).trim())) return false;
+    return true;
+  });
+}
+
+function orcaToolsHasQuickFilters(filters) {
+  filters = filters || {};
+  return !!(filters.pinnedOnly || filters.hasImage || filters.hasLocation);
+}
+
+function orcaToolsClearQuickFilters(filters) {
+  if (!filters) return;
+  filters.pinnedOnly = false;
+  filters.hasImage = false;
+  filters.hasLocation = false;
+}
+
+function orcaToolsComputeStats(items) {
+  items = items || [];
+  var now = new Date();
+  var y = now.getFullYear();
+  var ym = y + "-" + ("0" + (now.getMonth() + 1)).slice(-2);
+  var byYear = {};
+  var byMonth = {};
+  var byTag = {};
+  var days = {};
+  var withImg = 0;
+  var withLoc = 0;
+  var pinned = 0;
+  items.forEach(function (it) {
+    var day = orcaToolsItemDay(it);
+    if (day) {
+      days[day] = true;
+      var yy = day.slice(0, 4);
+      var mm = day.slice(0, 7);
+      byYear[yy] = (byYear[yy] || 0) + 1;
+      byMonth[mm] = (byMonth[mm] || 0) + 1;
+    }
+    if (it.images && it.images.length) withImg++;
+    if (it.location && String(it.location).trim()) withLoc++;
+    if (it.pinned) pinned++;
+    (it.tags || []).forEach(function (t) {
+      if (!t || t === "日记流") return;
+      byTag[t] = (byTag[t] || 0) + 1;
+    });
+  });
+  var dayList = Object.keys(days).sort();
+  var streak = 0;
+  function hasDay(d) { return !!days[d]; }
+  function shiftDay(base, n) {
+    var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+  var cursor = 0;
+  if (hasDay(shiftDay(now, 0))) cursor = 0;
+  else if (hasDay(shiftDay(now, -1))) cursor = -1;
+  else cursor = null;
+  if (cursor != null) {
+    while (hasDay(shiftDay(now, cursor - streak))) streak++;
+  }
+  var tagRows = Object.keys(byTag).map(function (k) {
+    return { tag: k, count: byTag[k] };
+  }).sort(function (a, b) { return b.count - a.count; }).slice(0, 12);
+  var yearRows = Object.keys(byYear).sort().reverse().map(function (k) {
+    return { year: k, count: byYear[k] };
+  });
+  var monthRows = Object.keys(byMonth).sort().reverse().slice(0, 12).map(function (k) {
+    return { month: k, count: byMonth[k] };
+  });
+  return {
+    total: items.length,
+    yearCount: byYear[String(y)] || 0,
+    monthCount: byMonth[ym] || 0,
+    activeDays: dayList.length,
+    streak: streak,
+    withImg: withImg,
+    withLoc: withLoc,
+    pinned: pinned,
+    tagRows: tagRows,
+    yearRows: yearRows,
+    monthRows: monthRows
+  };
+}
+
+function orcaToolsBuildMarkdown(items, cfg) {
+  cfg = cfg || {};
+  var lines = ["# 日记流 · " + (cfg.nickname || ""), "", "共 " + items.length + " 条", ""];
+  var lastMonth = "";
+  items.forEach(function (it) {
+    var day = orcaToolsItemDay(it);
+    var month = day ? day.slice(0, 7) : "";
+    if (month && month !== lastMonth) {
+      lastMonth = month;
+      lines.push("", "## " + month.replace("-", "年") + "月", "");
+    }
+    lines.push("### " + (it.created || day || "") + (it.pinned ? " [置顶]" : ""));
+    if (it.location) lines.push("地点：" + it.location);
+    var tags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
+    if (tags.length) lines.push("标签：" + tags.map(function (t) { return "#" + t; }).join(" "));
+    if (it.text) lines.push("", it.text, "");
+    (it.images || []).forEach(function (src, i) {
+      lines.push("![图" + (i + 1) + "](" + src + ")");
+    });
+    if (it.comments && it.comments.length) {
+      it.comments.forEach(function (c) {
+        lines.push("> " + (c.name || "我") + ": " + (c.text || ""));
+      });
+    }
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+function orcaToolsDownloadBlob(filename, blob) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () {
+    try { URL.revokeObjectURL(url); } catch (e) {}
+    a.remove();
+  }, 1500);
+}
+
+function orcaToolsDownloadText(filename, text, mime) {
+  orcaToolsDownloadBlob(filename, new Blob([text], { type: mime || "text/plain;charset=utf-8" }));
+}
+
+function orcaToolsCrc32(buf) {
+  var table = orcaToolsCrc32._t;
+  if (!table) {
+    table = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    orcaToolsCrc32._t = table;
+  }
+  var crc = 0xffffffff;
+  for (var i = 0; i < buf.length; i++) {
+    crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function orcaToolsUtf8(str) {
+  return new TextEncoder().encode(String(str || ""));
+}
+
+/** MS-DOS 时间/日期（ZIP 必填；全 0 会显示成 1601/1/1） */
+function orcaToolsZipDosTime(date) {
+  var d = date instanceof Date ? date : new Date(date || Date.now());
+  if (isNaN(d.getTime())) d = new Date();
+  var year = d.getFullYear();
+  if (year < 1980) year = 1980;
+  if (year > 2107) year = 2107;
+  var dosTime = ((d.getHours() & 31) << 11) | ((d.getMinutes() & 63) << 5) | ((d.getSeconds() / 2) & 31);
+  var dosDate = (((year - 1980) & 127) << 9) | (((d.getMonth() + 1) & 15) << 5) | (d.getDate() & 31);
+  return { time: dosTime, date: dosDate };
+}
+
+function orcaToolsZipStore(files) {
+  // 无压缩 ZIP（STORE）；GP bit11=UTF-8 文件名，避免 WinRAR 中文乱码
+  var parts = [];
+  var central = [];
+  var offset = 0;
+  var FLAG_UTF8 = 0x0800;
+  function u16(n) { return new Uint8Array([n & 255, (n >>> 8) & 255]); }
+  function u32(n) {
+    return new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
+  }
+  function concat(arrs) {
+    var len = 0;
+    arrs.forEach(function (a) { len += a.length; });
+    var out = new Uint8Array(len);
+    var p = 0;
+    arrs.forEach(function (a) { out.set(a, p); p += a.length; });
+    return out;
+  }
+  var nowDos = orcaToolsZipDosTime(new Date());
+  files.forEach(function (f) {
+    var name = orcaToolsUtf8(f.name || "file.md");
+    var data = typeof f.data === "string" ? orcaToolsUtf8(f.data) : (f.data || new Uint8Array(0));
+    var crc = orcaToolsCrc32(data);
+    var dos = f.mtime ? orcaToolsZipDosTime(f.mtime) : nowDos;
+    var local = concat([
+      u32(0x04034b50), u16(20), u16(FLAG_UTF8), u16(0), u16(dos.time), u16(dos.date),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0),
+      name, data
+    ]);
+    parts.push(local);
+    central.push(concat([
+      u32(0x02014b50), u16(20), u16(20), u16(FLAG_UTF8), u16(0), u16(dos.time), u16(dos.date),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0),
+      u16(0), u16(0), u32(0), u32(offset), name
+    ]));
+    offset += local.length;
+  });
+  var centralBlob = concat(central);
+  var end = concat([
+    u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+    u32(centralBlob.length), u32(offset), u16(0)
+  ]);
+  return concat(parts.concat([centralBlob, end]));
+}
+
+async function orcaToolsLoadItems(opts) {
+  opts = opts || {};
+  if (!OrcaBlocks) return [];
+  var feed = await OrcaBlocks.listFeed({
+    kw: opts.kw || "",
+    tags: opts.tags || [],
+    skipHeal: true,
+    preferLive: true,
+    fullText: opts.fullText !== false
+  });
+  var items = feed.items || [];
+  if (opts.applyQuick && opts.filters) {
+    items = orcaToolsQuickFilterItems(items, opts.filters);
+  }
+  return items;
+}
+
+function orcaToolsCloseBackdrop(sel) {
+  var old = document.querySelector(sel);
+  if (old) old.remove();
+}
+
+function orcaToolsBindEsc(closeFn) {
+  function onKey(e) {
+    if (e.key === "Escape") {
+      closeFn();
+      document.removeEventListener("keydown", onKey, true);
+    }
+  }
+  document.addEventListener("keydown", onKey, true);
+  return onKey;
+}
+
+function orcaCloseToolsDialog() {
+  orcaToolsCloseBackdrop(".orca-df-tools-backdrop");
+}
+
+function orcaOpenToolsHub(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="日记流工具">' +
+    '<div class="orca-df-tools-head"><span>工具</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="archive"><b>归档柜</b><span data-df-tools-arch-hint>已归档条目</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="trash"><b>回收站</b><span data-df-tools-trash-hint>删除后约保留 30 天</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="search"><b>搜索</b><span>在日记流内按关键词筛选</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="stats"><b>统计</b><span>年/月计数、连续打卡、标签分布</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="export"><b>导出</b><span>Markdown / 按月 zip / JSON 备份</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="recap"><b>回顾</b><span>去年今日、随机一条</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="layout"><b>布局</b><span>封面高度：紧凑 / 舒适 / 高封面</span></button>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var archHint = host.querySelector("[data-df-tools-arch-hint]");
+  var trashHint = host.querySelector("[data-df-tools-trash-hint]");
+  if (OrcaBlocks && typeof OrcaBlocks.listArchivedFeed === "function") {
+    OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
+      var n = (feed && feed.items && feed.items.length) || 0;
+      if (archHint) archHint.textContent = n ? ("共 " + n + " 条已归档") : "暂无归档";
+    }).catch(function () {});
+  }
+  if (OrcaBlocks && typeof OrcaBlocks.trashCount === "function") {
+    OrcaBlocks.trashCount().then(function (n) {
+      if (trashHint) trashHint.textContent = n ? ("共 " + n + " 条 · 约保留 30 天") : "回收站为空";
+    }).catch(function () {});
+  }
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-df-tools]");
+    if (!btn || !host.contains(btn)) return;
+    var act = btn.getAttribute("data-df-tools");
+    if (act === "close") { orcaCloseToolsDialog(); return; }
+    orcaCloseToolsDialog();
+    if (act === "archive") orcaOpenArchiveDialog(ctx);
+    else if (act === "trash") orcaOpenTrashDialog(ctx);
+    else if (act === "stats") orcaOpenStatsDialog(ctx);
+    else if (act === "export") orcaOpenExportDialog(ctx);
+    else if (act === "recap") orcaOpenRecapDialog(ctx);
+    else if (act === "search") orcaOpenSearchDialog(ctx);
+    else if (act === "layout") orcaOpenLayoutDialog(ctx);
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaOpenStatsDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="日记流统计">' +
+    '<div class="orca-df-tools-head"><span>统计</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
+  document.body.appendChild(host);
+  var body = host.querySelector(".orca-df-tools-body");
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) orcaCloseToolsDialog();
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  orcaToolsLoadItems({ fullText: false }).then(function (items) {
+    var s = orcaToolsComputeStats(items);
+    function cardsHtml(rows, labelFn) {
+      if (!rows || !rows.length) return '<div class="orca-df-tools-muted">暂无</div>';
+      return '<div class="orca-df-stats-grid">' + rows.map(function (r) {
+        return '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + r.count +
+          '</div><div class="orca-df-stats-l">' + orcaToolsEsc(labelFn(r)) + "</div></div>";
+      }).join("") + "</div>";
+    }
+    body.innerHTML =
+      '<div class="orca-df-stats-grid">' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.total + '</div><div class="orca-df-stats-l">全部</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.yearCount + '</div><div class="orca-df-stats-l">今年</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.monthCount + '</div><div class="orca-df-stats-l">本月</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.streak + '</div><div class="orca-df-stats-l">连续打卡（天）</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.activeDays + '</div><div class="orca-df-stats-l">有记录天数</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withImg + '</div><div class="orca-df-stats-l">含图</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withLoc + '</div><div class="orca-df-stats-l">含地点</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.pinned + '</div><div class="orca-df-stats-l">置顶</div></div>' +
+      "</div>" +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">年份</div>' +
+      cardsHtml(s.yearRows, function (r) { return r.year + " 年"; }) +
+      "</div>" +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">近月</div>' +
+      cardsHtml(s.monthRows, function (r) {
+        var m = String(r.month || "").match(/^(\d{4})-(\d{2})$/);
+        return m ? (m[1] + "年" + Number(m[2]) + "月") : r.month;
+      }) +
+      "</div>" +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">标签分布</div>' +
+      (s.tagRows.map(function (r) {
+        return '<div class="orca-df-tools-row"><span>#' + orcaToolsEsc(r.tag) + '</span><b>' + r.count + '</b></div>';
+      }).join("") || '<div class="orca-df-tools-muted">暂无用户标签</div>') +
+      "</div>";
+  }).catch(function () {
+    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+  });
+}
+
+function orcaOpenExportDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="导出日记流">' +
+    '<div class="orca-df-tools-head"><span>导出</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">导出会拉取全文；按月 zip 为无压缩 Markdown 包。</p>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="md-all">导出全部 Markdown</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="md-filter">导出当前筛选 Markdown</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="zip-month">按月打包 zip</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="json">导出 JSON 备份</button>' +
+    '<div class="orca-df-tools-status" hidden></div>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var status = host.querySelector(".orca-df-tools-status");
+  var busy = false;
+  function setStatus(t) {
+    status.hidden = !t;
+    status.textContent = t || "";
+  }
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    var close = e.target.closest("[data-df-tools=close]");
+    if (close) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-exp]");
+    if (!btn || busy) return;
+    var act = btn.getAttribute("data-df-exp");
+    busy = true;
+    setStatus("准备中…");
+    var filters = (ctx && ctx.filters) || {};
+    var useFilter = act === "md-filter";
+    orcaToolsLoadItems({
+      kw: useFilter ? (filters.kw || "") : "",
+      tags: useFilter ? (filters.tags || []) : [],
+      filters: filters,
+      applyQuick: useFilter,
+      fullText: true
+    }).then(function (items) {
+      var cfg = (ctx && ctx.data && ctx.data().config) || {};
+      if (act === "md-all" || act === "md-filter") {
+        orcaToolsDownloadText(
+          "日记流_" + (act === "md-filter" ? "筛选_" : "") + Date.now() + ".md",
+          orcaToolsBuildMarkdown(items, cfg),
+          "text/markdown;charset=utf-8"
+        );
+        setStatus("已下载 " + items.length + " 条 Markdown");
+        orcaShowMessage("已导出 Markdown（" + items.length + " 条）");
+        return;
+      }
+      if (act === "json") {
+        orcaToolsDownloadText(
+          "日记流_backup_" + Date.now() + ".json",
+          JSON.stringify({ exportedAt: new Date().toISOString(), config: cfg, items: items }, null, 2),
+          "application/json;charset=utf-8"
+        );
+        setStatus("已下载 JSON（" + items.length + " 条）");
+        orcaShowMessage("已导出 JSON 备份");
+        return;
+      }
+      if (act === "zip-month") {
+        var groups = {};
+        items.forEach(function (it) {
+          var day = orcaToolsItemDay(it);
+          var key = day ? day.slice(0, 7) : "unknown";
+          (groups[key] = groups[key] || []).push(it);
+        });
+        var files = Object.keys(groups).sort().map(function (k) {
+          var mtime = null;
+          var m = String(k).match(/^(\d{4})-(\d{2})$/);
+          if (m) mtime = new Date(Number(m[1]), Number(m[2]) - 1, 15, 12, 0, 0);
+          return {
+            name: "日记流_" + k + ".md",
+            data: orcaToolsBuildMarkdown(groups[k], cfg),
+            mtime: mtime
+          };
+        });
+        if (!files.length) files = [{ name: "empty.md", data: "# 日记流\n\n暂无条目\n" }];
+        var zip = orcaToolsZipStore(files);
+        orcaToolsDownloadBlob("日记流_按月_" + Date.now() + ".zip", new Blob([zip], { type: "application/zip" }));
+        setStatus("已打包 " + files.length + " 个月份文件");
+        orcaShowMessage("已导出按月 zip");
+      }
+    }).catch(function (err) {
+      setStatus("失败：" + String(err && err.message || err));
+      orcaShowMessage("导出失败");
+    }).then(function () { busy = false; });
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaOpenRecapDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="回顾">' +
+    '<div class="orca-df-tools-head"><span>回顾</span>' +
+    '<div class="orca-df-tools-head-tools">' +
+    '<button type="button" class="orca-df-tools-mini" data-df-recap="last-year">去年今日</button>' +
+    '<button type="button" class="orca-df-tools-mini" data-df-recap="random">随机一条</button>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button>' +
+    "</div></div>" +
+    '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
+  document.body.appendChild(host);
+  var body = host.querySelector(".orca-df-tools-body");
+  var allItems = [];
+  function renderList(list, emptyText) {
+    if (!list.length) {
+      body.innerHTML = '<div class="orca-df-tools-muted">' + orcaToolsEsc(emptyText || "暂无") + "</div>";
+      return;
+    }
+    body.innerHTML = list.map(function (it) {
+      var bid = it.blockId || it.id;
+      return (
+        '<div class="orca-df-tools-entry">' +
+        '<div class="orca-df-tools-entry-main">' +
+        '<div class="orca-df-tools-entry-t">' + orcaToolsEsc(orcaToolsItemTitle(it)) + "</div>" +
+        '<div class="orca-df-tools-muted">' + orcaToolsEsc(it.created || orcaToolsItemDay(it) || "") +
+        (it.location ? (" · " + orcaToolsEsc(it.location)) : "") + "</div></div>" +
+        '<button type="button" class="orca-df-tools-mini" data-df-recap="open" data-block-id="' + orcaToolsEsc(String(bid)) + '">打开</button>' +
+        "</div>"
+      );
+    }).join("");
+  }
+  function lastYearToday() {
+    var now = new Date();
+    var key = ("0" + (now.getMonth() + 1)).slice(-2) + "-" + ("0" + now.getDate()).slice(-2);
+    var y = now.getFullYear() - 1;
+    return allItems.filter(function (it) {
+      var day = orcaToolsItemDay(it);
+      return day && day.slice(0, 4) === String(y) && day.slice(5) === key;
+    });
+  }
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-recap]");
+    if (!btn) return;
+    var act = btn.getAttribute("data-df-recap");
+    if (act === "open") {
+      var bid = Number(btn.getAttribute("data-block-id"));
+      if (bid && typeof orcaOpenInOrca === "function") orcaOpenInOrca(bid);
+      return;
+    }
+    if (act === "last-year") {
+      renderList(lastYearToday(), "去年今日没有日记");
+      return;
+    }
+    if (act === "random") {
+      if (!allItems.length) {
+        renderList([], "暂无日记");
+        return;
+      }
+      var pick = allItems[Math.floor(Math.random() * allItems.length)];
+      renderList([pick], "");
+    }
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  orcaToolsLoadItems({ fullText: false }).then(function (items) {
+    allItems = items || [];
+    var ly = lastYearToday();
+    if (ly.length) renderList(ly, "");
+    else renderList([], "去年今日没有日记 — 可点「随机一条」");
+  }).catch(function () {
+    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+  });
+}
+
+function orcaOpenSearchDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  var cur = (ctx && ctx.filters && ctx.filters.kw) || "";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="搜索日记流">' +
+    '<div class="orca-df-tools-head"><span>搜索</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<label class="orca-df-tools-label">关键词（匹配日记流条目正文）</label>' +
+    '<input class="orca-df-tools-input" type="search" data-df-search-input placeholder="例如：旅行 / 心情" value="' + orcaToolsEsc(cur) + '" />' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-search="apply">在日记流中筛选</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-search="clear">清除关键词</button>' +
+    "</div>" +
+    '<p class="orca-df-tools-muted">也可使用虎鲸全局搜索；此处仅限带「日记流」标签的条目。</p>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var input = host.querySelector("[data-df-search-input]");
+  setTimeout(function () { try { input.focus(); input.select(); } catch (e) {} }, 30);
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  function apply(kw) {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.kw = kw || "";
+    orcaCloseToolsDialog();
+    orcaRefreshFeed().then(function () {
+      if (ctx.reApp) ctx.reApp();
+      orcaShowMessage(kw ? ("已筛选：" + kw) : "已清除搜索");
+    });
+  }
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-search]");
+    if (!btn) return;
+    var act = btn.getAttribute("data-df-search");
+    if (act === "apply") apply(String(input.value || "").trim());
+    else if (act === "clear") apply("");
+  });
+  host.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && e.target === input) {
+      e.preventDefault();
+      apply(String(input.value || "").trim());
+    }
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaToolsLayoutLabel(p) {
+  if (p === "compact") return "紧凑";
+  if (p === "tall") return "高封面";
+  return "舒适";
+}
+
+async function orcaToolsGetLayout() {
+  try {
+    var v = await dfGetData(DF_LAYOUT_KEY);
+    if (v === "compact" || v === "tall" || v === "cozy") return v;
+  } catch (e) {}
+  return DF_LAYOUT_DEFAULT;
+}
+
+async function orcaToolsSetLayout(preset) {
+  if (preset !== "compact" && preset !== "tall" && preset !== "cozy") preset = DF_LAYOUT_DEFAULT;
+  await dfSetData(DF_LAYOUT_KEY, preset);
+  return preset;
+}
+
+function orcaApplyLayoutToMounts(preset) {
+  preset = preset || DF_LAYOUT_DEFAULT;
+  (document.querySelectorAll(".orca-df-scope") || []).forEach(function (el) {
+    el.classList.remove("orca-df-layout-cozy", "orca-df-layout-compact", "orca-df-layout-tall");
+    el.classList.add("orca-df-layout-" + preset);
+  });
+}
+
+function orcaOpenLayoutDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop" role="dialog" aria-label="布局预设">' +
+    '<div class="orca-df-tools-head"><span>布局</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">窄屏可选手「紧凑」缩小封面；宽屏可用「高封面」。</p>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-layout="compact">紧凑 — 矮封面、更密列表</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-layout="cozy">舒适 — 默认</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-layout="tall">高封面 — 更强氛围</button>' +
+    '<div class="orca-df-tools-status" data-df-layout-status></div>' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var status = host.querySelector("[data-df-layout-status]");
+  orcaToolsGetLayout().then(function (cur) {
+    status.textContent = "当前：" + orcaToolsLayoutLabel(cur);
+    host.querySelectorAll("[data-df-layout]").forEach(function (b) {
+      b.classList.toggle("is-on", b.getAttribute("data-df-layout") === cur);
+    });
+  });
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-layout]");
+    if (!btn) return;
+    var preset = btn.getAttribute("data-df-layout");
+    orcaToolsSetLayout(preset).then(function (p) {
+      orcaApplyLayoutToMounts(p);
+      status.textContent = "当前：" + orcaToolsLayoutLabel(p);
+      host.querySelectorAll("[data-df-layout]").forEach(function (b) {
+        b.classList.toggle("is-on", b.getAttribute("data-df-layout") === p);
+      });
+      orcaShowMessage("布局已设为「" + orcaToolsLayoutLabel(p) + "」");
+      if (ctx && ctx.reApp) ctx.reApp();
+    });
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+}
+
+function orcaCloseImagesDialog() {
+  orcaToolsCloseBackdrop(".orca-df-images-backdrop");
+}
+
+function orcaOpenImagesDialog(ctx, item) {
+  if (!item || !OrcaBlocks) {
+    orcaShowMessage("找不到条目");
+    return;
+  }
+  orcaCloseImagesDialog();
+  var bid = item.blockId || item.id;
+  var host = document.createElement("div");
+  host.className = "orca-df-images-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="管理图片">' +
+    '<div class="orca-df-tools-head"><span>图片（最多 9 张）</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-img="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<div class="orca-df-img-list"></div>' +
+    '<div class="orca-df-img-progress"><div class="orca-df-img-progress-bar" style="width:0%"></div></div>' +
+    '<div class="orca-df-tools-muted orca-df-img-status">可添加、排序；失败可重试后保存</div>' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn" data-df-img="add">添加图片</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-img="retry">重试失败</button>' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-img="save">保存到日记</button>' +
+    "</div>" +
+    '<input type="file" accept="image/*" multiple hidden data-df-img-file />' +
+    "</div></div>";
+  document.body.appendChild(host);
+  var listEl = host.querySelector(".orca-df-img-list");
+  var bar = host.querySelector(".orca-df-img-progress-bar");
+  var status = host.querySelector(".orca-df-img-status");
+  var fileInput = host.querySelector("[data-df-img-file]");
+  var rows = (item.images || []).filter(Boolean).slice(0, 9).map(function (src) {
+    return { src: src, status: "ready", error: "" };
+  });
+  var busy = false;
+
+  function setProgress(done, total) {
+    var pct = total ? Math.round((done / total) * 100) : 0;
+    bar.style.width = pct + "%";
+  }
+
+  function render() {
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="orca-df-tools-muted">暂无图片</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function (r, i) {
+      var thumb = r.preview || r.src || "";
+      var st = r.status === "error" ? ("失败" + (r.error ? "：" + r.error : "")) :
+        r.status === "uploading" ? "上传中…" :
+          r.status === "pending" ? "等待上传" : "就绪";
+      return (
+        '<div class="orca-df-img-row" data-idx="' + i + '">' +
+        '<img class="orca-df-img-thumb" src="' + orcaToolsEsc(thumb) + '" alt="" />' +
+        '<div class="orca-df-img-meta"><div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div></div>" +
+        '<div class="orca-df-img-acts">' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>上</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>下</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="rm" data-idx="' + i + '">删</button>' +
+        "</div></div>"
+      );
+    }).join("");
+  }
+
+  async function uploadOne(row) {
+    if (!row || row.status === "ready") return row;
+    row.status = "uploading";
+    render();
+    try {
+      var asset = null;
+      if (typeof OrcaBlocks.srcToOrcaAsset === "function") {
+        asset = await OrcaBlocks.srcToOrcaAsset(row.src);
+      }
+      if (!asset) throw new Error("上传失败");
+      row.src = asset;
+      row.preview = asset;
+      row.status = "ready";
+      row.error = "";
+    } catch (e) {
+      row.status = "error";
+      row.error = String(e && e.message || e || "失败");
+    }
+    render();
+    return row;
+  }
+
+  async function uploadPending() {
+    var pending = rows.filter(function (r) { return r.status === "pending" || r.status === "error"; });
+    var done = 0;
+    setProgress(0, pending.length || 1);
+    for (var i = 0; i < pending.length; i++) {
+      await uploadOne(pending[i]);
+      done++;
+      setProgress(done, pending.length);
+    }
+    status.textContent = pending.length
+      ? ("上传完成：成功 " + rows.filter(function (r) { return r.status === "ready"; }).length +
+        " / 失败 " + rows.filter(function (r) { return r.status === "error"; }).length)
+      : "无需上传";
+  }
+
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseImagesDialog();
+  });
+  host.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-df-img]");
+    if (!btn || !host.contains(btn)) return;
+    var act = btn.getAttribute("data-df-img");
+    if (act === "close") { orcaCloseImagesDialog(); return; }
+    if (act === "add") { fileInput.click(); return; }
+    var idx = Number(btn.getAttribute("data-idx"));
+    if (act === "rm" && isFinite(idx)) {
+      if (rows[idx] && rows[idx].preview && String(rows[idx].preview).indexOf("blob:") === 0) {
+        try { URL.revokeObjectURL(rows[idx].preview); } catch (e2) {}
+      }
+      rows.splice(idx, 1);
+      render();
+      return;
+    }
+    if (act === "up" && isFinite(idx) && idx > 0) {
+      var t = rows[idx - 1]; rows[idx - 1] = rows[idx]; rows[idx] = t;
+      render();
+      return;
+    }
+    if (act === "down" && isFinite(idx) && idx < rows.length - 1) {
+      var t2 = rows[idx + 1]; rows[idx + 1] = rows[idx]; rows[idx] = t2;
+      render();
+      return;
+    }
+    if (busy) return;
+    if (act === "retry") {
+      busy = true;
+      rows.forEach(function (r) { if (r.status === "error") r.status = "pending"; });
+      uploadPending().then(function () { busy = false; });
+      return;
+    }
+    if (act === "save") {
+      busy = true;
+      status.textContent = "保存中…";
+      uploadPending().then(function () {
+        var failed = rows.filter(function (r) { return r.status === "error"; });
+        if (failed.length) {
+          status.textContent = "仍有 " + failed.length + " 张失败，可重试后再保存";
+          busy = false;
+          return null;
+        }
+        var imgs = rows.filter(function (r) { return r.status === "ready"; }).map(function (r) { return r.src; }).slice(0, 9);
+        return OrcaBlocks.updateEntry(bid, { images: imgs });
+      }).then(function (res) {
+        if (res == null) return;
+        item.images = rows.filter(function (r) { return r.status === "ready"; }).map(function (r) { return r.src; }).slice(0, 9);
+        orcaShowMessage("图片已保存");
+        orcaCloseImagesDialog();
+        return orcaRefreshFeed({ keepLimit: true, skipHeal: true, preferLive: true }).then(function () {
+          if (ctx && ctx.reApp) ctx.reApp();
+        });
+      }).catch(function (err) {
+        status.textContent = "保存失败：" + String(err && err.message || err);
+        orcaShowMessage("保存图片失败");
+      }).then(function () { busy = false; });
+    }
+  });
+  fileInput.addEventListener("change", function () {
+    var files = Array.prototype.slice.call(fileInput.files || []);
+    fileInput.value = "";
+    var room = 9 - rows.length;
+    if (room <= 0) {
+      orcaShowMessage("最多 9 张图");
+      return;
+    }
+    files.slice(0, room).forEach(function (f) {
+      var url = URL.createObjectURL(f);
+      rows.push({ src: url, preview: url, status: "pending", error: "" });
+    });
+    render();
+    if (busy) return;
+    busy = true;
+    uploadPending().then(function () { busy = false; });
+  });
+  orcaToolsBindEsc(orcaCloseImagesDialog);
+  render();
+}
+
+function orcaEnhanceToolsUi(el, ctx) {
+  if (!el) return;
+  var stack = el.querySelector(".mom-fab-stack");
+  if (stack) {
+    stack.querySelectorAll("[data-df-act=open-trash], [data-df-act=open-archive], [data-df-act=open-search]").forEach(function (n) {
+      n.remove();
+    });
+  }
+  if (stack && !stack.querySelector("[data-df-act=open-tools]")) {
+    var toolsBtn = document.createElement("button");
+    toolsBtn.type = "button";
+    toolsBtn.className = "mom-outline-fab orca-df-tools-fab";
+    toolsBtn.setAttribute("data-df-act", "open-tools");
+    toolsBtn.title = "工具（归档/回收站/搜索/统计/导出…）";
+    toolsBtn.setAttribute("aria-label", "工具");
+    toolsBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>' +
+      '<span class="orca-df-tools-fab-count" hidden>0</span>';
+    var syncEl = stack.querySelector("[data-df-act=refresh-feed]");
+    if (syncEl && syncEl.nextSibling) stack.insertBefore(toolsBtn, syncEl.nextSibling);
+    else if (syncEl) stack.appendChild(toolsBtn);
+    else stack.appendChild(toolsBtn);
+  }
+  if (stack) {
+    var toolsEl = stack.querySelector("[data-df-act=open-tools]");
+    if (toolsEl) {
+      var kwOn = !!(ctx.filters && ctx.filters.kw);
+      toolsEl.classList.toggle("is-on", kwOn);
+      if (!toolsEl.querySelector(".orca-df-tools-fab-count")) {
+        var badge = document.createElement("span");
+        badge.className = "orca-df-tools-fab-count";
+        badge.hidden = true;
+        badge.textContent = "0";
+        toolsEl.appendChild(badge);
+      }
+    }
+  }
+
+  // 快捷筛选条
+  var quick = el.querySelector(".orca-df-quickbar");
+  if (!quick) {
+    quick = document.createElement("div");
+    quick.className = "orca-df-quickbar";
+    var tagbar = el.querySelector(".orca-df-tagbar");
+    var list = el.querySelector(".mom-list") || el.querySelector("[data-list]");
+    if (tagbar && tagbar.parentNode) tagbar.parentNode.insertBefore(quick, tagbar.nextSibling);
+    else if (list && list.parentNode) list.parentNode.insertBefore(quick, list);
+    else el.appendChild(quick);
+  }
+  var f = ctx.filters || {};
+  var hasQ = orcaToolsHasQuickFilters(f);
+  quick.innerHTML =
+    '<span class="orca-df-tagbar-label">筛选</span>' +
+    '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">有图</button>' +
+    '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">有地点</button>' +
+    '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">仅置顶</button>' +
+    (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">清除筛选</button>' : "") +
+    (f.kw ? '<span class="orca-df-quick-kw">搜索：' + orcaToolsEsc(f.kw) + "</span>" : "");
+
+  orcaToolsGetLayout().then(function (p) {
+    if (!el.isConnected) return;
+    el.classList.remove("orca-df-layout-cozy", "orca-df-layout-compact", "orca-df-layout-tall");
+    el.classList.add("orca-df-layout-" + p);
+  }).catch(function () {});
+}
+
+function orcaHandleToolsAct(ctx, act, btn) {
+  if (act === "open-tools") {
+    orcaOpenToolsHub(ctx);
+    return true;
+  }
+  if (act === "open-search") {
+    orcaOpenSearchDialog(ctx);
+    return true;
+  }
+  if (act === "open-stats") {
+    orcaOpenStatsDialog(ctx);
+    return true;
+  }
+  if (act === "quick-image") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.hasImage = !ctx.filters.hasImage;
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "quick-location") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.hasLocation = !ctx.filters.hasLocation;
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "quick-pinned") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.pinnedOnly = !ctx.filters.pinnedOnly;
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "clear-quick") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    orcaToolsClearQuickFilters(ctx.filters);
+    ctx.filters.kw = "";
+    orcaRefreshFeed().then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "manage-images") {
+    var id = btn.getAttribute("data-id") || btn.getAttribute("data-mid");
+    var it = ((ctx.data() && ctx.data().items) || []).find(function (x) {
+      return String(x.id) === String(id);
+    });
+    if (!it && orcaFeedAllItems) {
+      it = orcaFeedAllItems.find(function (x) { return String(x.id) === String(id); });
+    }
+    orcaOpenImagesDialog(ctx, it);
+    return true;
+  }
+  return false;
+}
+
+
 // ===== Orca Note entry =====
-var ORCA_CSS = "/* src/style.css */\n.mom-root {\n  position: relative;\n  height: 100%;\n  min-height: 0;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n  background: var(--b3-theme-background, #fff);\n  font-family: inherit;\n  color: var(--b3-theme-on-background, #222);\n}\n.mom-scroll {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-cover {\n  position: relative;\n  height: clamp(170px, 26vh, 300px);\n  flex-shrink: 0;\n  overflow: hidden;\n}\n.mom-cover-bg {\n  height: 100%;\n  position: relative;\n  overflow: hidden;\n}\n.mom-cover-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cover-default {\n  position: absolute;\n  inset: 0;\n  background:\n    linear-gradient(\n      150deg,\n      var(--b3-theme-primary, #4e6ef2) 0%,\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 45%, #0c0c20) 100%);\n}\n.mom-cover-shade {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  background:\n    linear-gradient(\n      180deg,\n      rgba(0, 0, 0, .06),\n      rgba(0, 0, 0, .4));\n}\n.mom-cover-stats {\n  position: absolute;\n  bottom: 24px;\n  right: 16px;\n  z-index: 10;\n  font-size: 13px;\n  color: #fff;\n  padding: 5px 12px;\n  border-radius: 999px;\n  background: rgba(0, 0, 0, .28);\n  backdrop-filter: blur(6px);\n  -webkit-backdrop-filter: blur(6px);\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .3);\n  white-space: nowrap;\n}\n.mom-cover-settings {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  width: 30px;\n  height: 30px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .28);\n  color: #fff;\n  cursor: pointer;\n  transition: background .18s ease, transform .15s ease;\n}\n.mom-cover-settings:hover {\n  background: rgba(255, 255, 255, .5);\n  transform: scale(1.05);\n}\n.mom-avatar-ph {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background:\n    linear-gradient(\n      135deg,\n      var(--b3-theme-primary, #4e6ef2),\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 52%, #0c0c20));\n  color: #fff;\n  font-weight: 600;\n}\n.mom-filter-row {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-actions {\n  display: flex;\n  gap: 8px;\n}\n.mom-actions .mom-btn-primary {\n  margin-left: auto;\n}\n.mom-chip {\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 999px;\n  padding: 3px 10px;\n  font-size: 12px;\n  cursor: pointer;\n}\n.mom-chip.active {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 6px;\n  padding: 5px 12px;\n  font-size: 13px;\n  cursor: pointer;\n}\n.mom-btn:hover {\n  background: var(--b3-theme-background-light, #f2f2f2);\n}\n.mom-btn-primary {\n  background: var(--b3-theme-primary, #4e6ef2);\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n}\n.mom-btn-primary:hover {\n  opacity: .9;\n}\n.mom-btn-small {\n  padding: 3px 9px;\n  font-size: 12px;\n}\n.mom-btn-danger {\n  border-color: #e05050;\n  color: #e05050;\n}\n.mom-btn-danger:hover {\n  background: #fdecec;\n}\n.mom-signature {\n  background-color: var(--moments-signature-bg, #f7f7f7);\n  padding: 14px 16px 10px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  flex-wrap: wrap;\n  flex-shrink: 0;\n}\n.mom-signature-tools {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.mom-cover-tool {\n  display: inline-flex !important;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  height: 30px;\n  padding: 0 12px;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .78);\n  color: #333;\n  font-size: 12px;\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);\n  transition:\n    background .18s ease,\n    transform .15s ease,\n    box-shadow .18s ease;\n  box-sizing: border-box;\n}\n.mom-cover-tool:hover {\n  background: #fff;\n  transform: translateY(-1px);\n}\n.mom-cover-tool-danger:hover {\n  background: #ff6b6b;\n  color: #fff;\n}\n.mom-signature-text {\n  font-size: 13px;\n  color: var(--moments-signature-text, #888);\n  line-height: 1.5;\n  margin-left: auto;\n  max-width: 40%;\n  word-break: break-word;\n}\n.mom-pin-strip {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 10px 16px;\n  margin: 8px auto 0;\n  width: 73%;\n  box-sizing: border-box;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-strip-label {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  flex-shrink: 0;\n}\n.mom-pin-strip-thumbs {\n  display: flex;\n  gap: 12px;\n  overflow: hidden;\n  flex: 1;\n}\n.mom-pin-group {\n  display: grid;\n  gap: 2px;\n  padding: 0;\n  border: none;\n  background: none;\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-group:hover {\n  opacity: .9;\n}\n.mom-pin-thumb {\n  position: relative;\n  overflow: hidden;\n  border-radius: 4px;\n}\n.mom-pin-thumb img {\n  width: 44px;\n  height: 44px;\n  object-fit: cover;\n  display: block;\n}\n.mom-pin-thumb-video,\n.mom-cal-thumb-video {\n  background: #000;\n}\n.mom-pin-thumb-single img {\n  width: 88px;\n  height: 88px;\n}\n.mom-pin-thumb-text {\n  width: 88px;\n  height: 88px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: color-mix(in srgb, var(--b3-theme-surface, #fff) 40%, transparent);\n}\n.mom-pin-text {\n  font-size: 12px;\n  color: var(--b3-theme-on-background, #333);\n  padding: 4px;\n  word-break: break-word;\n  line-height: 1.4;\n}\n.mom-pin-text-center {\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-pin-text-flow {\n  display: -webkit-box;\n  -webkit-line-clamp: 3;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n.mom-pin-thumb-more {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0, 0, 0, .45);\n  color: #fff;\n  font-size: 16px;\n  font-weight: 600;\n}\n.mom-list {\n  flex: 0 0 auto;\n  overflow: visible;\n  padding: 14px 0 90px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 12px;\n}\n.mom-filter-bar {\n  width: 73%;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-empty {\n  text-align: center;\n  color: #999;\n  margin: 72px auto 0;\n  font-size: 14px;\n  max-width: 240px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 6px;\n}\n.mom-empty-ico {\n  font-size: 40px;\n  line-height: 1;\n  margin-bottom: 6px;\n  opacity: .9;\n}\n.mom-empty-title {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  margin: 0;\n}\n.mom-empty-sub {\n  font-size: 13px;\n  color: #999;\n  margin: 0;\n}\n.mom-empty-btn {\n  margin-top: 14px;\n}\n.mom-empty-result {\n  margin-top: 72px;\n}\n.mom-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 8px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  width: 73%;\n  box-sizing: border-box;\n}\n.mom-item:hover {\n  border-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 55%, transparent);\n}\n.mom-pin-badge {\n  position: absolute;\n  top: 8px;\n  left: 8px;\n  z-index: 3;\n  display: flex;\n  align-items: center;\n  color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-item-avatar {\n  width: 48px;\n  height: 48px;\n  border-radius: 6px;\n  object-fit: cover;\n  flex-shrink: 0;\n  margin-right: 12px;\n  background-color: var(--moments-border, #ddd);\n}\n.mom-item-avatar.mom-avatar-ph {\n  font-size: 20px;\n}\n.mom-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.mom-item-name {\n  font-size: 16px;\n  color: var(--b3-theme-on-background, #333);\n  font-weight: 600;\n  line-height: 1.4;\n  margin-bottom: 4px;\n}\n.mom-item-text {\n  font-size: 14px;\n  color: var(--b3-theme-on-background, #333);\n  line-height: 1.8;\n  margin-bottom: 6px;\n  word-break: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n}\n.mom-no-text {\n  color: #bbb;\n  font-size: 13px;\n}\n.mom-long-toggle {\n  font-size: 12px;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background: none;\n  border: none;\n  cursor: pointer;\n  padding: 0;\n  margin-top: 2px;\n}\n.mom-card-imgs {\n  display: grid;\n  gap: 4px;\n  margin-top: 10px;\n}\n.mom-grid-1 {\n  grid-template-columns: 1fr;\n  max-width: 320px;\n}\n.mom-grid-2 {\n  grid-template-columns: 1fr 1fr;\n}\n.mom-grid-3 {\n  grid-template-columns: 1fr 1fr 1fr;\n}\n.mom-img-cell {\n  position: relative;\n  overflow: hidden;\n  border-radius: 6px;\n  aspect-ratio: 1;\n  background: #f0f0f0;\n}\n.mom-img-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  cursor: zoom-in;\n  display: block;\n}\n.mom-card-link {\n  margin-top: 10px;\n}\n.mom-card-link a {\n  color: var(--b3-theme-primary, #4e6ef2);\n  text-decoration: none;\n  font-size: 13px;\n}\n.mom-card-link a:hover {\n  text-decoration: underline;\n}\n.mom-bottom-space {\n  height: 90px;\n  flex-shrink: 0;\n}\n.mom-fab-stack {\n  position: absolute;\n  z-index: 40;\n  right: 16px;\n  bottom: 48px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  margin: 0;\n  padding-right: 0;\n  flex: none;\n  pointer-events: none;\n}\n.mom-outline-fab {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 44px;\n  height: 44px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  cursor: pointer;\n  color: var(--b3-theme-on-background, #333);\n  background: var(--b3-theme-surface, #fff);\n  border: 1px solid var(--b3-border-color, #ddd);\n  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);\n  transition: transform .15s ease, box-shadow .15s ease;\n  flex: none;\n  pointer-events: auto;\n}\n.mom-outline-fab:hover {\n  transform: translateY(-1px);\n  box-shadow: 0 6px 18px rgba(0, 0, 0, .24);\n}\n.mom-fab-stack.is-mobile {\n  position: absolute;\n  right: 16px;\n  bottom: 80px;\n  left: auto;\n  margin: 0;\n}\n.mom-outline-fab.is-mobile {\n  transform: none;\n}\n.mom-lightbox {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .85);\n  z-index: 1002;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: zoom-out;\n}\n.mom-lightbox-img {\n  max-width: 92%;\n  max-height: 88vh;\n  border-radius: 6px;\n  object-fit: contain;\n}\n.mom-lightbox-close {\n  position: absolute;\n  top: 16px;\n  right: 16px;\n  z-index: 2;\n  width: 36px;\n  height: 36px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 22px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-lightbox-close:hover {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav {\n  position: absolute;\n  top: 50%;\n  transform: translateY(-50%);\n  z-index: 2;\n  width: 44px;\n  height: 44px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 28px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.mom-lightbox-nav:hover:not(:disabled) {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav:disabled {\n  opacity: .25;\n  cursor: default;\n}\n.mom-lightbox-prev {\n  left: 12px;\n}\n.mom-lightbox-next {\n  right: 12px;\n}\n.mom-lightbox-dots {\n  position: absolute;\n  bottom: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  gap: 8px;\n  z-index: 2;\n}\n.mom-lightbox-dot {\n  width: 8px;\n  height: 8px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .35);\n  cursor: pointer;\n}\n.mom-lightbox-dot.active {\n  background: #fff;\n  transform: scale(1.15);\n}\n.mom-lightbox-counter {\n  position: absolute;\n  top: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  color: rgba(255, 255, 255, .85);\n  font-size: 13px;\n  z-index: 2;\n  pointer-events: none;\n}\n.mom-confirm-msg {\n  margin: 0;\n  font-size: 14px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background);\n  white-space: pre-wrap;\n}\n.north-luna-moments-item-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 10px;\n}\n.north-luna-moments-item-header .mom-avatar {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  object-fit: cover;\n  flex-shrink: 0;\n}\n.north-luna-moments-item-header .mom-avatar-ph {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  font-size: 16px;\n}\n.north-luna-moments-item-name {\n  font-size: 15px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  line-height: 1.3;\n}\n.mom-lightbox[hidden] {\n  display: none;\n}\n.mom-lightbox img {\n  max-width: 92%;\n  max-height: 92%;\n  border-radius: 6px;\n}\n.mom-overlay {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .4);\n  z-index: 2147483000;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-sizing: border-box;\n  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));\n}\n.mom-modal {\n  background: var(--b3-theme-background, #fff);\n  border-radius: 12px;\n  width: min(560px, 92vw);\n  max-height: 86vh;\n  display: flex;\n  flex-direction: column;\n  box-shadow: 0 10px 40px rgba(0, 0, 0, .3);\n}\n.mom-modal-sm {\n  width: min(340px, 90vw);\n}\n.mom-overlay.mom-settings .mom-modal {\n  width: min(320px, 92vw);\n  font-size: 16px;\n}\n.mom-overlay.mom-settings .mom-field {\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-modal-head {\n  font-size: 17px;\n}\n.mom-overlay.mom-settings .mom-modal-head .mom-modal-x {\n  font-size: 18px;\n}\n.mom-overlay.mom-settings .mom-inp {\n  width: 240px;\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-hint {\n  font-size: 13px;\n}\n.mom-overlay.mom-settings label.mom-btn:has(> input[type=\"file\"]) {\n  width: 240px;\n}\n/* ===== 日历弹窗（复刻 siyuan-moments）===== */\n.mom-overlay.mom-calendar {\n  background: rgba(0, 0, 0, .5);\n}\n.mom-calendar-modal {\n  display: contents;\n}\n.mom-calendar-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483000;\n  touch-action: none;\n}\n.mom-calendar-content {\n  position: relative;\n  background: var(--b3-theme-background);\n  border-radius: 12px;\n  width: auto;\n  max-width: 1200px;\n  min-width: 0;\n  max-height: 60vh;\n  overflow: hidden;\n  z-index: 2147483001;\n  box-shadow: 0 4px 24px rgba(0, 0, 0, .3);\n  display: flex;\n  flex-direction: column;\n  transition: box-shadow .2s ease, transform .2s ease;\n  touch-action: pan-y;\n  overscroll-behavior: contain;\n}\n.mom-calendar-content.dragging {\n  transition: none;\n  cursor: grabbing;\n}\n.mom-calendar-header {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid color-mix(in srgb, var(--b3-border-color) 35%, transparent);\n  flex-shrink: 0;\n  cursor: move;\n  user-select: none;\n}\n.mom-calendar-title {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: 1;\n  min-width: 0;\n  white-space: nowrap;\n  overflow: hidden;\n}\n.mom-calendar-title > span:first-child {\n  font-size: 15px;\n  font-weight: 600;\n}\n.mom-calendar-year {\n  font-size: 13px;\n  color: var(--b3-theme-primary);\n  background: transparent;\n  border: none;\n  outline: none;\n  cursor: pointer;\n  padding: 2px 4px;\n  font-family: inherit;\n  -webkit-appearance: none;\n  -moz-appearance: none;\n  appearance: none;\n  flex-shrink: 0;\n}\n.mom-calendar-modes {\n  display: inline-flex;\n  gap: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-mode {\n  border: 1px solid var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface);\n  font-size: 12px;\n  padding: 2px 9px;\n  border-radius: 999px;\n  cursor: pointer;\n  line-height: 1.4;\n}\n.mom-calendar-mode.on {\n  background: var(--b3-theme-primary);\n  border-color: var(--b3-theme-primary);\n  color: #fff;\n}\n.mom-calendar-count {\n  font-size: 12px;\n  color: var(--b3-theme-primary);\n  margin-left: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-close {\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  font-size: 20px;\n  color: var(--b3-theme-on-surface);\n  border-radius: 4px;\n  flex-shrink: 0;\n}\n.mom-calendar-close:hover {\n  background-color: var(--b3-list-hover);\n}\n.mom-calendar-body {\n  padding: 16px;\n  overflow: auto;\n}\n.mom-calendar-grid {\n  width: 100%;\n  display: block;\n}\n.mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n}\n.mom-calendar-column {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.mom-calendar-cell {\n  width: 100%;\n  min-width: 10px;\n  aspect-ratio: 1;\n  border-radius: 3px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  transition: all .15s;\n  cursor: pointer;\n}\n.mom-calendar-cell:hover {\n  transform: scale(1.2);\n  box-shadow: 0 0 0 1px var(--b3-theme-primary);\n}\n.mom-calendar-cell.level-empty {\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  opacity: .5;\n}\n.mom-calendar-cell.level-empty:hover {\n  transform: none;\n  box-shadow: none;\n}\n.mom-calendar-cell.level-1 { background-color: var(--b3-theme-primary-lightest); }\n.mom-calendar-cell.level-2 { background-color: var(--b3-theme-primary-lighter); }\n.mom-calendar-cell.level-3 { background-color: var(--b3-theme-primary-light); }\n.mom-calendar-cell.level-4 { background-color: var(--b3-theme-primary); }\n.mom-calendar-months {\n  position: relative;\n  margin-top: 8px;\n  height: 18px;\n  min-width: max-content;\n}\n.mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.mom-calendar-photo-twocol {\n  display: flex;\n  flex-direction: column;\n  gap: 18px;\n}\n.mom-calendar-photo-month-title {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  margin: 4px 0 8px 4px;\n}\n.mom-calendar-photo-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-calendar-photo-row {\n  display: grid;\n  grid-template-columns: repeat(7, minmax(32px, 44px));\n  gap: 6px;\n}\n.mom-calendar-photo-cell {\n  position: relative;\n  aspect-ratio: 1;\n  width: 100%;\n  min-width: 32px;\n  max-width: 44px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 5%, transparent);\n  border-radius: 6px;\n  border: 1px solid color-mix(in srgb, var(--b3-border-color) 20%, transparent);\n  cursor: default;\n  overflow: hidden;\n  transition: transform .15s ease, box-shadow .15s ease;\n}\n.mom-calendar-photo-cell.has-photo {\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);\n}\n.mom-calendar-photo-cell.has-photo:hover,\n.mom-calendar-photo-cell.has-record:hover {\n  transform: scale(1.05);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .15);\n  z-index: 1;\n}\n.mom-calendar-photo-cell.empty {\n  background-color: transparent;\n  border: 0;\n}\n.mom-calendar-photo-cell.has-record {\n  cursor: pointer;\n}\n.mom-calendar-photo-dot {\n  position: absolute;\n  right: 5px;\n  bottom: 5px;\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  background: var(--b3-theme-primary);\n  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b3-theme-background) 60%, transparent);\n  z-index: 2;\n}\n.mom-calendar-photo-num {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  font-size: 11px;\n  color: var(--b3-theme-on-surface);\n  opacity: .85;\n  background: color-mix(in srgb, var(--b3-theme-background) 65%, transparent);\n  padding: 1px 5px;\n  border-radius: 3px;\n  line-height: 1.3;\n  z-index: 1;\n}\n.mom-calendar-photo-cell.has-photo .mom-calendar-photo-num {\n  color: #fff;\n  background: rgba(0, 0, 0, .45);\n  opacity: 1;\n}\n.mom-calendar-photo-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  z-index: 0;\n  background: var(--b3-theme-surface);\n}\n.mom-modal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid var(--b3-border-color, #eee);\n  font-weight: 600;\n}\n.mom-modal-x {\n  border: none;\n  background: none;\n  font-size: 16px;\n  cursor: pointer;\n  color: #888;\n}\n.mom-modal-body {\n  padding: 14px 16px;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.mom-modal-foot {\n  display: flex;\n  justify-content: flex-end;\n  gap: 8px;\n  padding: 10px 16px;\n  border-top: 1px solid var(--b3-border-color, #eee);\n}\n.mom-editor-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-inp {\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 6px;\n  padding: 6px 9px;\n  font-size: 13px;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-inp-inline {\n  width: 100px;\n}\n.mom-textarea {\n  min-height: 120px;\n  width: 100%;\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 8px;\n  padding: 10px;\n  font-size: 14px;\n  font-family: inherit;\n  resize: vertical;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-img-previews {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-img-prev {\n  position: relative;\n  width: 64px;\n  height: 64px;\n}\n.mom-img-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  border-radius: 6px;\n}\n.mom-img-prev-x {\n  position: absolute;\n  top: -6px;\n  right: -6px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  border: none;\n  background: #333;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-picked {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-picked-chip {\n  cursor: pointer;\n}\n.mom-pick-panel {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  font-size: 13px;\n}\n.mom-field-col {\n  align-items: flex-start;\n}\n.mom-field .mom-inp {\n  width: 100%;\n}\n.mom-hint {\n  font-size: 11px;\n  color: #999;\n}\n.mom-divider {\n  height: 1px;\n  background: var(--b3-border-color, #eee);\n}\n.mom-btn-row {\n  display: flex;\n  gap: 8px;\n  flex-wrap: wrap;\n}\n.mom-view-switch {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-cal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.mom-cal-nav {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.mom-cal-year {\n  font-size: 14px;\n  font-weight: 600;\n  min-width: 64px;\n  text-align: center;\n}\n.mom-cal-modes {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal-months {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.mom-cal-month {\n  background: var(--b3-theme-background, #fff);\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 10px;\n  padding: 10px;\n}\n.mom-cal-month-t {\n  margin: 0 0 8px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-cal-grid {\n  display: grid;\n  grid-template-columns: repeat(7, 1fr);\n  gap: 4px;\n}\n.mom-cal-dow {\n  text-align: center;\n  font-size: 11px;\n  color: #aaa;\n  padding: 2px 0;\n}\n.mom-cal-blank {\n  aspect-ratio: 1;\n}\n.mom-cal-cell {\n  position: relative;\n  aspect-ratio: 1;\n  border-radius: 6px;\n  border: 1px solid transparent;\n  background: var(--b3-theme-background-light, #f4f4f4);\n  overflow: hidden;\n  cursor: pointer;\n  padding: 0;\n}\n.mom-cal-cell.has {\n  border-color: var(--b3-border-color, #ddd);\n}\n.mom-cal-cell:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell.is-today {\n  box-shadow: inset 0 0 0 2px var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cal-daynum {\n  position: absolute;\n  left: 3px;\n  top: 3px;\n  font-size: 10px;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);\n}\n.mom-cal-heatline {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 11px;\n  font-weight: 600;\n}\n.mom-cal-ph-cnt {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n@keyframes mom-flash {\n  0% {\n    box-shadow: 0 0 0 3px var(--b3-theme-primary, #4e6ef2);\n  }\n  100% {\n    box-shadow: 0 0 0 0 rgba(78, 110, 242, 0);\n  }\n}\n.mom-lock {\n  position: relative;\n  min-height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n}\n.mom-lock-bg {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n.mom-lock-bg--glass {\n  background:\n    linear-gradient(\n      180deg,\n      #fafafa,\n      #f0f0f0);\n}\n.mom-lock-panel {\n  position: relative;\n  z-index: 1;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  width: 100%;\n  height: 100%;\n  padding: 28px 26px;\n  background: transparent;\n}\n.mom-lock-top {\n  text-align: center;\n  color: #000;\n  width: 100%;\n  padding-bottom: 18px;\n  margin-bottom: 18px;\n  border-bottom: 1px solid #f0f0f0;\n}\n.mom-lock-date {\n  font-size: 12px;\n  letter-spacing: 2px;\n  color: #999;\n  text-transform: uppercase;\n}\n.mom-lock-time {\n  font-size: 44px;\n  font-weight: 200;\n  letter-spacing: 2px;\n  margin-top: 6px;\n  font-variant-numeric: tabular-nums;\n  color: #111;\n}\n.mom-lock-bottom {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  width: 100%;\n  gap: 10px;\n}\n.mom-lock-avatar {\n  width: 60px;\n  height: 60px;\n  border-radius: 50%;\n  font-size: 26px;\n}\n.mom-lock-name {\n  color: #111;\n  font-size: 14px;\n  font-weight: 600;\n}\n.mom-lock-input {\n  width: 50%;\n  border: 1px solid #e5e5e5;\n  border-radius: 10px;\n  padding: 10px 12px;\n  background: #f7f7f7;\n  color: #000;\n  font-size: 14px;\n  outline: none;\n  transition: border-color .18s ease, background .18s ease;\n}\n.mom-lock-input:focus {\n  border-color: #bbb;\n  background: #fff;\n}\n.mom-lock-input::placeholder {\n  color: #b0b0b0;\n}\n.mom-lock .mom-btn-primary {\n  width: 100%;\n  justify-content: center;\n  padding: 10px 12px;\n  border-radius: 10px;\n}\n.mom-lock-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin: 0;\n}\n.mom-lock-hint {\n  color: #aaa;\n  font-size: 12px;\n  margin-top: 2px;\n}\n.mom-lock.shake {\n  animation: mom-shake .4s ease;\n}\n@keyframes mom-shake {\n  0%, 100% {\n    transform: translateX(0);\n  }\n  25% {\n    transform: translateX(-6px);\n  }\n  75% {\n    transform: translateX(6px);\n  }\n}\n.mom-switch {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  cursor: pointer;\n  font-size: 13px;\n}\n.mom-switch input {\n  display: none;\n}\n.mom-switch i {\n  width: 40px;\n  height: 22px;\n  border-radius: 999px;\n  background: #ccc;\n  position: relative;\n  transition: background .2s;\n}\n.mom-switch i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  background: #fff;\n  transition: transform .2s;\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);\n}\n.mom-switch input:checked + i {\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-switch input:checked + i::after {\n  transform: translateX(18px);\n}\n.mom-switch-lab {\n  cursor: pointer;\n}\n.mom-md-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-link-card {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-inline-code {\n  background: var(--b3-theme-background-light, #f2f2f2);\n  border-radius: 4px;\n  padding: 1px 5px;\n  font-size: 13px;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.mom-mark {\n  background: #ffe08a;\n  color: inherit;\n  padding: 0 2px;\n  border-radius: 3px;\n}\n.mom-card-text em {\n  font-style: italic;\n}\n.mom-publish-page {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background-color: var(--b3-theme-background, #fff);\n  z-index: 30;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-page[hidden] {\n  display: none;\n}\n.mom-publish {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  min-height: 0;\n}\n.mom-publish-nav {\n  position: relative;\n  flex: 0 0 auto;\n  height: 44px;\n  background-color: var(--b3-theme-background, #fff);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 16px;\n  border-bottom: 0.5px solid var(--moments-nav-border, #eee);\n}\n.mom-publish-back {\n  width: 24px;\n  height: 24px;\n  border: none;\n  background: transparent;\n  position: relative;\n  cursor: pointer;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n}\n.mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n}\n.mom-publish-submit {\n  font-size: 15px;\n  font-weight: 500;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 10%, transparent);\n  padding: 6px 16px;\n  border-radius: 4px;\n  border: none;\n  cursor: pointer;\n}\n.mom-publish-content {\n  padding: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-publish-card {\n  background: var(--b3-theme-background-light, #f7f7f7);\n  border: 1px solid color-mix(in srgb, var(--b3-border-color, #ddd) 45%, transparent);\n  border-radius: 12px;\n  padding: 14px;\n  box-sizing: border-box;\n}\n.mom-publish-card--editor {\n  flex: 0 0 auto;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-card--editor:focus-within {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-publish-textarea {\n  width: 100%;\n  min-height: 90px;\n  max-height: 40vh;\n  border: none;\n  outline: none;\n  font-size: 16px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background, #333);\n  resize: vertical;\n  overflow-y: auto;\n  font-family: inherit;\n  background: transparent;\n}\n.mom-publish-textarea::placeholder {\n  color: #aaa;\n}\n.mom-publish-imgcard {\n  display: flex;\n  align-items: flex-start;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-publish-grid-add,\n.mom-publish-grid-prev {\n  width: 56px;\n  height: 56px;\n  border: 1px dashed #ccc;\n  border-radius: 8px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  box-sizing: border-box;\n  background: transparent;\n  font-size: 22px;\n  color: #999;\n  flex: none;\n}\n.mom-publish-grid-prev {\n  border-style: solid;\n  border-color: #eee;\n}\n.mom-publish-grid-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-publish-grid-prev-video {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.mom-publish-prev-media {\n  position: absolute;\n  inset: 0;\n}\n.mom-publish-prev-play {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  font-size: 18px;\n  pointer-events: none;\n  text-shadow: 0 1px 3px rgba(0, 0, 0, .6);\n}\n.mom-publish-grid-x {\n  position: absolute;\n  top: 3px;\n  right: 3px;\n  width: 18px;\n  height: 18px;\n  background-color: #FA5151;\n  border-radius: 50%;\n  border: none;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 10;\n  padding: 0;\n}\n.mom-publish-inp {\n  flex: none;\n  width: 100%;\n  height: 30px;\n  border: 0.5px solid color-mix(in srgb, var(--b3-border-color, #ddd) 70%, transparent);\n  border-radius: 8px;\n  padding: 0 8px;\n  font-size: 13px;\n  color: var(--b3-theme-on-background, #333);\n  background: color-mix(in srgb, var(--b3-theme-background, #fff) 55%, transparent);\n  outline: none;\n  font-family: inherit;\n  box-sizing: border-box;\n}\n.mom-publish-info {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n.mom-publish-info .mom-publish-inp[type=date] {\n  flex: 1;\n  min-width: 0;\n}\n.mom-publish-info .mom-publish-inp[data-location] {\n  flex: 2;\n  min-width: 0;\n}\n.mom-picker-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));\n  gap: 6px;\n  max-height: 60vh;\n  overflow-y: auto;\n  padding: 2px;\n}\n.mom-picker-item {\n  width: 100%;\n  aspect-ratio: 1;\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 6px;\n  background-size: cover;\n  background-position: center;\n  background-color: var(--b3-theme-background-light, #f4f4f4);\n  cursor: pointer;\n  padding: 0;\n  box-sizing: border-box;\n}\n.mom-picker-item:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-list {\n  --moments-text: var(--b3-theme-on-background);\n  --moments-text-secondary: var(--b3-theme-on-surface);\n  --moments-border: var(--b3-border-color);\n  --moments-card-border: var(--b3-border-color);\n  --moments-name-color: var(--b3-theme-on-background);\n  --moments-close-color: var(--b3-theme-on-surface-light);\n  --moments-link-card-bg: var(--b3-theme-surface);\n  --moments-interaction-bg: var(--b3-theme-surface);\n  --moments-action-popup-bg: var(--b3-theme-surface);\n  --moments-action-popup-text: var(--b3-theme-on-background);\n  --moments-action-popup-border: var(--b3-border-color);\n  --moments-action-popup-active-bg: var(--b3-list-hover);\n}\n.north-luna-moments-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 14px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface) 45%, transparent);\n  width: calc(100% - 6%);\n  margin: 0 auto;\n  box-sizing: border-box;\n  border: 1px solid color-mix(in srgb, var(--b3-theme-on-background) 6%, transparent);\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .05);\n  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;\n}\n.north-luna-moments-item:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .07), 0 12px 28px rgba(0, 0, 0, .10);\n  border-color: color-mix(in srgb, var(--b3-theme-on-background) 10%, transparent);\n}\n.north-luna-moments-item.popup-open {\n  z-index: 8;\n}\n.north-luna-moments-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-item-text {\n  font-size: 18px;\n  color: var(--moments-text);\n  line-height: 1.75;\n  margin-bottom: 6px;\n  word-wrap: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n  -webkit-user-select: text;\n  overflow: hidden;\n}\n.north-luna-moments-no-text {\n  color: var(--moments-close-color);\n  font-size: 13px;\n}\n.north-luna-moments-item-text.moments-folded {\n  max-height: calc(var(--moments-fold-line-h, 32px) * var(--moments-fold-lines, 6));\n  -webkit-mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  -webkit-mask-size: 100% 100%;\n  mask-size: 100% 100%;\n  -webkit-mask-repeat: no-repeat;\n  mask-repeat: no-repeat;\n}\n.north-luna-moments-item.moments-expanded .north-luna-moments-item-text.moments-folded {\n  max-height: none;\n  -webkit-mask-image: none;\n  mask-image: none;\n}\n.north-luna-moments-expand {\n  display: none;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 2px;\n  margin-top: 4px;\n  margin-bottom: 10px;\n  color: var(--b3-theme-on-surface-light);\n  font-size: 13px;\n  cursor: pointer;\n  user-select: none;\n  -webkit-user-select: none;\n  transition: color 0.2s;\n}\n.north-luna-moments-expand:hover {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-item.moments-has-fold .north-luna-moments-expand {\n  display: flex;\n}\n.north-luna-moments-expand .moments-expand-icon {\n  width: 14px;\n  height: 14px;\n}\n.north-luna-moments-item-text code,\n.north-luna-moments-item-text .mom-inline-code {\n  color: var(--b3-theme-primary);\n  background-color: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent);\n  padding: 2px 4px;\n  border-radius: 7px;\n  font-size: 0.9em;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.north-luna-moments-item-text mark {\n  background-color: #ffe08a;\n  padding: 0 2px;\n  border-radius: 2px;\n}\n.north-luna-moments-item-text strong {\n  font-weight: 600;\n}\n.north-luna-moments-media {\n  margin-bottom: 8px;\n}\n.north-luna-moments-video {\n  width: 100%;\n  max-height: 420px;\n  border-radius: 8px;\n  background: #000;\n  display: block;\n}\n.north-luna-moments-grid-cel {\n  position: relative;\n  display: block;\n  cursor: pointer;\n  overflow: hidden;\n  border-radius: 8px;\n}\n.north-luna-moments-grid-video-el {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-video-el {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: 100%;\n}\n.north-luna-moments-grid-play {\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 42px;\n  height: 42px;\n  border-radius: 50%;\n  background: rgba(0, 0, 0, .55);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  pointer-events: none;\n}\n.north-luna-moments-grid-play svg {\n  width: 22px;\n  height: 22px;\n}\n.mom-lightbox video {\n  max-width: 92vw;\n  max-height: 80vh;\n  border-radius: 8px;\n  background: #000;\n}\n.north-luna-moments-image-grid {\n  display: grid;\n  gap: 4px;\n}\n.north-luna-moments-image-grid.single {\n  grid-template-columns: 1fr;\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.double {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.triple {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.four {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-img {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  cursor: zoom-in;\n  background: var(--b3-theme-surface);\n  transition: transform 0.3s ease;\n  border-radius: 8px;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-img {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: auto;\n  max-width: 100%;\n  border-radius: 6px;\n}\n.north-luna-moments-link-card {\n  display: flex;\n  align-items: center;\n  background-color: var(--moments-link-card-bg);\n  padding: 8px;\n  border-radius: 4px;\n  margin-bottom: 8px;\n  max-width: 220px;\n}\n.north-luna-moments-link-thumb {\n  width: 40px;\n  height: 40px;\n  border-radius: 4px;\n  object-fit: cover;\n  margin-right: 8px;\n  flex-shrink: 0;\n  background-color: #e0e0e0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.north-luna-moments-link-info {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-link-title {\n  font-size: 13px;\n  color: var(--moments-text);\n  line-height: 1.4;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n}\n.north-luna-moments-link-url {\n  font-size: 11px;\n  color: var(--moments-close-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.north-luna-moments-item-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-top: 10px;\n  gap: 8px;\n  flex-wrap: nowrap;\n}\n.north-luna-moments-meta-tags {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 0;\n  flex: 1;\n  min-width: 0;\n  overflow: hidden;\n}\n.north-luna-moments-meta-item {\n  display: inline-flex;\n  align-items: center;\n  gap: 2px;\n  font-size: 12px;\n  color: var(--moments-text-secondary);\n  white-space: nowrap;\n  flex-shrink: 0;\n  line-height: 1.5;\n}\n.north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  content: \"\\b7\";\n  margin: 0 7px;\n  color: var(--moments-text-secondary);\n  opacity: 0.4;\n  font-weight: bold;\n}\n.north-luna-moments-item-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 12px;\n  position: relative;\n  margin-top: 6px;\n}\n.north-luna-moments-liked-indicator {\n  display: inline-flex;\n  align-items: center;\n  flex-shrink: 0;\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-liked-indicator svg {\n  display: block;\n}\n@keyframes moments-like-pop {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.3);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n.north-luna-moments-pin-badge {\n  position: absolute;\n  top: 12px;\n  right: 12px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--b3-theme-primary);\n  opacity: 0.6;\n  pointer-events: none;\n}\n.north-luna-moments-more-btn {\n  width: 28px;\n  height: 24px;\n  background-color: transparent;\n  border: none;\n  border-radius: 6px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  opacity: 0;\n  transition: opacity 0.2s ease, background-color 0.2s ease;\n}\n.north-luna-moments-item:hover .north-luna-moments-more-btn {\n  opacity: 1;\n}\n.north-luna-moments-more-btn:hover {\n  background-color: var(--moments-interaction-bg);\n}\n.north-luna-moments-more-btn::before {\n  content: \"\\22ef\";\n  font-size: 14px;\n  line-height: 1;\n  color: var(--moments-close-color);\n  letter-spacing: 1px;\n}\n.north-luna-moments-action-popup {\n  position: absolute;\n  right: 40px;\n  top: 50%;\n  transform: translateY(-50%);\n  background-color: var(--moments-action-popup-bg);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 8px;\n  padding: 4px;\n  display: none;\n  flex-direction: column;\n  gap: 2px;\n  z-index: 10;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);\n}\n.north-luna-moments-action-popup[data-mid] {\n  display: none;\n}\n.north-luna-moments-item.popup-open .north-luna-moments-action-popup {\n  display: flex;\n}\n.north-luna-moments-action-popup-row {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 2px;\n}\n.north-luna-moments-action-popup-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  padding: 6px 10px;\n  font-size: 13px;\n  color: var(--moments-action-popup-text);\n  white-space: nowrap;\n  cursor: pointer;\n  border-radius: 6px;\n}\n.north-luna-moments-action-popup-btn:hover {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn:active {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn.like-btn.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-popup-btn.like-btn.liked svg {\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-comment-panel {\n  margin-top: 8px;\n  padding: 8px 0 0;\n  animation: moments-likes-fade-in 0.2s ease;\n}\n.north-luna-moments-comment-panel:has(.north-luna-moments-comment-item) {\n  border-top: 1px solid rgba(128, 128, 128, 0.08);\n}\n.north-luna-moments-comment-item {\n  padding: 4px 0;\n  font-size: 13px;\n  line-height: 1.5;\n}\n.north-luna-moments-comment-display {\n  display: block;\n}\n.north-luna-moments-comment-text {\n  color: var(--b3-theme-on-surface);\n  word-break: break-all;\n  user-select: text;\n}\n.north-luna-moments-comment-text strong {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n}\n.north-luna-moments-comment-actions {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-top: 4px;\n}\n.north-luna-moments-comment-actions-right {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-comment-time {\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.north-luna-moments-comment-del {\n  display: inline-flex;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  opacity: 0;\n  padding: 2px;\n  transition: opacity 0.15s;\n}\n.north-luna-moments-comment-item:hover .north-luna-moments-comment-del {\n  opacity: 1;\n}\n.north-luna-moments-comment-del:hover {\n  color: var(--b3-theme-on-surface);\n}\n.north-luna-moments-comment-input-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-top: 8px;\n  padding-top: 6px;\n}\n.north-luna-moments-comment-input {\n  flex: 1;\n  border: none;\n  outline: none;\n  background: var(--b3-theme-surface);\n  border-radius: 7px;\n  padding: 6px 12px;\n  font-size: 13px;\n  color: var(--b3-theme-on-surface);\n  line-height: 1.4;\n}\n.north-luna-moments-comment-input::placeholder {\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send {\n  flex-shrink: 0;\n  border: none;\n  background: var(--b3-theme-primary);\n  color: #fff;\n  border-radius: 7px;\n  padding: 6px 18px;\n  min-width: 56px;\n  font-size: 13px;\n  font-weight: 600;\n  line-height: 1.3;\n  cursor: pointer;\n  transition: opacity 0.15s;\n  text-align: center;\n  white-space: nowrap;\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send:hover {\n  opacity: 0.85;\n}\n@keyframes moments-likes-fade-in {\n  from {\n    opacity: 0;\n    transform: translateY(-4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n.north-luna-moments-item.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n.mom-list .north-luna-moments-date-group {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 10px;\n  margin: 4px 0 10px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.mom-list .north-luna-moments-date-group::before,\n.mom-list .north-luna-moments-date-group::after {\n  content: \"\";\n  flex: 1;\n  height: 1px;\n  max-width: 90px;\n  background:\n    linear-gradient(\n      to right,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group::after {\n  background:\n    linear-gradient(\n      to left,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group-text {\n  font-size: 20px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  letter-spacing: 0.4px;\n  white-space: nowrap;\n}\n.north-luna-moments-outline-popover {\n  width: 140px;\n  max-height: 320px;\n  overflow-y: auto;\n  background: var(--b3-theme-surface);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 10px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);\n  z-index: 100;\n  padding: 6px 0;\n}\n.north-luna-moments-outline-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 6px 14px 8px;\n  border-bottom: 0.5px solid var(--b3-border-color);\n  margin-bottom: 4px;\n}\n.north-luna-moments-outline-item {\n  font-size: 14px;\n  color: var(--b3-theme-on-background);\n  padding: 8px 14px;\n  cursor: pointer;\n  transition: background 0.12s ease, color 0.12s ease;\n}\n.north-luna-moments-outline-item:hover {\n  background: var(--b3-list-hover);\n}\n.north-luna-moments-outline-item.active {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n  background: var(--b3-theme-primary-lightest);\n}\n\n/* 方案3：去掉\"⋯\"按钮，动态下方悬停淡入一行操作图标 */\n.north-luna-moments-more-btn,\n.north-luna-moments-action-popup {\n  display: none !important;\n}\n.north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-action-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 31px;\n  height: 31px;\n  border: none;\n  border-radius: 7px;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  transition: background-color .15s ease, color .15s ease;\n}\n.north-luna-moments-action-btn svg {\n  width: 16px !important;\n  height: 16px !important;\n}\n.north-luna-moments-action-btn:hover,\n.north-luna-moments-action-btn:focus-visible {\n  background-color: var(--b3-theme-background-light);\n  color: var(--b3-theme-on-background);\n}\n.north-luna-moments-action-btn:focus-visible {\n  outline: 2px solid var(--b3-theme-primary, #4e6ef2);\n  outline-offset: 1px;\n}\n.north-luna-moments-action-btn.like-action.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-btn.active {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del {\n  color: #e05050;\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del:hover {\n  color: #e05050;\n  background-color: #fdecec;\n}\n/* ===== 移动端：卡片尽量充满屏幕 ===== */\n@media (max-width: 480px) {\n  .north-luna-moments-item {\n    width: calc(100% - 6%);\n    margin: 0 auto;\n    padding: 12px;\n  }\n}\n\n/* ===== Orca Note + Apple HIG (appended by build.mjs) ===== */\n.orca-df-host {\n  flex: 1 1 auto;\n  align-self: stretch;\n  width: 100%;\n  min-width: 0;\n  height: 100%;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.orca-df-scope .mom-root { height: 100%; width: 100%; min-width: 0; }\n/* ---- Apple / iOS-macOS tokens → legacy --b3-* ---- */\n.orca-df-scope {\n  --df-font: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"SF Pro Display\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  --df-font-mono: \"SF Mono\", ui-monospace, Menlo, Consolas, monospace;\n  --df-radius-sm: 6px;\n  --df-radius-md: 10px;\n  --df-radius-lg: 14px;\n  --df-radius-xl: 20px;\n  --df-radius-pill: 980px;\n  --df-stroke: 0.5px;\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.06);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.04);\n  --df-brand: #007AFF;\n  --df-brand-hover: #0066D6;\n  --df-brand-pressed: #0055B3;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(0,122,255,.12);\n  --df-brand-tint-2: rgba(0,122,255,.20);\n  --df-fill-tertiary: rgba(120,120,128,.12);\n  --b3-theme-background: #F2F2F7;\n  --b3-theme-background-light: rgba(255,255,255,0.72);\n  --b3-theme-on-background: #000000;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #5AC8FA;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(60,60,67,0.18);\n  --b3-theme-surface: #FFFFFF;\n  --b3-theme-surface-lighter: #F2F2F7;\n  --b3-theme-on-surface: #000000;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.12);\n  --b3-font-family-code: var(--df-font-mono);\n  --moments-card-border: rgba(60,60,67,0.12);\n  --moments-nav-border: rgba(60,60,67,0.18);\n  color: var(--b3-theme-on-background);\n  font-family: var(--df-font);\n  font-size: 15px;\n  line-height: 1.47;\n  letter-spacing: -0.01em;\n  -webkit-font-smoothing: antialiased;\n}\n.orca-df-scope.orca-df-dark {\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.28);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.55);\n  --df-brand: #0A84FF;\n  --df-brand-hover: #409CFF;\n  --df-brand-pressed: #0066CC;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(10,132,255,.22);\n  --df-brand-tint-2: rgba(10,132,255,.32);\n  --df-fill-tertiary: rgba(120,120,128,.24);\n  --b3-theme-background: #000000;\n  --b3-theme-background-light: rgba(44,44,46,0.78);\n  --b3-theme-on-background: #FFFFFF;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #64D2FF;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(84,84,88,0.65);\n  --b3-theme-surface: #1C1C1E;\n  --b3-theme-surface-lighter: #2C2C2E;\n  --b3-theme-on-surface: #FFFFFF;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.24);\n  --moments-card-border: rgba(84,84,88,0.45);\n  --moments-nav-border: rgba(84,84,88,0.65);\n}\n.orca-df-hb-icon { display: inline-flex; align-items: center; justify-content: center; }\n.orca-df-hb-icon svg { display: block; }\n/* ---- Surfaces / cards ---- */\n.orca-df-scope .mom-root {\n  background: var(--b3-theme-background);\n  font-family: var(--df-font);\n}\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  width: 100%;\n  max-width: none;\n  margin-left: 0;\n  margin-right: 0;\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n  transition: transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s ease, background .18s ease;\n}\n.orca-df-scope .mom-item:hover,\n.orca-df-scope .north-luna-moments-item:hover {\n  box-shadow: var(--df-shadow-8);\n}\n.orca-df-scope .mom-list {\n  align-items: stretch;\n  padding-left: 16px;\n  padding-right: 16px;\n  gap: 12px;\n}\n.orca-df-scope .mom-filter-bar { width: 100%; }\n.orca-df-scope .mom-pin-strip {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  margin: 0;\n  padding: 10px 16px 0;\n  box-sizing: border-box;\n  background: transparent;\n  border: none;\n  border-radius: 0;\n  cursor: default;\n}\n.orca-df-scope .mom-pin-strip-label {\n  writing-mode: horizontal-tb;\n  white-space: nowrap;\n  font-size: 13px;\n  font-weight: 400;\n  line-height: 1;\n  color: var(--orca-color-text-3, #8e8e93);\n  margin-right: 2px;\n}\n.orca-df-scope .mom-pin-strip-thumbs {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: visible;\n}\n.orca-df-scope .mom-pin-group-text {\n  display: inline-flex !important;\n  align-items: center;\n  gap: 6px;\n  max-width: min(100%, 320px);\n  height: 32px;\n  padding: 0 12px 0 10px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n  color: var(--orca-color-text-1, #1c1c1e);\n  grid-template-columns: none !important;\n}\n.orca-df-scope .mom-pin-group-text:hover {\n  opacity: 1;\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 12%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-ico {\n  display: inline-flex;\n  flex-shrink: 0;\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-scope .mom-pin-title {\n  min-width: 0;\n  font-size: 13px;\n  font-weight: 500;\n  line-height: 1.2;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.orca-df-scope .mom-pin-group-media {\n  display: grid;\n  gap: 2px;\n  padding: 3px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb img {\n  width: 28px;\n  height: 28px;\n  border-radius: 4px;\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb-single img {\n  width: 40px;\n  height: 40px;\n}\n.orca-df-scope .mom-pin-thumb-more {\n  font-size: 11px;\n}\n.orca-df-scope .mom-avatar,\n.orca-df-scope .mom-avatar-ph {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n/* ---- Controls ---- */\n.orca-df-scope button,\n.orca-df-scope input,\n.orca-df-scope textarea,\n.orca-df-scope select {\n  font-family: inherit;\n}\n.orca-df-scope .mom-publish-submit,\n.orca-df-scope .mom-empty-btn,\n.orca-df-scope .mom-btn-primary {\n  height: 34px;\n  min-width: 72px;\n  padding: 0 16px;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-brand);\n  color: var(--df-brand-fg);\n  font-size: 15px;\n  font-weight: 600;\n  letter-spacing: -0.01em;\n  line-height: 1;\n  box-shadow: none;\n  transition: opacity .15s ease, transform .15s ease, background .15s ease;\n}\n.orca-df-scope .mom-publish-submit:hover,\n.orca-df-scope .mom-empty-btn:hover,\n.orca-df-scope .mom-btn-primary:hover {\n  background: var(--df-brand-hover);\n  opacity: 0.96;\n}\n.orca-df-scope .mom-publish-submit:active,\n.orca-df-scope .mom-empty-btn:active,\n.orca-df-scope .mom-btn-primary:active {\n  background: var(--df-brand-pressed);\n  opacity: 0.88;\n}\n.orca-df-scope .mom-publish-inp,\n.orca-df-scope .mom-publish-textarea {\n  border: none;\n  border-radius: var(--df-radius-md);\n  background: var(--df-fill-tertiary);\n  transition: background .15s ease, box-shadow .15s ease;\n}\n.orca-df-scope .mom-publish-inp:hover,\n.orca-df-scope .mom-publish-textarea:hover {\n  background: color-mix(in srgb, var(--df-fill-tertiary) 85%, var(--df-brand) 15%);\n}\n.orca-df-scope .mom-publish-inp:focus,\n.orca-df-scope .mom-publish-textarea:focus,\n.orca-df-scope .mom-publish-card--editor:focus-within {\n  outline: none;\n  box-shadow: 0 0 0 3px var(--df-brand-tint);\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-publish-card {\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n}\n.orca-df-scope .mom-publish-nav {\n  height: 52px;\n  border-bottom: var(--df-stroke) solid var(--moments-nav-border);\n  background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);\n  backdrop-filter: saturate(180%) blur(20px);\n  -webkit-backdrop-filter: saturate(180%) blur(20px);\n}\n.orca-df-scope .mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n.orca-df-scope .mom-publish-grid-add,\n.orca-df-scope .mom-publish-grid-prev {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab,\n.orca-df-scope .mom-fab-stack .mom-tag-fab,\n.orca-df-scope .mom-fab,\n.orca-df-scope button.mom-outline-fab,\n.orca-df-scope button.mom-tag-fab {\n  width: 44px;\n  height: 44px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: color-mix(in srgb, var(--b3-theme-surface) 82%, transparent);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  box-shadow: var(--df-shadow-8);\n  color: var(--df-brand);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab:hover,\n.orca-df-scope .mom-fab-stack .mom-tag-fab:hover,\n.orca-df-scope .mom-fab:hover {\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-tag-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-scope .mom-cover-default {\n  background:\n    linear-gradient(160deg, #5AC8FA 0%, #007AFF 48%, #5856D6 100%);\n}\n.orca-df-scope.orca-df-dark .mom-cover-default {\n  background:\n    linear-gradient(160deg, #64D2FF 0%, #0A84FF 45%, #5E5CE6 100%);\n}\n.orca-df-scope .mom-cover-actions .mom-cover-settings,\n.orca-df-scope .mom-cover-actions button {\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: rgba(255,255,255,.28);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  color: #fff;\n}\n/* ---- Tags / chips ---- */\n.north-luna-moments-tags { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; }\n.north-luna-moments-tag {\n  font-size: 13px;\n  line-height: 1.4;\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n  padding: 4px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  cursor: pointer;\n  user-select: none;\n  transition: background .15s ease, opacity .15s ease;\n}\n.north-luna-moments-tag:hover { background: var(--df-brand-tint-2); }\n.mom-publish-info { flex-wrap: wrap; }\n.mom-publish-info .mom-publish-info-tags { flex: 1 1 100%; min-width: 0; margin-top: 4px; }\n/* ---- Empty ---- */\n.mom-empty { padding: 64px 28px 52px; text-align: center; }\n.mom-empty-ico { font-size: 48px; line-height: 1; margin-bottom: 14px; opacity: 0.9; }\n.mom-empty-title { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 8px; color: var(--b3-theme-on-surface); }\n.mom-empty-sub { font-size: 15px; line-height: 1.5; margin: 0 0 6px; color: var(--b3-theme-on-surface-light); }\n.mom-empty-hint { font-size: 13px; line-height: 1.5; margin: 0 0 20px; color: var(--b3-theme-on-surface-light); opacity: 0.95; }\n.mom-empty-btn { margin-top: 4px; }\n/* ---- Tag bar / refs ---- */\n.orca-df-tagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-tagbar-label { font-size: 13px; color: var(--b3-theme-on-surface-light); margin-right: 2px; }\n.orca-df-tagchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 12px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagchip.is-on, .orca-df-tagchip:hover {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }\n.orca-df-refchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 3px 10px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) dashed var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n}\n.orca-df-refchip:hover { color: var(--df-brand); border-color: var(--df-brand); background: var(--df-brand-tint); }\n.orca-df-open-orca {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: transparent;\n  color: var(--df-brand);\n  font-weight: 600;\n  cursor: pointer;\n}\n.orca-df-open-orca:hover { background: var(--df-brand-tint); }\n.orca-df-loc-btn.is-on { color: var(--df-brand); }\n.orca-df-tag-btn.is-on { color: var(--df-brand); }\n.orca-df-actions-wrap,\n.orca-df-scope .north-luna-moments-item-actions {\n  position: relative;\n}\n.orca-df-scope .north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  justify-content: flex-start;\n  flex-wrap: nowrap;\n}\n.orca-df-scope .north-luna-moments-action-btn {\n  width: 34px;\n  height: 34px;\n  border-radius: var(--df-radius-pill);\n}\n.orca-df-more-inline {\n  display: none;\n  align-items: center;\n  gap: 2px;\n  margin-left: 2px;\n  padding-left: 4px;\n  border-left: var(--df-stroke) solid color-mix(in srgb, var(--b3-border-color) 80%, transparent);\n  animation: orca-df-more-in .16s ease;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-inline,\n.mom-action-bar.is-more-open .orca-df-more-inline {\n  display: inline-flex;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-btn,\n.mom-action-bar.is-more-open .orca-df-more-btn {\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n}\n.orca-df-more-inline .orca-df-more-del {\n  color: #FF3B30;\n}\n.orca-df-more-inline .orca-df-more-del:hover {\n  background: rgba(255,59,48,.1);\n}\n@keyframes orca-df-more-in {\n  from { opacity: 0; transform: translateX(-4px); }\n  to { opacity: 1; transform: translateX(0); }\n}\n.orca-df-tags-list {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n  max-height: 220px;\n  overflow-y: auto;\n  margin-bottom: 12px;\n}\n.orca-df-tags-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 0;\n}\n.orca-df-tagpick {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 4px 12px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) solid var(--b3-border-color);\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagpick.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n  border-color: var(--df-brand);\n}\n.orca-df-tags-add {\n  display: flex;\n  gap: 8px;\n  align-items: center;\n  margin-bottom: 8px;\n}\n.orca-df-tags-add .mom-inp { flex: 1 1 auto; min-width: 0; }\n.orca-df-loc-meta {\n  cursor: pointer;\n  color: var(--b3-theme-on-surface-light);\n}\n.orca-df-loc-meta:hover { color: var(--df-brand); }\n.orca-df-loc-pin { font-size: 12px; }\n.mom-publish-orca {\n  flex: none;\n  height: 34px;\n  padding: 0 14px;\n  margin-right: 0;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-fill-tertiary);\n  color: var(--df-brand);\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n}\n.mom-publish-orca:hover {\n  background: var(--df-brand-tint);\n}\n.mom-publish-nav-right { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; z-index: 2; }\n.mom-publish-nav .mom-publish-back { position: relative; z-index: 2; border-radius: var(--df-radius-pill); color: var(--df-brand); }\n.mom-publish-nav .mom-publish-title { pointer-events: none; z-index: 0; }\n/* ---- Cover actions ---- */\n.mom-cover-actions {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.mom-cover-actions .mom-cover-settings {\n  position: static;\n  top: auto;\n  right: auto;\n}\n.mom-cover-signature {\n  position: absolute;\n  left: 16px;\n  right: 120px;\n  bottom: 22px;\n  z-index: 11;\n  margin: 0;\n  font-size: 15px;\n  line-height: 1.45;\n  font-weight: 500;\n  letter-spacing: 0.06em;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 12px rgba(0,0,0,.35);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-more {\n  position: relative;\n  display: block;\n  overflow: hidden;\n  border-radius: inherit;\n  cursor: pointer;\n}\n.north-luna-moments-grid-more .north-luna-moments-grid-img,\n.north-luna-moments-grid-more .north-luna-moments-grid-video-el {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.north-luna-moments-grid-more-badge {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0,0,0,.46);\n  color: #fff;\n  font-size: 22px;\n  font-weight: 600;\n  letter-spacing: 0.02em;\n  pointer-events: none;\n  text-shadow: 0 1px 2px rgba(0,0,0,.35);\n}\n.north-luna-moments-item-text .orca-df-md-ul,\n.north-luna-moments-item-text .orca-df-md-ol {\n  margin: 4px 0 6px;\n  padding-left: 1.4em;\n  list-style-position: outside;\n}\n.north-luna-moments-item-text .orca-df-md-ul {\n  list-style-type: disc !important;\n}\n.north-luna-moments-item-text .orca-df-md-ol {\n  list-style-type: decimal !important;\n}\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul { list-style-type: circle !important; }\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul .orca-df-md-ul { list-style-type: square !important; }\n.north-luna-moments-item-text .orca-df-md-li {\n  margin: 2px 0;\n  line-height: 1.55;\n  display: list-item !important;\n}\n.north-luna-moments-item-text .orca-df-md-p {\n  margin: 0 0 4px;\n  line-height: 1.55;\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n.north-luna-moments-item-text .orca-df-md-gap { height: 8px; }\n.north-luna-moments-item-text .orca-df-md-h {\n  font-weight: 650;\n  margin: 6px 0 4px;\n  line-height: 1.4;\n}\n.north-luna-moments-item-text .orca-df-md-h1 { font-size: 1.2em; }\n.north-luna-moments-item-text .orca-df-md-h2 { font-size: 1.1em; }\n.north-luna-moments-item-text .orca-df-md-h3 { font-size: 1.05em; }\n.north-luna-moments-item-text .orca-df-md-quote {\n  margin: 4px 0;\n  padding: 2px 0 2px 10px;\n  border-left: 3px solid var(--b3-border-color);\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-item-text .orca-df-md-code {\n  margin: 6px 0;\n  padding: 8px 10px;\n  border-radius: 8px;\n  background: var(--df-fill-tertiary);\n  overflow: auto;\n  font-size: 13px;\n  line-height: 1.45;\n}\n/* ---- Popover ---- */\n.orca-df-tag-popover {\n  position: fixed;\n  z-index: 2147483001;\n  min-width: 180px;\n  max-width: min(280px, calc(100vw - 24px));\n  max-height: min(360px, 50vh);\n  overflow: auto;\n  padding: 6px;\n  border-radius: var(--df-radius-lg);\n  background: color-mix(in srgb, var(--b3-theme-surface) 86%, transparent);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  box-shadow: var(--df-shadow-16);\n  backdrop-filter: saturate(180%) blur(24px);\n  -webkit-backdrop-filter: saturate(180%) blur(24px);\n  box-sizing: border-box;\n}\n.orca-df-tag-popover-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 10px 6px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n}\n.orca-df-tag-popover-item {\n  display: block;\n  width: 100%;\n  text-align: left;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-background);\n  font-size: 15px;\n  line-height: 1.35;\n  padding: 10px 12px;\n  border-radius: var(--df-radius-md);\n  cursor: pointer;\n}\n.orca-df-tag-popover-item:hover,\n.orca-df-tag-popover-item.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-tag-popover-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 12px 10px;\n}\n/* ---- Motion ---- */\n@media (prefers-reduced-motion: no-preference) {\n  .orca-df-scope .mom-item,\n  .orca-df-scope .north-luna-moments-item,\n  .orca-df-scope .mom-publish-submit,\n  .orca-df-scope .orca-df-tagchip,\n  .orca-df-scope .mom-outline-fab,\n  .orca-df-scope .mom-tag-fab {\n    transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s cubic-bezier(.22,.61,.36,1), opacity .15s ease;\n  }\n  .orca-df-scope .mom-outline-fab:active,\n  .orca-df-scope .mom-tag-fab:active,\n  .orca-df-scope .mom-publish-submit:active {\n    transform: scale(0.96);\n  }\n}\n/* ---- 正文观感仍对齐虎鲸字号变量 ---- */\n.orca-df-scope {\n  --moments-text: var(--orca-color-text-1, var(--b3-theme-on-background, #000));\n  --df-body-font: var(--orca-fontfamily-ui, var(--orca-font-family, var(--df-font)));\n  --df-body-size: var(--orca-fontsize, 15px);\n  --df-body-leading: var(--orca-block-line-height, var(--orca-lineheight-md, 1.47));\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-publish-textarea,\n.orca-df-scope .mom-publish-card--editor .mom-publish-textarea {\n  font-family: var(--df-body-font);\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n  color: var(--moments-text);\n  letter-spacing: -0.01em;\n  font-weight: 400;\n}\n.orca-df-scope .north-luna-moments-no-text {\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n}\n.orca-df-scope .mom-inline-code,\n.orca-df-scope .north-luna-moments-item-text code {\n  font-family: var(--orca-fontfamily-code, var(--df-font-mono));\n  font-size: 0.92em;\n  line-height: inherit;\n  background: var(--df-fill-tertiary);\n  border-radius: 4px;\n  padding: 0.1em 0.35em;\n}\n.orca-df-scope .north-luna-moments-item-text a,\n.orca-df-scope .north-luna-moments-item-text .mom-md-link {\n  color: var(--orca-color-primary-5, var(--df-brand));\n}\n/* ---- 卡片正文层级：正文 > 列表 > meta 日期 ---- */\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  padding: 12px 14px 10px;\n}\n.orca-df-scope .north-luna-moments-item-header {\n  margin-bottom: 6px;\n  gap: 8px;\n}\n.orca-df-scope .north-luna-moments-item-header .mom-avatar,\n.orca-df-scope .north-luna-moments-item-header .mom-avatar-ph {\n  width: 34px;\n  height: 34px;\n  font-size: 14px;\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--orca-color-text-2, var(--b3-theme-on-surface, #3A3A3C));\n}\n.orca-df-scope .north-luna-moments-item-text {\n  margin-bottom: 2px;\n  line-height: 1.55;\n}\n.orca-df-scope .north-luna-moments-item-text > .orca-df-md-p:first-child {\n  color: var(--moments-text);\n  font-weight: 450;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ol {\n  margin: 6px 0 2px;\n  color: color-mix(in srgb, var(--moments-text) 86%, transparent);\n  font-size: 0.96em;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-li {\n  line-height: 1.5;\n  margin: 1px 0;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ol {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-tags {\n  margin-top: 6px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-item-meta {\n  margin-top: 8px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-meta-item {\n  font-size: 11px;\n  line-height: 1.35;\n  letter-spacing: 0.01em;\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  opacity: 0.92;\n}\n.orca-df-scope .north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  margin: 0 6px;\n  opacity: 0.35;\n  font-weight: 500;\n}\n.orca-df-scope .north-luna-moments-item-actions {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-comment-panel {\n  margin-top: 6px;\n}\n.orca-df-scope .orca-df-inline-ref {\n  display: inline;\n  text-decoration: none;\n  border-bottom: 1px dashed color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  cursor: pointer;\n}\n.orca-df-scope .orca-df-inline-ref:hover {\n  border-bottom-style: solid;\n}\n.orca-df-refresh-fab svg { display: block; }\n.orca-df-time-hint {\n  margin: 10px 0 0;\n  font-size: 12px;\n  line-height: 1.4;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-item-text {\n  cursor: pointer;\n}\n.orca-df-load-more {\n  display: flex;\n  justify-content: center;\n  padding: 16px 12px 28px;\n}\n.orca-df-load-more-btn {\n  appearance: none;\n  border: 1px solid color-mix(in srgb, var(--orca-color-text-3, #8e8e93) 35%, transparent);\n  background: color-mix(in srgb, var(--orca-color-bg-1, #fff) 92%, transparent);\n  color: var(--orca-color-text-2, #636366);\n  border-radius: 999px;\n  padding: 8px 18px;\n  font-size: 13px;\n  line-height: 1.3;\n  cursor: pointer;\n}\n.orca-df-load-more-btn:hover {\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n}\n.orca-df-trash-fab { position: relative; }\n.orca-df-trash-fab-count {\n  position: absolute; top: -4px; right: -4px;\n  min-width: 16px; height: 16px; padding: 0 4px;\n  border-radius: 999px; background: var(--orca-color-accent, #0F6CBD);\n  color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;\n}\n.orca-df-trash-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-trash-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-trash-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-trash-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-trash-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-trash-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-trash-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-trash-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-trash-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-trash-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-trash-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-trash-act.danger { color: var(--orca-color-danger, #c42b1c); border-color: color-mix(in srgb, var(--orca-color-danger, #c42b1c) 35%, transparent); }\n.orca-df-trash-foot { padding-top: 14px; display: flex; justify-content: flex-end; }\n.orca-df-archive-fab { position: relative; }\n.orca-df-archive-fab-count {\n  position: absolute; top: -4px; right: -4px;\n  min-width: 16px; height: 16px; padding: 0 4px;\n  border-radius: 999px; background: var(--orca-color-text-3, #8e8e93);\n  color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;\n}\n.orca-df-archive-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-archive-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-archive-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-archive-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-archive-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-archive-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-archive-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-archive-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-archive-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-archive-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-archive-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-outline-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: stretch; justify-content: center;\n  background: rgba(0, 0, 0, 0.28);\n}\n.orca-df-outline-pop {\n  z-index: 2147483000; width: min(420px, 100vw); max-width: 100vw;\n  max-height: min(92vh, 900px); margin: auto 0;\n  display: flex; flex-direction: column;\n  background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-radius: 12px 12px 0 0;\n  box-shadow: var(--orca-shadow-modal, 0 24px 48px rgba(0,0,0,0.22));\n  overflow: hidden;\n}\n@media (min-width: 720px) {\n  .orca-df-outline-pop {\n    width: min(480px, calc(100vw - 48px)); max-height: 82vh; margin: auto;\n    border-radius: 12px;\n  }\n}\n.orca-df-outline-head {\n  display: flex; align-items: center; gap: 4px;\n  padding: 10px 12px 8px; font-size: 17px; font-weight: 600;\n  border-bottom: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-outline-back {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  width: 36px; height: 36px; border-radius: 10px;\n  display: inline-flex; align-items: center; justify-content: center;\n  color: var(--orca-color-text-1, #1c1c1e);\n}\n.orca-df-outline-back:hover { background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent); }\n.orca-df-outline-head-spacer { width: 36px; }\n.orca-df-outline-years { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 6px; }\n.orca-df-outline-year-row { display: flex; gap: 6px; }\n.orca-df-outline-year,\n.orca-df-outline-year-ph {\n  flex: 1 1 0; min-width: 0; height: 40px;\n}\n.orca-df-outline-year {\n  appearance: none; cursor: pointer;\n  border-radius: 10px; font-size: 13px; font-weight: 600;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-outline-year.is-on {\n  background: var(--df-brand, #007AFF);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n  color: #fff;\n}\n.orca-df-outline-hint {\n  padding: 6px 16px 8px; font-size: 12px;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-months {\n  flex: 1 1 auto; min-height: 120px; overflow: auto;\n  padding: 4px 16px 16px;\n  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start;\n}\n.orca-df-outline-month {\n  appearance: none; cursor: pointer; height: 40px; padding: 0 8px;\n  display: flex; align-items: center; gap: 6px; min-width: 0;\n  border-radius: 10px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n  font-size: 13px; font-weight: 600;\n}\n.orca-df-outline-month:hover {\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n}\n.orca-df-outline-cal { flex-shrink: 0; opacity: 0.95; }\n.orca-df-outline-month-label {\n  flex: 1 1 auto; min-width: 0;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;\n}\n.orca-df-outline-month-count {\n  flex-shrink: 0; font-size: 12px; font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-empty {\n  grid-column: 1 / -1; padding: 24px 8px; text-align: center;\n  color: var(--orca-color-text-3, #8e8e93); font-size: 14px; font-weight: 400;\n}";
+var ORCA_CSS = "/* src/style.css */\n.mom-root {\n  position: relative;\n  height: 100%;\n  min-height: 0;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n  background: var(--b3-theme-background, #fff);\n  font-family: inherit;\n  color: var(--b3-theme-on-background, #222);\n}\n.mom-scroll {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-cover {\n  position: relative;\n  height: clamp(170px, 26vh, 300px);\n  flex-shrink: 0;\n  overflow: hidden;\n}\n.mom-cover-bg {\n  height: 100%;\n  position: relative;\n  overflow: hidden;\n}\n.mom-cover-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cover-default {\n  position: absolute;\n  inset: 0;\n  background:\n    linear-gradient(\n      150deg,\n      var(--b3-theme-primary, #4e6ef2) 0%,\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 45%, #0c0c20) 100%);\n}\n.mom-cover-shade {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  background:\n    linear-gradient(\n      180deg,\n      rgba(0, 0, 0, .06),\n      rgba(0, 0, 0, .4));\n}\n.mom-cover-stats {\n  position: absolute;\n  bottom: 24px;\n  right: 16px;\n  z-index: 10;\n  font-size: 13px;\n  color: #fff;\n  padding: 5px 12px;\n  border-radius: 999px;\n  background: rgba(0, 0, 0, .28);\n  backdrop-filter: blur(6px);\n  -webkit-backdrop-filter: blur(6px);\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .3);\n  white-space: nowrap;\n}\n.mom-cover-settings {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  width: 30px;\n  height: 30px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .28);\n  color: #fff;\n  cursor: pointer;\n  transition: background .18s ease, transform .15s ease;\n}\n.mom-cover-settings:hover {\n  background: rgba(255, 255, 255, .5);\n  transform: scale(1.05);\n}\n.mom-avatar-ph {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background:\n    linear-gradient(\n      135deg,\n      var(--b3-theme-primary, #4e6ef2),\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 52%, #0c0c20));\n  color: #fff;\n  font-weight: 600;\n}\n.mom-filter-row {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-actions {\n  display: flex;\n  gap: 8px;\n}\n.mom-actions .mom-btn-primary {\n  margin-left: auto;\n}\n.mom-chip {\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 999px;\n  padding: 3px 10px;\n  font-size: 12px;\n  cursor: pointer;\n}\n.mom-chip.active {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 6px;\n  padding: 5px 12px;\n  font-size: 13px;\n  cursor: pointer;\n}\n.mom-btn:hover {\n  background: var(--b3-theme-background-light, #f2f2f2);\n}\n.mom-btn-primary {\n  background: var(--b3-theme-primary, #4e6ef2);\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n}\n.mom-btn-primary:hover {\n  opacity: .9;\n}\n.mom-btn-small {\n  padding: 3px 9px;\n  font-size: 12px;\n}\n.mom-btn-danger {\n  border-color: #e05050;\n  color: #e05050;\n}\n.mom-btn-danger:hover {\n  background: #fdecec;\n}\n.mom-signature {\n  background-color: var(--moments-signature-bg, #f7f7f7);\n  padding: 14px 16px 10px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  flex-wrap: wrap;\n  flex-shrink: 0;\n}\n.mom-signature-tools {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.mom-cover-tool {\n  display: inline-flex !important;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  height: 30px;\n  padding: 0 12px;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .78);\n  color: #333;\n  font-size: 12px;\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);\n  transition:\n    background .18s ease,\n    transform .15s ease,\n    box-shadow .18s ease;\n  box-sizing: border-box;\n}\n.mom-cover-tool:hover {\n  background: #fff;\n  transform: translateY(-1px);\n}\n.mom-cover-tool-danger:hover {\n  background: #ff6b6b;\n  color: #fff;\n}\n.mom-signature-text {\n  font-size: 13px;\n  color: var(--moments-signature-text, #888);\n  line-height: 1.5;\n  margin-left: auto;\n  max-width: 40%;\n  word-break: break-word;\n}\n.mom-pin-strip {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 10px 16px;\n  margin: 8px auto 0;\n  width: 73%;\n  box-sizing: border-box;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-strip-label {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  flex-shrink: 0;\n}\n.mom-pin-strip-thumbs {\n  display: flex;\n  gap: 12px;\n  overflow: hidden;\n  flex: 1;\n}\n.mom-pin-group {\n  display: grid;\n  gap: 2px;\n  padding: 0;\n  border: none;\n  background: none;\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-group:hover {\n  opacity: .9;\n}\n.mom-pin-thumb {\n  position: relative;\n  overflow: hidden;\n  border-radius: 4px;\n}\n.mom-pin-thumb img {\n  width: 44px;\n  height: 44px;\n  object-fit: cover;\n  display: block;\n}\n.mom-pin-thumb-video,\n.mom-cal-thumb-video {\n  background: #000;\n}\n.mom-pin-thumb-single img {\n  width: 88px;\n  height: 88px;\n}\n.mom-pin-thumb-text {\n  width: 88px;\n  height: 88px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: color-mix(in srgb, var(--b3-theme-surface, #fff) 40%, transparent);\n}\n.mom-pin-text {\n  font-size: 12px;\n  color: var(--b3-theme-on-background, #333);\n  padding: 4px;\n  word-break: break-word;\n  line-height: 1.4;\n}\n.mom-pin-text-center {\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-pin-text-flow {\n  display: -webkit-box;\n  -webkit-line-clamp: 3;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n.mom-pin-thumb-more {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0, 0, 0, .45);\n  color: #fff;\n  font-size: 16px;\n  font-weight: 600;\n}\n.mom-list {\n  flex: 0 0 auto;\n  overflow: visible;\n  padding: 14px 0 90px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 12px;\n}\n.mom-filter-bar {\n  width: 73%;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-empty {\n  text-align: center;\n  color: #999;\n  margin: 72px auto 0;\n  font-size: 14px;\n  max-width: 240px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 6px;\n}\n.mom-empty-ico {\n  font-size: 40px;\n  line-height: 1;\n  margin-bottom: 6px;\n  opacity: .9;\n}\n.mom-empty-title {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  margin: 0;\n}\n.mom-empty-sub {\n  font-size: 13px;\n  color: #999;\n  margin: 0;\n}\n.mom-empty-btn {\n  margin-top: 14px;\n}\n.mom-empty-result {\n  margin-top: 72px;\n}\n.mom-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 8px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  width: 73%;\n  box-sizing: border-box;\n}\n.mom-item:hover {\n  border-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 55%, transparent);\n}\n.mom-pin-badge {\n  position: absolute;\n  top: 8px;\n  left: 8px;\n  z-index: 3;\n  display: flex;\n  align-items: center;\n  color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-item-avatar {\n  width: 48px;\n  height: 48px;\n  border-radius: 6px;\n  object-fit: cover;\n  flex-shrink: 0;\n  margin-right: 12px;\n  background-color: var(--moments-border, #ddd);\n}\n.mom-item-avatar.mom-avatar-ph {\n  font-size: 20px;\n}\n.mom-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.mom-item-name {\n  font-size: 16px;\n  color: var(--b3-theme-on-background, #333);\n  font-weight: 600;\n  line-height: 1.4;\n  margin-bottom: 4px;\n}\n.mom-item-text {\n  font-size: 14px;\n  color: var(--b3-theme-on-background, #333);\n  line-height: 1.8;\n  margin-bottom: 6px;\n  word-break: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n}\n.mom-no-text {\n  color: #bbb;\n  font-size: 13px;\n}\n.mom-long-toggle {\n  font-size: 12px;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background: none;\n  border: none;\n  cursor: pointer;\n  padding: 0;\n  margin-top: 2px;\n}\n.mom-card-imgs {\n  display: grid;\n  gap: 4px;\n  margin-top: 10px;\n}\n.mom-grid-1 {\n  grid-template-columns: 1fr;\n  max-width: 320px;\n}\n.mom-grid-2 {\n  grid-template-columns: 1fr 1fr;\n}\n.mom-grid-3 {\n  grid-template-columns: 1fr 1fr 1fr;\n}\n.mom-img-cell {\n  position: relative;\n  overflow: hidden;\n  border-radius: 6px;\n  aspect-ratio: 1;\n  background: #f0f0f0;\n}\n.mom-img-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  cursor: zoom-in;\n  display: block;\n}\n.mom-card-link {\n  margin-top: 10px;\n}\n.mom-card-link a {\n  color: var(--b3-theme-primary, #4e6ef2);\n  text-decoration: none;\n  font-size: 13px;\n}\n.mom-card-link a:hover {\n  text-decoration: underline;\n}\n.mom-bottom-space {\n  height: 90px;\n  flex-shrink: 0;\n}\n.mom-fab-stack {\n  position: absolute;\n  z-index: 40;\n  right: 16px;\n  bottom: 48px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  margin: 0;\n  padding-right: 0;\n  flex: none;\n  pointer-events: none;\n}\n.mom-outline-fab {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 44px;\n  height: 44px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  cursor: pointer;\n  color: var(--b3-theme-on-background, #333);\n  background: var(--b3-theme-surface, #fff);\n  border: 1px solid var(--b3-border-color, #ddd);\n  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);\n  transition: transform .15s ease, box-shadow .15s ease;\n  flex: none;\n  pointer-events: auto;\n}\n.mom-outline-fab:hover {\n  transform: translateY(-1px);\n  box-shadow: 0 6px 18px rgba(0, 0, 0, .24);\n}\n.mom-fab-stack.is-mobile {\n  position: absolute;\n  right: 16px;\n  bottom: 80px;\n  left: auto;\n  margin: 0;\n}\n.mom-outline-fab.is-mobile {\n  transform: none;\n}\n.mom-lightbox {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .85);\n  z-index: 1002;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: zoom-out;\n}\n.mom-lightbox-img {\n  max-width: 92%;\n  max-height: 88vh;\n  border-radius: 6px;\n  object-fit: contain;\n}\n.mom-lightbox-close {\n  position: absolute;\n  top: 16px;\n  right: 16px;\n  z-index: 2;\n  width: 36px;\n  height: 36px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 22px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-lightbox-close:hover {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav {\n  position: absolute;\n  top: 50%;\n  transform: translateY(-50%);\n  z-index: 2;\n  width: 44px;\n  height: 44px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 28px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.mom-lightbox-nav:hover:not(:disabled) {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav:disabled {\n  opacity: .25;\n  cursor: default;\n}\n.mom-lightbox-prev {\n  left: 12px;\n}\n.mom-lightbox-next {\n  right: 12px;\n}\n.mom-lightbox-dots {\n  position: absolute;\n  bottom: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  gap: 8px;\n  z-index: 2;\n}\n.mom-lightbox-dot {\n  width: 8px;\n  height: 8px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .35);\n  cursor: pointer;\n}\n.mom-lightbox-dot.active {\n  background: #fff;\n  transform: scale(1.15);\n}\n.mom-lightbox-counter {\n  position: absolute;\n  top: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  color: rgba(255, 255, 255, .85);\n  font-size: 13px;\n  z-index: 2;\n  pointer-events: none;\n}\n.mom-confirm-msg {\n  margin: 0;\n  font-size: 14px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background);\n  white-space: pre-wrap;\n}\n.north-luna-moments-item-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 10px;\n}\n.north-luna-moments-item-header .mom-avatar {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  object-fit: cover;\n  flex-shrink: 0;\n}\n.north-luna-moments-item-header .mom-avatar-ph {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  font-size: 16px;\n}\n.north-luna-moments-item-name {\n  font-size: 15px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  line-height: 1.3;\n}\n.mom-lightbox[hidden] {\n  display: none;\n}\n.mom-lightbox img {\n  max-width: 92%;\n  max-height: 92%;\n  border-radius: 6px;\n}\n.mom-overlay {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .4);\n  z-index: 2147483000;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-sizing: border-box;\n  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));\n}\n.mom-modal {\n  background: var(--b3-theme-background, #fff);\n  border-radius: 12px;\n  width: min(560px, 92vw);\n  max-height: 86vh;\n  display: flex;\n  flex-direction: column;\n  box-shadow: 0 10px 40px rgba(0, 0, 0, .3);\n}\n.mom-modal-sm {\n  width: min(340px, 90vw);\n}\n.mom-overlay.mom-settings .mom-modal {\n  width: min(320px, 92vw);\n  font-size: 16px;\n}\n.mom-overlay.mom-settings .mom-field {\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-modal-head {\n  font-size: 17px;\n}\n.mom-overlay.mom-settings .mom-modal-head .mom-modal-x {\n  font-size: 18px;\n}\n.mom-overlay.mom-settings .mom-inp {\n  width: 240px;\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-hint {\n  font-size: 13px;\n}\n.mom-overlay.mom-settings label.mom-btn:has(> input[type=\"file\"]) {\n  width: 240px;\n}\n/* ===== 日历弹窗（复刻 siyuan-moments）===== */\n.mom-overlay.mom-calendar {\n  background: rgba(0, 0, 0, .5);\n}\n.mom-calendar-modal {\n  display: contents;\n}\n.mom-calendar-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483000;\n  touch-action: none;\n}\n.mom-calendar-content {\n  position: relative;\n  background: var(--b3-theme-background);\n  border-radius: 12px;\n  width: auto;\n  max-width: 1200px;\n  min-width: 0;\n  max-height: 60vh;\n  overflow: hidden;\n  z-index: 2147483001;\n  box-shadow: 0 4px 24px rgba(0, 0, 0, .3);\n  display: flex;\n  flex-direction: column;\n  transition: box-shadow .2s ease, transform .2s ease;\n  touch-action: pan-y;\n  overscroll-behavior: contain;\n}\n.mom-calendar-content.dragging {\n  transition: none;\n  cursor: grabbing;\n}\n.mom-calendar-header {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid color-mix(in srgb, var(--b3-border-color) 35%, transparent);\n  flex-shrink: 0;\n  cursor: move;\n  user-select: none;\n}\n.mom-calendar-title {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: 1;\n  min-width: 0;\n  white-space: nowrap;\n  overflow: hidden;\n}\n.mom-calendar-title > span:first-child {\n  font-size: 15px;\n  font-weight: 600;\n}\n.mom-calendar-year {\n  font-size: 13px;\n  color: var(--b3-theme-primary);\n  background: transparent;\n  border: none;\n  outline: none;\n  cursor: pointer;\n  padding: 2px 4px;\n  font-family: inherit;\n  -webkit-appearance: none;\n  -moz-appearance: none;\n  appearance: none;\n  flex-shrink: 0;\n}\n.mom-calendar-modes {\n  display: inline-flex;\n  gap: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-mode {\n  border: 1px solid var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface);\n  font-size: 12px;\n  padding: 2px 9px;\n  border-radius: 999px;\n  cursor: pointer;\n  line-height: 1.4;\n}\n.mom-calendar-mode.on {\n  background: var(--b3-theme-primary);\n  border-color: var(--b3-theme-primary);\n  color: #fff;\n}\n.mom-calendar-count {\n  font-size: 12px;\n  color: var(--b3-theme-primary);\n  margin-left: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-close {\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  font-size: 20px;\n  color: var(--b3-theme-on-surface);\n  border-radius: 4px;\n  flex-shrink: 0;\n}\n.mom-calendar-close:hover {\n  background-color: var(--b3-list-hover);\n}\n.mom-calendar-body {\n  padding: 16px;\n  overflow: auto;\n}\n.mom-calendar-grid {\n  width: 100%;\n  display: block;\n}\n.mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n}\n.mom-calendar-column {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.mom-calendar-cell {\n  width: 100%;\n  min-width: 10px;\n  aspect-ratio: 1;\n  border-radius: 3px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  transition: all .15s;\n  cursor: pointer;\n}\n.mom-calendar-cell:hover {\n  transform: scale(1.2);\n  box-shadow: 0 0 0 1px var(--b3-theme-primary);\n}\n.mom-calendar-cell.level-empty {\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  opacity: .5;\n}\n.mom-calendar-cell.level-empty:hover {\n  transform: none;\n  box-shadow: none;\n}\n.mom-calendar-cell.level-1 { background-color: var(--b3-theme-primary-lightest); }\n.mom-calendar-cell.level-2 { background-color: var(--b3-theme-primary-lighter); }\n.mom-calendar-cell.level-3 { background-color: var(--b3-theme-primary-light); }\n.mom-calendar-cell.level-4 { background-color: var(--b3-theme-primary); }\n.mom-calendar-months {\n  position: relative;\n  margin-top: 8px;\n  height: 18px;\n  min-width: max-content;\n}\n.mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.mom-calendar-photo-twocol {\n  display: flex;\n  flex-direction: column;\n  gap: 18px;\n}\n.mom-calendar-photo-month-title {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  margin: 4px 0 8px 4px;\n}\n.mom-calendar-photo-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-calendar-photo-row {\n  display: grid;\n  grid-template-columns: repeat(7, minmax(32px, 44px));\n  gap: 6px;\n}\n.mom-calendar-photo-cell {\n  position: relative;\n  aspect-ratio: 1;\n  width: 100%;\n  min-width: 32px;\n  max-width: 44px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 5%, transparent);\n  border-radius: 6px;\n  border: 1px solid color-mix(in srgb, var(--b3-border-color) 20%, transparent);\n  cursor: default;\n  overflow: hidden;\n  transition: transform .15s ease, box-shadow .15s ease;\n}\n.mom-calendar-photo-cell.has-photo {\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);\n}\n.mom-calendar-photo-cell.has-photo:hover,\n.mom-calendar-photo-cell.has-record:hover {\n  transform: scale(1.05);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .15);\n  z-index: 1;\n}\n.mom-calendar-photo-cell.empty {\n  background-color: transparent;\n  border: 0;\n}\n.mom-calendar-photo-cell.has-record {\n  cursor: pointer;\n}\n.mom-calendar-photo-dot {\n  position: absolute;\n  right: 5px;\n  bottom: 5px;\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  background: var(--b3-theme-primary);\n  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b3-theme-background) 60%, transparent);\n  z-index: 2;\n}\n.mom-calendar-photo-num {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  font-size: 11px;\n  color: var(--b3-theme-on-surface);\n  opacity: .85;\n  background: color-mix(in srgb, var(--b3-theme-background) 65%, transparent);\n  padding: 1px 5px;\n  border-radius: 3px;\n  line-height: 1.3;\n  z-index: 1;\n}\n.mom-calendar-photo-cell.has-photo .mom-calendar-photo-num {\n  color: #fff;\n  background: rgba(0, 0, 0, .45);\n  opacity: 1;\n}\n.mom-calendar-photo-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  z-index: 0;\n  background: var(--b3-theme-surface);\n}\n.mom-modal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid var(--b3-border-color, #eee);\n  font-weight: 600;\n}\n.mom-modal-x {\n  border: none;\n  background: none;\n  font-size: 16px;\n  cursor: pointer;\n  color: #888;\n}\n.mom-modal-body {\n  padding: 14px 16px;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.mom-modal-foot {\n  display: flex;\n  justify-content: flex-end;\n  gap: 8px;\n  padding: 10px 16px;\n  border-top: 1px solid var(--b3-border-color, #eee);\n}\n.mom-editor-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-inp {\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 6px;\n  padding: 6px 9px;\n  font-size: 13px;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-inp-inline {\n  width: 100px;\n}\n.mom-textarea {\n  min-height: 120px;\n  width: 100%;\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 8px;\n  padding: 10px;\n  font-size: 14px;\n  font-family: inherit;\n  resize: vertical;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-img-previews {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-img-prev {\n  position: relative;\n  width: 64px;\n  height: 64px;\n}\n.mom-img-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  border-radius: 6px;\n}\n.mom-img-prev-x {\n  position: absolute;\n  top: -6px;\n  right: -6px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  border: none;\n  background: #333;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-picked {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-picked-chip {\n  cursor: pointer;\n}\n.mom-pick-panel {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  font-size: 13px;\n}\n.mom-field-col {\n  align-items: flex-start;\n}\n.mom-field .mom-inp {\n  width: 100%;\n}\n.mom-hint {\n  font-size: 11px;\n  color: #999;\n}\n.mom-divider {\n  height: 1px;\n  background: var(--b3-border-color, #eee);\n}\n.mom-btn-row {\n  display: flex;\n  gap: 8px;\n  flex-wrap: wrap;\n}\n.mom-view-switch {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-cal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.mom-cal-nav {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.mom-cal-year {\n  font-size: 14px;\n  font-weight: 600;\n  min-width: 64px;\n  text-align: center;\n}\n.mom-cal-modes {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal-months {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.mom-cal-month {\n  background: var(--b3-theme-background, #fff);\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 10px;\n  padding: 10px;\n}\n.mom-cal-month-t {\n  margin: 0 0 8px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-cal-grid {\n  display: grid;\n  grid-template-columns: repeat(7, 1fr);\n  gap: 4px;\n}\n.mom-cal-dow {\n  text-align: center;\n  font-size: 11px;\n  color: #aaa;\n  padding: 2px 0;\n}\n.mom-cal-blank {\n  aspect-ratio: 1;\n}\n.mom-cal-cell {\n  position: relative;\n  aspect-ratio: 1;\n  border-radius: 6px;\n  border: 1px solid transparent;\n  background: var(--b3-theme-background-light, #f4f4f4);\n  overflow: hidden;\n  cursor: pointer;\n  padding: 0;\n}\n.mom-cal-cell.has {\n  border-color: var(--b3-border-color, #ddd);\n}\n.mom-cal-cell:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell.is-today {\n  box-shadow: inset 0 0 0 2px var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cal-daynum {\n  position: absolute;\n  left: 3px;\n  top: 3px;\n  font-size: 10px;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);\n}\n.mom-cal-heatline {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 11px;\n  font-weight: 600;\n}\n.mom-cal-ph-cnt {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n@keyframes mom-flash {\n  0% {\n    box-shadow: 0 0 0 3px var(--b3-theme-primary, #4e6ef2);\n  }\n  100% {\n    box-shadow: 0 0 0 0 rgba(78, 110, 242, 0);\n  }\n}\n.mom-lock {\n  position: relative;\n  min-height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n}\n.mom-lock-bg {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n.mom-lock-bg--glass {\n  background:\n    linear-gradient(\n      180deg,\n      #fafafa,\n      #f0f0f0);\n}\n.mom-lock-panel {\n  position: relative;\n  z-index: 1;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  width: 100%;\n  height: 100%;\n  padding: 28px 26px;\n  background: transparent;\n}\n.mom-lock-top {\n  text-align: center;\n  color: #000;\n  width: 100%;\n  padding-bottom: 18px;\n  margin-bottom: 18px;\n  border-bottom: 1px solid #f0f0f0;\n}\n.mom-lock-date {\n  font-size: 12px;\n  letter-spacing: 2px;\n  color: #999;\n  text-transform: uppercase;\n}\n.mom-lock-time {\n  font-size: 44px;\n  font-weight: 200;\n  letter-spacing: 2px;\n  margin-top: 6px;\n  font-variant-numeric: tabular-nums;\n  color: #111;\n}\n.mom-lock-bottom {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  width: 100%;\n  gap: 10px;\n}\n.mom-lock-avatar {\n  width: 60px;\n  height: 60px;\n  border-radius: 50%;\n  font-size: 26px;\n}\n.mom-lock-name {\n  color: #111;\n  font-size: 14px;\n  font-weight: 600;\n}\n.mom-lock-input {\n  width: 50%;\n  border: 1px solid #e5e5e5;\n  border-radius: 10px;\n  padding: 10px 12px;\n  background: #f7f7f7;\n  color: #000;\n  font-size: 14px;\n  outline: none;\n  transition: border-color .18s ease, background .18s ease;\n}\n.mom-lock-input:focus {\n  border-color: #bbb;\n  background: #fff;\n}\n.mom-lock-input::placeholder {\n  color: #b0b0b0;\n}\n.mom-lock .mom-btn-primary {\n  width: 100%;\n  justify-content: center;\n  padding: 10px 12px;\n  border-radius: 10px;\n}\n.mom-lock-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin: 0;\n}\n.mom-lock-hint {\n  color: #aaa;\n  font-size: 12px;\n  margin-top: 2px;\n}\n.mom-lock.shake {\n  animation: mom-shake .4s ease;\n}\n@keyframes mom-shake {\n  0%, 100% {\n    transform: translateX(0);\n  }\n  25% {\n    transform: translateX(-6px);\n  }\n  75% {\n    transform: translateX(6px);\n  }\n}\n.mom-switch {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  cursor: pointer;\n  font-size: 13px;\n}\n.mom-switch input {\n  display: none;\n}\n.mom-switch i {\n  width: 40px;\n  height: 22px;\n  border-radius: 999px;\n  background: #ccc;\n  position: relative;\n  transition: background .2s;\n}\n.mom-switch i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  background: #fff;\n  transition: transform .2s;\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);\n}\n.mom-switch input:checked + i {\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-switch input:checked + i::after {\n  transform: translateX(18px);\n}\n.mom-switch-lab {\n  cursor: pointer;\n}\n.mom-md-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-link-card {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-inline-code {\n  background: var(--b3-theme-background-light, #f2f2f2);\n  border-radius: 4px;\n  padding: 1px 5px;\n  font-size: 13px;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.mom-mark {\n  background: #ffe08a;\n  color: inherit;\n  padding: 0 2px;\n  border-radius: 3px;\n}\n.mom-card-text em {\n  font-style: italic;\n}\n.mom-publish-page {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background-color: var(--b3-theme-background, #fff);\n  z-index: 30;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-page[hidden] {\n  display: none;\n}\n.mom-publish {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  min-height: 0;\n}\n.mom-publish-nav {\n  position: relative;\n  flex: 0 0 auto;\n  height: 44px;\n  background-color: var(--b3-theme-background, #fff);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 16px;\n  border-bottom: 0.5px solid var(--moments-nav-border, #eee);\n}\n.mom-publish-back {\n  width: 24px;\n  height: 24px;\n  border: none;\n  background: transparent;\n  position: relative;\n  cursor: pointer;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n}\n.mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n}\n.mom-publish-submit {\n  font-size: 15px;\n  font-weight: 500;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 10%, transparent);\n  padding: 6px 16px;\n  border-radius: 4px;\n  border: none;\n  cursor: pointer;\n}\n.mom-publish-content {\n  padding: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-publish-card {\n  background: var(--b3-theme-background-light, #f7f7f7);\n  border: 1px solid color-mix(in srgb, var(--b3-border-color, #ddd) 45%, transparent);\n  border-radius: 12px;\n  padding: 14px;\n  box-sizing: border-box;\n}\n.mom-publish-card--editor {\n  flex: 0 0 auto;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-card--editor:focus-within {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-publish-textarea {\n  width: 100%;\n  min-height: 90px;\n  max-height: 40vh;\n  border: none;\n  outline: none;\n  font-size: 16px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background, #333);\n  resize: vertical;\n  overflow-y: auto;\n  font-family: inherit;\n  background: transparent;\n}\n.mom-publish-textarea::placeholder {\n  color: #aaa;\n}\n.mom-publish-imgcard {\n  display: flex;\n  align-items: flex-start;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-publish-grid-add,\n.mom-publish-grid-prev {\n  width: 56px;\n  height: 56px;\n  border: 1px dashed #ccc;\n  border-radius: 8px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  box-sizing: border-box;\n  background: transparent;\n  font-size: 22px;\n  color: #999;\n  flex: none;\n}\n.mom-publish-grid-prev {\n  border-style: solid;\n  border-color: #eee;\n}\n.mom-publish-grid-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-publish-grid-prev-video {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.mom-publish-prev-media {\n  position: absolute;\n  inset: 0;\n}\n.mom-publish-prev-play {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  font-size: 18px;\n  pointer-events: none;\n  text-shadow: 0 1px 3px rgba(0, 0, 0, .6);\n}\n.mom-publish-grid-x {\n  position: absolute;\n  top: 3px;\n  right: 3px;\n  width: 18px;\n  height: 18px;\n  background-color: #FA5151;\n  border-radius: 50%;\n  border: none;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 10;\n  padding: 0;\n}\n.mom-publish-inp {\n  flex: none;\n  width: 100%;\n  height: 30px;\n  border: 0.5px solid color-mix(in srgb, var(--b3-border-color, #ddd) 70%, transparent);\n  border-radius: 8px;\n  padding: 0 8px;\n  font-size: 13px;\n  color: var(--b3-theme-on-background, #333);\n  background: color-mix(in srgb, var(--b3-theme-background, #fff) 55%, transparent);\n  outline: none;\n  font-family: inherit;\n  box-sizing: border-box;\n}\n.mom-publish-info {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n.mom-publish-info .mom-publish-inp[type=date] {\n  flex: 1;\n  min-width: 0;\n}\n.mom-publish-info .mom-publish-inp[data-location] {\n  flex: 2;\n  min-width: 0;\n}\n.mom-picker-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));\n  gap: 6px;\n  max-height: 60vh;\n  overflow-y: auto;\n  padding: 2px;\n}\n.mom-picker-item {\n  width: 100%;\n  aspect-ratio: 1;\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 6px;\n  background-size: cover;\n  background-position: center;\n  background-color: var(--b3-theme-background-light, #f4f4f4);\n  cursor: pointer;\n  padding: 0;\n  box-sizing: border-box;\n}\n.mom-picker-item:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-list {\n  --moments-text: var(--b3-theme-on-background);\n  --moments-text-secondary: var(--b3-theme-on-surface);\n  --moments-border: var(--b3-border-color);\n  --moments-card-border: var(--b3-border-color);\n  --moments-name-color: var(--b3-theme-on-background);\n  --moments-close-color: var(--b3-theme-on-surface-light);\n  --moments-link-card-bg: var(--b3-theme-surface);\n  --moments-interaction-bg: var(--b3-theme-surface);\n  --moments-action-popup-bg: var(--b3-theme-surface);\n  --moments-action-popup-text: var(--b3-theme-on-background);\n  --moments-action-popup-border: var(--b3-border-color);\n  --moments-action-popup-active-bg: var(--b3-list-hover);\n}\n.north-luna-moments-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 14px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface) 45%, transparent);\n  width: calc(100% - 6%);\n  margin: 0 auto;\n  box-sizing: border-box;\n  border: 1px solid color-mix(in srgb, var(--b3-theme-on-background) 6%, transparent);\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .05);\n  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;\n}\n.north-luna-moments-item:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .07), 0 12px 28px rgba(0, 0, 0, .10);\n  border-color: color-mix(in srgb, var(--b3-theme-on-background) 10%, transparent);\n}\n.north-luna-moments-item.popup-open {\n  z-index: 8;\n}\n.north-luna-moments-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-item-text {\n  font-size: 18px;\n  color: var(--moments-text);\n  line-height: 1.75;\n  margin-bottom: 6px;\n  word-wrap: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n  -webkit-user-select: text;\n  overflow: hidden;\n}\n.north-luna-moments-no-text {\n  color: var(--moments-close-color);\n  font-size: 13px;\n}\n.north-luna-moments-item-text.moments-folded {\n  max-height: calc(var(--moments-fold-line-h, 32px) * var(--moments-fold-lines, 6));\n  -webkit-mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  -webkit-mask-size: 100% 100%;\n  mask-size: 100% 100%;\n  -webkit-mask-repeat: no-repeat;\n  mask-repeat: no-repeat;\n}\n.north-luna-moments-item.moments-expanded .north-luna-moments-item-text.moments-folded {\n  max-height: none;\n  -webkit-mask-image: none;\n  mask-image: none;\n}\n.north-luna-moments-expand {\n  display: none;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 2px;\n  margin-top: 4px;\n  margin-bottom: 10px;\n  color: var(--b3-theme-on-surface-light);\n  font-size: 13px;\n  cursor: pointer;\n  user-select: none;\n  -webkit-user-select: none;\n  transition: color 0.2s;\n}\n.north-luna-moments-expand:hover {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-item.moments-has-fold .north-luna-moments-expand {\n  display: flex;\n}\n.north-luna-moments-expand .moments-expand-icon {\n  width: 14px;\n  height: 14px;\n}\n.north-luna-moments-item-text code,\n.north-luna-moments-item-text .mom-inline-code {\n  color: var(--b3-theme-primary);\n  background-color: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent);\n  padding: 2px 4px;\n  border-radius: 7px;\n  font-size: 0.9em;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.north-luna-moments-item-text mark {\n  background-color: #ffe08a;\n  padding: 0 2px;\n  border-radius: 2px;\n}\n.north-luna-moments-item-text strong {\n  font-weight: 600;\n}\n.north-luna-moments-media {\n  margin-bottom: 8px;\n}\n.north-luna-moments-video {\n  width: 100%;\n  max-height: 420px;\n  border-radius: 8px;\n  background: #000;\n  display: block;\n}\n.north-luna-moments-grid-cel {\n  position: relative;\n  display: block;\n  cursor: pointer;\n  overflow: hidden;\n  border-radius: 8px;\n}\n.north-luna-moments-grid-video-el {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-video-el {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: 100%;\n}\n.north-luna-moments-grid-play {\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 42px;\n  height: 42px;\n  border-radius: 50%;\n  background: rgba(0, 0, 0, .55);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  pointer-events: none;\n}\n.north-luna-moments-grid-play svg {\n  width: 22px;\n  height: 22px;\n}\n.mom-lightbox video {\n  max-width: 92vw;\n  max-height: 80vh;\n  border-radius: 8px;\n  background: #000;\n}\n.north-luna-moments-image-grid {\n  display: grid;\n  gap: 4px;\n}\n.north-luna-moments-image-grid.single {\n  grid-template-columns: 1fr;\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.double {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.triple {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.four {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-img {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  cursor: zoom-in;\n  background: var(--b3-theme-surface);\n  transition: transform 0.3s ease;\n  border-radius: 8px;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-img {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: auto;\n  max-width: 100%;\n  border-radius: 6px;\n}\n.north-luna-moments-link-card {\n  display: flex;\n  align-items: center;\n  background-color: var(--moments-link-card-bg);\n  padding: 8px;\n  border-radius: 4px;\n  margin-bottom: 8px;\n  max-width: 220px;\n}\n.north-luna-moments-link-thumb {\n  width: 40px;\n  height: 40px;\n  border-radius: 4px;\n  object-fit: cover;\n  margin-right: 8px;\n  flex-shrink: 0;\n  background-color: #e0e0e0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.north-luna-moments-link-info {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-link-title {\n  font-size: 13px;\n  color: var(--moments-text);\n  line-height: 1.4;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n}\n.north-luna-moments-link-url {\n  font-size: 11px;\n  color: var(--moments-close-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.north-luna-moments-item-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-top: 10px;\n  gap: 8px;\n  flex-wrap: nowrap;\n}\n.north-luna-moments-meta-tags {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 0;\n  flex: 1;\n  min-width: 0;\n  overflow: hidden;\n}\n.north-luna-moments-meta-item {\n  display: inline-flex;\n  align-items: center;\n  gap: 2px;\n  font-size: 12px;\n  color: var(--moments-text-secondary);\n  white-space: nowrap;\n  flex-shrink: 0;\n  line-height: 1.5;\n}\n.north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  content: \"\\b7\";\n  margin: 0 7px;\n  color: var(--moments-text-secondary);\n  opacity: 0.4;\n  font-weight: bold;\n}\n.north-luna-moments-item-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 12px;\n  position: relative;\n  margin-top: 6px;\n}\n.north-luna-moments-liked-indicator {\n  display: inline-flex;\n  align-items: center;\n  flex-shrink: 0;\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-liked-indicator svg {\n  display: block;\n}\n@keyframes moments-like-pop {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.3);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n.north-luna-moments-pin-badge {\n  position: absolute;\n  top: 12px;\n  right: 12px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--b3-theme-primary);\n  opacity: 0.6;\n  pointer-events: none;\n}\n.north-luna-moments-more-btn {\n  width: 28px;\n  height: 24px;\n  background-color: transparent;\n  border: none;\n  border-radius: 6px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  opacity: 0;\n  transition: opacity 0.2s ease, background-color 0.2s ease;\n}\n.north-luna-moments-item:hover .north-luna-moments-more-btn {\n  opacity: 1;\n}\n.north-luna-moments-more-btn:hover {\n  background-color: var(--moments-interaction-bg);\n}\n.north-luna-moments-more-btn::before {\n  content: \"\\22ef\";\n  font-size: 14px;\n  line-height: 1;\n  color: var(--moments-close-color);\n  letter-spacing: 1px;\n}\n.north-luna-moments-action-popup {\n  position: absolute;\n  right: 40px;\n  top: 50%;\n  transform: translateY(-50%);\n  background-color: var(--moments-action-popup-bg);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 8px;\n  padding: 4px;\n  display: none;\n  flex-direction: column;\n  gap: 2px;\n  z-index: 10;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);\n}\n.north-luna-moments-action-popup[data-mid] {\n  display: none;\n}\n.north-luna-moments-item.popup-open .north-luna-moments-action-popup {\n  display: flex;\n}\n.north-luna-moments-action-popup-row {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 2px;\n}\n.north-luna-moments-action-popup-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  padding: 6px 10px;\n  font-size: 13px;\n  color: var(--moments-action-popup-text);\n  white-space: nowrap;\n  cursor: pointer;\n  border-radius: 6px;\n}\n.north-luna-moments-action-popup-btn:hover {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn:active {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn.like-btn.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-popup-btn.like-btn.liked svg {\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-comment-panel {\n  margin-top: 8px;\n  padding: 8px 0 0;\n  animation: moments-likes-fade-in 0.2s ease;\n}\n.north-luna-moments-comment-panel:has(.north-luna-moments-comment-item) {\n  border-top: 1px solid rgba(128, 128, 128, 0.08);\n}\n.north-luna-moments-comment-item {\n  padding: 4px 0;\n  font-size: 13px;\n  line-height: 1.5;\n}\n.north-luna-moments-comment-display {\n  display: block;\n}\n.north-luna-moments-comment-text {\n  color: var(--b3-theme-on-surface);\n  word-break: break-all;\n  user-select: text;\n}\n.north-luna-moments-comment-text strong {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n}\n.north-luna-moments-comment-actions {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-top: 4px;\n}\n.north-luna-moments-comment-actions-right {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-comment-time {\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.north-luna-moments-comment-del {\n  display: inline-flex;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  opacity: 0;\n  padding: 2px;\n  transition: opacity 0.15s;\n}\n.north-luna-moments-comment-item:hover .north-luna-moments-comment-del {\n  opacity: 1;\n}\n.north-luna-moments-comment-del:hover {\n  color: var(--b3-theme-on-surface);\n}\n.north-luna-moments-comment-input-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-top: 8px;\n  padding-top: 6px;\n}\n.north-luna-moments-comment-input {\n  flex: 1;\n  border: none;\n  outline: none;\n  background: var(--b3-theme-surface);\n  border-radius: 7px;\n  padding: 6px 12px;\n  font-size: 13px;\n  color: var(--b3-theme-on-surface);\n  line-height: 1.4;\n}\n.north-luna-moments-comment-input::placeholder {\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send {\n  flex-shrink: 0;\n  border: none;\n  background: var(--b3-theme-primary);\n  color: #fff;\n  border-radius: 7px;\n  padding: 6px 18px;\n  min-width: 56px;\n  font-size: 13px;\n  font-weight: 600;\n  line-height: 1.3;\n  cursor: pointer;\n  transition: opacity 0.15s;\n  text-align: center;\n  white-space: nowrap;\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send:hover {\n  opacity: 0.85;\n}\n@keyframes moments-likes-fade-in {\n  from {\n    opacity: 0;\n    transform: translateY(-4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n.north-luna-moments-item.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n.mom-list .north-luna-moments-date-group {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 10px;\n  margin: 4px 0 10px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.mom-list .north-luna-moments-date-group::before,\n.mom-list .north-luna-moments-date-group::after {\n  content: \"\";\n  flex: 1;\n  height: 1px;\n  max-width: 90px;\n  background:\n    linear-gradient(\n      to right,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group::after {\n  background:\n    linear-gradient(\n      to left,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group-text {\n  font-size: 20px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  letter-spacing: 0.4px;\n  white-space: nowrap;\n}\n.north-luna-moments-outline-popover {\n  width: 140px;\n  max-height: 320px;\n  overflow-y: auto;\n  background: var(--b3-theme-surface);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 10px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);\n  z-index: 100;\n  padding: 6px 0;\n}\n.north-luna-moments-outline-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 6px 14px 8px;\n  border-bottom: 0.5px solid var(--b3-border-color);\n  margin-bottom: 4px;\n}\n.north-luna-moments-outline-item {\n  font-size: 14px;\n  color: var(--b3-theme-on-background);\n  padding: 8px 14px;\n  cursor: pointer;\n  transition: background 0.12s ease, color 0.12s ease;\n}\n.north-luna-moments-outline-item:hover {\n  background: var(--b3-list-hover);\n}\n.north-luna-moments-outline-item.active {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n  background: var(--b3-theme-primary-lightest);\n}\n\n/* 方案3：去掉\"⋯\"按钮，动态下方悬停淡入一行操作图标 */\n.north-luna-moments-more-btn,\n.north-luna-moments-action-popup {\n  display: none !important;\n}\n.north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-action-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 31px;\n  height: 31px;\n  border: none;\n  border-radius: 7px;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  transition: background-color .15s ease, color .15s ease;\n}\n.north-luna-moments-action-btn svg {\n  width: 16px !important;\n  height: 16px !important;\n}\n.north-luna-moments-action-btn:hover,\n.north-luna-moments-action-btn:focus-visible {\n  background-color: var(--b3-theme-background-light);\n  color: var(--b3-theme-on-background);\n}\n.north-luna-moments-action-btn:focus-visible {\n  outline: 2px solid var(--b3-theme-primary, #4e6ef2);\n  outline-offset: 1px;\n}\n.north-luna-moments-action-btn.like-action.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-btn.active {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del {\n  color: #e05050;\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del:hover {\n  color: #e05050;\n  background-color: #fdecec;\n}\n/* ===== 移动端：卡片尽量充满屏幕 ===== */\n@media (max-width: 480px) {\n  .north-luna-moments-item {\n    width: calc(100% - 6%);\n    margin: 0 auto;\n    padding: 12px;\n  }\n}\n\n/* ===== Orca Note + Apple HIG (appended by build.mjs) ===== */\n.orca-df-host {\n  flex: 1 1 auto;\n  align-self: stretch;\n  width: 100%;\n  min-width: 0;\n  height: 100%;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.orca-df-scope .mom-root { height: 100%; width: 100%; min-width: 0; }\n/* ---- Apple / iOS-macOS tokens → legacy --b3-* ---- */\n.orca-df-scope {\n  --df-font: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"SF Pro Display\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  --df-font-mono: \"SF Mono\", ui-monospace, Menlo, Consolas, monospace;\n  --df-radius-sm: 6px;\n  --df-radius-md: 10px;\n  --df-radius-lg: 14px;\n  --df-radius-xl: 20px;\n  --df-radius-pill: 980px;\n  --df-stroke: 0.5px;\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.06);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.04);\n  --df-brand: #007AFF;\n  --df-brand-hover: #0066D6;\n  --df-brand-pressed: #0055B3;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(0,122,255,.12);\n  --df-brand-tint-2: rgba(0,122,255,.20);\n  --df-fill-tertiary: rgba(120,120,128,.12);\n  --b3-theme-background: #F2F2F7;\n  --b3-theme-background-light: rgba(255,255,255,0.72);\n  --b3-theme-on-background: #000000;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #5AC8FA;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(60,60,67,0.18);\n  --b3-theme-surface: #FFFFFF;\n  --b3-theme-surface-lighter: #F2F2F7;\n  --b3-theme-on-surface: #000000;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.12);\n  --b3-font-family-code: var(--df-font-mono);\n  --moments-card-border: rgba(60,60,67,0.12);\n  --moments-nav-border: rgba(60,60,67,0.18);\n  color: var(--b3-theme-on-background);\n  font-family: var(--df-font);\n  font-size: 15px;\n  line-height: 1.47;\n  letter-spacing: -0.01em;\n  -webkit-font-smoothing: antialiased;\n}\n.orca-df-scope.orca-df-dark {\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.28);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.55);\n  --df-brand: #0A84FF;\n  --df-brand-hover: #409CFF;\n  --df-brand-pressed: #0066CC;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(10,132,255,.22);\n  --df-brand-tint-2: rgba(10,132,255,.32);\n  --df-fill-tertiary: rgba(120,120,128,.24);\n  --b3-theme-background: #000000;\n  --b3-theme-background-light: rgba(44,44,46,0.78);\n  --b3-theme-on-background: #FFFFFF;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #64D2FF;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(84,84,88,0.65);\n  --b3-theme-surface: #1C1C1E;\n  --b3-theme-surface-lighter: #2C2C2E;\n  --b3-theme-on-surface: #FFFFFF;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.24);\n  --moments-card-border: rgba(84,84,88,0.45);\n  --moments-nav-border: rgba(84,84,88,0.65);\n}\n.orca-df-hb-icon { display: inline-flex; align-items: center; justify-content: center; }\n.orca-df-hb-icon svg { display: block; }\n/* ---- Surfaces / cards ---- */\n.orca-df-scope .mom-root {\n  background: var(--b3-theme-background);\n  font-family: var(--df-font);\n}\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  width: 100%;\n  max-width: none;\n  margin-left: 0;\n  margin-right: 0;\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n  transition: transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s ease, background .18s ease;\n}\n.orca-df-scope .mom-item:hover,\n.orca-df-scope .north-luna-moments-item:hover {\n  box-shadow: var(--df-shadow-8);\n}\n.orca-df-scope .mom-list {\n  align-items: stretch;\n  padding-left: 16px;\n  padding-right: 16px;\n  gap: 12px;\n}\n.orca-df-scope .mom-filter-bar { width: 100%; }\n.orca-df-scope .mom-pin-strip {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  margin: 0;\n  padding: 10px 16px 0;\n  box-sizing: border-box;\n  background: transparent;\n  border: none;\n  border-radius: 0;\n  cursor: default;\n}\n.orca-df-scope .mom-pin-strip-label {\n  writing-mode: horizontal-tb;\n  white-space: nowrap;\n  font-size: 13px;\n  font-weight: 400;\n  line-height: 1;\n  color: var(--orca-color-text-3, #8e8e93);\n  margin-right: 2px;\n}\n.orca-df-scope .mom-pin-strip-thumbs {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: visible;\n}\n.orca-df-scope .mom-pin-group-text {\n  display: inline-flex !important;\n  align-items: center;\n  gap: 6px;\n  max-width: min(100%, 320px);\n  height: 32px;\n  padding: 0 12px 0 10px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n  color: var(--orca-color-text-1, #1c1c1e);\n  grid-template-columns: none !important;\n}\n.orca-df-scope .mom-pin-group-text:hover {\n  opacity: 1;\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 12%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-ico {\n  display: inline-flex;\n  flex-shrink: 0;\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-scope .mom-pin-title {\n  min-width: 0;\n  font-size: 13px;\n  font-weight: 500;\n  line-height: 1.2;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.orca-df-scope .mom-pin-group-media {\n  display: grid;\n  gap: 2px;\n  padding: 3px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb img {\n  width: 28px;\n  height: 28px;\n  border-radius: 4px;\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb-single img {\n  width: 40px;\n  height: 40px;\n}\n.orca-df-scope .mom-pin-thumb-more {\n  font-size: 11px;\n}\n.orca-df-scope .mom-avatar,\n.orca-df-scope .mom-avatar-ph {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n/* ---- Controls ---- */\n.orca-df-scope button,\n.orca-df-scope input,\n.orca-df-scope textarea,\n.orca-df-scope select {\n  font-family: inherit;\n}\n.orca-df-scope .mom-publish-submit,\n.orca-df-scope .mom-empty-btn,\n.orca-df-scope .mom-btn-primary {\n  height: 34px;\n  min-width: 72px;\n  padding: 0 16px;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-brand);\n  color: var(--df-brand-fg);\n  font-size: 15px;\n  font-weight: 600;\n  letter-spacing: -0.01em;\n  line-height: 1;\n  box-shadow: none;\n  transition: opacity .15s ease, transform .15s ease, background .15s ease;\n}\n.orca-df-scope .mom-publish-submit:hover,\n.orca-df-scope .mom-empty-btn:hover,\n.orca-df-scope .mom-btn-primary:hover {\n  background: var(--df-brand-hover);\n  opacity: 0.96;\n}\n.orca-df-scope .mom-publish-submit:active,\n.orca-df-scope .mom-empty-btn:active,\n.orca-df-scope .mom-btn-primary:active {\n  background: var(--df-brand-pressed);\n  opacity: 0.88;\n}\n.orca-df-scope .mom-publish-inp,\n.orca-df-scope .mom-publish-textarea {\n  border: none;\n  border-radius: var(--df-radius-md);\n  background: var(--df-fill-tertiary);\n  transition: background .15s ease, box-shadow .15s ease;\n}\n.orca-df-scope .mom-publish-inp:hover,\n.orca-df-scope .mom-publish-textarea:hover {\n  background: color-mix(in srgb, var(--df-fill-tertiary) 85%, var(--df-brand) 15%);\n}\n.orca-df-scope .mom-publish-inp:focus,\n.orca-df-scope .mom-publish-textarea:focus,\n.orca-df-scope .mom-publish-card--editor:focus-within {\n  outline: none;\n  box-shadow: 0 0 0 3px var(--df-brand-tint);\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-publish-card {\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n}\n.orca-df-scope .mom-publish-nav {\n  height: 52px;\n  border-bottom: var(--df-stroke) solid var(--moments-nav-border);\n  background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);\n  backdrop-filter: saturate(180%) blur(20px);\n  -webkit-backdrop-filter: saturate(180%) blur(20px);\n}\n.orca-df-scope .mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n.orca-df-scope .mom-publish-grid-add,\n.orca-df-scope .mom-publish-grid-prev {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab,\n.orca-df-scope .mom-fab-stack .mom-tag-fab,\n.orca-df-scope .mom-fab,\n.orca-df-scope button.mom-outline-fab,\n.orca-df-scope button.mom-tag-fab {\n  width: 44px;\n  height: 44px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: color-mix(in srgb, var(--b3-theme-surface) 82%, transparent);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  box-shadow: var(--df-shadow-8);\n  color: var(--df-brand);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab:hover,\n.orca-df-scope .mom-fab-stack .mom-tag-fab:hover,\n.orca-df-scope .mom-fab:hover {\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-tag-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-scope .mom-cover-default {\n  background:\n    linear-gradient(160deg, #5AC8FA 0%, #007AFF 48%, #5856D6 100%);\n}\n.orca-df-scope.orca-df-dark .mom-cover-default {\n  background:\n    linear-gradient(160deg, #64D2FF 0%, #0A84FF 45%, #5E5CE6 100%);\n}\n.orca-df-scope .mom-cover-actions .mom-cover-settings,\n.orca-df-scope .mom-cover-actions button {\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: rgba(255,255,255,.28);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  color: #fff;\n}\n/* ---- Tags / chips ---- */\n.north-luna-moments-tags { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; }\n.north-luna-moments-tag {\n  font-size: 13px;\n  line-height: 1.4;\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n  padding: 4px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  cursor: pointer;\n  user-select: none;\n  transition: background .15s ease, opacity .15s ease;\n}\n.north-luna-moments-tag:hover { background: var(--df-brand-tint-2); }\n.mom-publish-info { flex-wrap: wrap; }\n.mom-publish-info .mom-publish-info-tags { flex: 1 1 100%; min-width: 0; margin-top: 4px; }\n/* ---- Empty ---- */\n.mom-empty { padding: 64px 28px 52px; text-align: center; }\n.mom-empty-ico { font-size: 48px; line-height: 1; margin-bottom: 14px; opacity: 0.9; }\n.mom-empty-title { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 8px; color: var(--b3-theme-on-surface); }\n.mom-empty-sub { font-size: 15px; line-height: 1.5; margin: 0 0 6px; color: var(--b3-theme-on-surface-light); }\n.mom-empty-hint { font-size: 13px; line-height: 1.5; margin: 0 0 20px; color: var(--b3-theme-on-surface-light); opacity: 0.95; }\n.mom-empty-btn { margin-top: 4px; }\n/* ---- Tag bar / refs ---- */\n.orca-df-tagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-tagbar-label { font-size: 13px; color: var(--b3-theme-on-surface-light); margin-right: 2px; }\n.orca-df-tagchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 12px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagchip.is-on, .orca-df-tagchip:hover {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }\n.orca-df-refchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 3px 10px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) dashed var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n}\n.orca-df-refchip:hover { color: var(--df-brand); border-color: var(--df-brand); background: var(--df-brand-tint); }\n.orca-df-open-orca {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: transparent;\n  color: var(--df-brand);\n  font-weight: 600;\n  cursor: pointer;\n}\n.orca-df-open-orca:hover { background: var(--df-brand-tint); }\n.orca-df-loc-btn.is-on { color: var(--df-brand); }\n.orca-df-tag-btn.is-on { color: var(--df-brand); }\n.orca-df-actions-wrap,\n.orca-df-scope .north-luna-moments-item-actions {\n  position: relative;\n}\n.orca-df-scope .north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  justify-content: flex-start;\n  flex-wrap: nowrap;\n}\n.orca-df-scope .north-luna-moments-action-btn {\n  width: 34px;\n  height: 34px;\n  border-radius: var(--df-radius-pill);\n}\n.orca-df-more-inline {\n  display: none;\n  align-items: center;\n  gap: 2px;\n  margin-left: 2px;\n  padding-left: 4px;\n  border-left: var(--df-stroke) solid color-mix(in srgb, var(--b3-border-color) 80%, transparent);\n  animation: orca-df-more-in .16s ease;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-inline,\n.mom-action-bar.is-more-open .orca-df-more-inline {\n  display: inline-flex;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-btn,\n.mom-action-bar.is-more-open .orca-df-more-btn {\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n}\n.orca-df-more-inline .orca-df-more-del {\n  color: #FF3B30;\n}\n.orca-df-more-inline .orca-df-more-del:hover {\n  background: rgba(255,59,48,.1);\n}\n@keyframes orca-df-more-in {\n  from { opacity: 0; transform: translateX(-4px); }\n  to { opacity: 1; transform: translateX(0); }\n}\n.orca-df-tags-list {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n  max-height: 220px;\n  overflow-y: auto;\n  margin-bottom: 12px;\n}\n.orca-df-tags-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 0;\n}\n.orca-df-tagpick {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 4px 12px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) solid var(--b3-border-color);\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagpick.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n  border-color: var(--df-brand);\n}\n.orca-df-tags-add {\n  display: flex;\n  gap: 8px;\n  align-items: center;\n  margin-bottom: 8px;\n}\n.orca-df-tags-add .mom-inp { flex: 1 1 auto; min-width: 0; }\n.orca-df-loc-meta {\n  cursor: pointer;\n  color: var(--b3-theme-on-surface-light);\n}\n.orca-df-loc-meta:hover { color: var(--df-brand); }\n.orca-df-loc-pin { font-size: 12px; }\n.mom-publish-orca {\n  flex: none;\n  height: 34px;\n  padding: 0 14px;\n  margin-right: 0;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-fill-tertiary);\n  color: var(--df-brand);\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n}\n.mom-publish-orca:hover {\n  background: var(--df-brand-tint);\n}\n.mom-publish-nav-right { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; z-index: 2; }\n.mom-publish-nav .mom-publish-back { position: relative; z-index: 2; border-radius: var(--df-radius-pill); color: var(--df-brand); }\n.mom-publish-nav .mom-publish-title { pointer-events: none; z-index: 0; }\n/* ---- Cover actions ---- */\n.mom-cover-actions {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.mom-cover-actions .mom-cover-settings {\n  position: static;\n  top: auto;\n  right: auto;\n}\n.mom-cover-signature {\n  position: absolute;\n  left: 16px;\n  right: 120px;\n  bottom: 22px;\n  z-index: 11;\n  margin: 0;\n  font-size: 15px;\n  line-height: 1.45;\n  font-weight: 500;\n  letter-spacing: 0.06em;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 12px rgba(0,0,0,.35);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-more {\n  position: relative;\n  display: block;\n  overflow: hidden;\n  border-radius: inherit;\n  cursor: pointer;\n}\n.north-luna-moments-grid-more .north-luna-moments-grid-img,\n.north-luna-moments-grid-more .north-luna-moments-grid-video-el {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.north-luna-moments-grid-more-badge {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0,0,0,.46);\n  color: #fff;\n  font-size: 22px;\n  font-weight: 600;\n  letter-spacing: 0.02em;\n  pointer-events: none;\n  text-shadow: 0 1px 2px rgba(0,0,0,.35);\n}\n.north-luna-moments-item-text .orca-df-md-ul,\n.north-luna-moments-item-text .orca-df-md-ol {\n  margin: 4px 0 6px;\n  padding-left: 1.4em;\n  list-style-position: outside;\n}\n.north-luna-moments-item-text .orca-df-md-ul {\n  list-style-type: disc !important;\n}\n.north-luna-moments-item-text .orca-df-md-ol {\n  list-style-type: decimal !important;\n}\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul { list-style-type: circle !important; }\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul .orca-df-md-ul { list-style-type: square !important; }\n.north-luna-moments-item-text .orca-df-md-li {\n  margin: 2px 0;\n  line-height: 1.55;\n  display: list-item !important;\n}\n.north-luna-moments-item-text .orca-df-md-p {\n  margin: 0 0 4px;\n  line-height: 1.55;\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n.north-luna-moments-item-text .orca-df-md-gap { height: 8px; }\n.north-luna-moments-item-text .orca-df-md-h {\n  font-weight: 650;\n  margin: 6px 0 4px;\n  line-height: 1.4;\n}\n.north-luna-moments-item-text .orca-df-md-h1 { font-size: 1.2em; }\n.north-luna-moments-item-text .orca-df-md-h2 { font-size: 1.1em; }\n.north-luna-moments-item-text .orca-df-md-h3 { font-size: 1.05em; }\n.north-luna-moments-item-text .orca-df-md-quote {\n  margin: 4px 0;\n  padding: 2px 0 2px 10px;\n  border-left: 3px solid var(--b3-border-color);\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-item-text .orca-df-md-code {\n  margin: 6px 0;\n  padding: 8px 10px;\n  border-radius: 8px;\n  background: var(--df-fill-tertiary);\n  overflow: auto;\n  font-size: 13px;\n  line-height: 1.45;\n}\n/* ---- Popover ---- */\n.orca-df-tag-popover {\n  position: fixed;\n  z-index: 2147483001;\n  min-width: 180px;\n  max-width: min(280px, calc(100vw - 24px));\n  max-height: min(360px, 50vh);\n  overflow: auto;\n  padding: 6px;\n  border-radius: var(--df-radius-lg);\n  background: color-mix(in srgb, var(--b3-theme-surface) 86%, transparent);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  box-shadow: var(--df-shadow-16);\n  backdrop-filter: saturate(180%) blur(24px);\n  -webkit-backdrop-filter: saturate(180%) blur(24px);\n  box-sizing: border-box;\n}\n.orca-df-tag-popover-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 10px 6px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n}\n.orca-df-tag-popover-item {\n  display: block;\n  width: 100%;\n  text-align: left;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-background);\n  font-size: 15px;\n  line-height: 1.35;\n  padding: 10px 12px;\n  border-radius: var(--df-radius-md);\n  cursor: pointer;\n}\n.orca-df-tag-popover-item:hover,\n.orca-df-tag-popover-item.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-tag-popover-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 12px 10px;\n}\n/* ---- Motion ---- */\n@media (prefers-reduced-motion: no-preference) {\n  .orca-df-scope .mom-item,\n  .orca-df-scope .north-luna-moments-item,\n  .orca-df-scope .mom-publish-submit,\n  .orca-df-scope .orca-df-tagchip,\n  .orca-df-scope .mom-outline-fab,\n  .orca-df-scope .mom-tag-fab {\n    transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s cubic-bezier(.22,.61,.36,1), opacity .15s ease;\n  }\n  .orca-df-scope .mom-outline-fab:active,\n  .orca-df-scope .mom-tag-fab:active,\n  .orca-df-scope .mom-publish-submit:active {\n    transform: scale(0.96);\n  }\n}\n/* ---- 正文观感仍对齐虎鲸字号变量 ---- */\n.orca-df-scope {\n  --moments-text: var(--orca-color-text-1, var(--b3-theme-on-background, #000));\n  --df-body-font: var(--orca-fontfamily-ui, var(--orca-font-family, var(--df-font)));\n  --df-body-size: var(--orca-fontsize, 15px);\n  --df-body-leading: var(--orca-block-line-height, var(--orca-lineheight-md, 1.47));\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-publish-textarea,\n.orca-df-scope .mom-publish-card--editor .mom-publish-textarea {\n  font-family: var(--df-body-font);\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n  color: var(--moments-text);\n  letter-spacing: -0.01em;\n  font-weight: 400;\n}\n.orca-df-scope .north-luna-moments-no-text {\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n}\n.orca-df-scope .mom-inline-code,\n.orca-df-scope .north-luna-moments-item-text code {\n  font-family: var(--orca-fontfamily-code, var(--df-font-mono));\n  font-size: 0.92em;\n  line-height: inherit;\n  background: var(--df-fill-tertiary);\n  border-radius: 4px;\n  padding: 0.1em 0.35em;\n}\n.orca-df-scope .north-luna-moments-item-text a,\n.orca-df-scope .north-luna-moments-item-text .mom-md-link {\n  color: var(--orca-color-primary-5, var(--df-brand));\n}\n/* ---- 卡片正文层级：正文 > 列表 > meta 日期 ---- */\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  padding: 12px 14px 10px;\n}\n.orca-df-scope .north-luna-moments-item-header {\n  margin-bottom: 6px;\n  gap: 8px;\n}\n.orca-df-scope .north-luna-moments-item-header .mom-avatar,\n.orca-df-scope .north-luna-moments-item-header .mom-avatar-ph {\n  width: 34px;\n  height: 34px;\n  font-size: 14px;\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--orca-color-text-2, var(--b3-theme-on-surface, #3A3A3C));\n}\n.orca-df-scope .north-luna-moments-item-text {\n  margin-bottom: 2px;\n  line-height: 1.55;\n}\n.orca-df-scope .north-luna-moments-item-text > .orca-df-md-p:first-child {\n  color: var(--moments-text);\n  font-weight: 450;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ol {\n  margin: 6px 0 2px;\n  color: color-mix(in srgb, var(--moments-text) 86%, transparent);\n  font-size: 0.96em;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-li {\n  line-height: 1.5;\n  margin: 1px 0;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ol {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-tags {\n  margin-top: 6px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-item-meta {\n  margin-top: 8px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-meta-item {\n  font-size: 11px;\n  line-height: 1.35;\n  letter-spacing: 0.01em;\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  opacity: 0.92;\n}\n.orca-df-scope .north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  margin: 0 6px;\n  opacity: 0.35;\n  font-weight: 500;\n}\n.orca-df-scope .north-luna-moments-item-actions {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-comment-panel {\n  margin-top: 6px;\n}\n.orca-df-scope .orca-df-inline-ref {\n  display: inline;\n  text-decoration: none;\n  border-bottom: 1px dashed color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  cursor: pointer;\n}\n.orca-df-scope .orca-df-inline-ref:hover {\n  border-bottom-style: solid;\n}\n.orca-df-refresh-fab svg { display: block; }\n.orca-df-time-hint {\n  margin: 10px 0 0;\n  font-size: 12px;\n  line-height: 1.4;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-item-text {\n  cursor: pointer;\n}\n.orca-df-load-more {\n  display: flex;\n  justify-content: center;\n  padding: 16px 12px 28px;\n}\n.orca-df-load-more-btn {\n  appearance: none;\n  border: 1px solid color-mix(in srgb, var(--orca-color-text-3, #8e8e93) 35%, transparent);\n  background: color-mix(in srgb, var(--orca-color-bg-1, #fff) 92%, transparent);\n  color: var(--orca-color-text-2, #636366);\n  border-radius: 999px;\n  padding: 8px 18px;\n  font-size: 13px;\n  line-height: 1.3;\n  cursor: pointer;\n}\n.orca-df-load-more-btn:hover {\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n}\n.orca-df-trash-fab { position: relative; }\n.orca-df-trash-fab-count,\n.orca-df-archive-fab-count,\n.orca-df-tools-fab-count {\n  position: absolute; top: -4px; right: -4px;\n  min-width: 16px; height: 16px; padding: 0 4px;\n  border-radius: 999px; background: var(--orca-color-accent, #0F6CBD);\n  color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;\n}\n.orca-df-tools-fab { position: relative; }\n.orca-df-trash-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-trash-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-trash-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-trash-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-trash-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-trash-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-trash-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-trash-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-trash-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-trash-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-trash-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-trash-act.danger { color: var(--orca-color-danger, #c42b1c); border-color: color-mix(in srgb, var(--orca-color-danger, #c42b1c) 35%, transparent); }\n.orca-df-trash-foot { padding-top: 14px; display: flex; justify-content: flex-end; }\n.orca-df-archive-fab { position: relative; }\n.orca-df-archive-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-archive-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-archive-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-archive-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-archive-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-archive-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-archive-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-archive-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-archive-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-archive-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-archive-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-outline-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: stretch; justify-content: center;\n  background: rgba(0, 0, 0, 0.28);\n}\n.orca-df-outline-pop {\n  z-index: 2147483000; width: min(420px, 100vw); max-width: 100vw;\n  max-height: min(92vh, 900px); margin: auto 0;\n  display: flex; flex-direction: column;\n  background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-radius: 12px 12px 0 0;\n  box-shadow: var(--orca-shadow-modal, 0 24px 48px rgba(0,0,0,0.22));\n  overflow: hidden;\n}\n@media (min-width: 720px) {\n  .orca-df-outline-pop {\n    width: min(480px, calc(100vw - 48px)); max-height: 82vh; margin: auto;\n    border-radius: 12px;\n  }\n}\n.orca-df-outline-head {\n  display: flex; align-items: center; gap: 4px;\n  padding: 10px 12px 8px; font-size: 17px; font-weight: 600;\n  border-bottom: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-outline-back {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  width: 36px; height: 36px; border-radius: 10px;\n  display: inline-flex; align-items: center; justify-content: center;\n  color: var(--orca-color-text-1, #1c1c1e);\n}\n.orca-df-outline-back:hover { background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent); }\n.orca-df-outline-head-spacer { width: 36px; }\n.orca-df-outline-years { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 6px; }\n.orca-df-outline-year-row { display: flex; gap: 6px; }\n.orca-df-outline-year,\n.orca-df-outline-year-ph {\n  flex: 1 1 0; min-width: 0; height: 40px;\n}\n.orca-df-outline-year {\n  appearance: none; cursor: pointer;\n  border-radius: 10px; font-size: 13px; font-weight: 600;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-outline-year.is-on {\n  background: var(--df-brand, #007AFF);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n  color: #fff;\n}\n.orca-df-outline-hint {\n  padding: 6px 16px 8px; font-size: 12px;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-months {\n  flex: 1 1 auto; min-height: 120px; overflow: auto;\n  padding: 4px 16px 16px;\n  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start;\n}\n.orca-df-outline-month {\n  appearance: none; cursor: pointer; height: 40px; padding: 0 8px;\n  display: flex; align-items: center; gap: 6px; min-width: 0;\n  border-radius: 10px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n  font-size: 13px; font-weight: 600;\n}\n.orca-df-outline-month:hover {\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n}\n.orca-df-outline-cal { flex-shrink: 0; opacity: 0.95; }\n.orca-df-outline-month-label {\n  flex: 1 1 auto; min-width: 0;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;\n}\n.orca-df-outline-month-count {\n  flex-shrink: 0; font-size: 12px; font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-empty {\n  grid-column: 1 / -1; padding: 24px 8px; text-align: center;\n  color: var(--orca-color-text-3, #8e8e93); font-size: 14px; font-weight: 400;\n}\n.orca-df-scope .mom-calendar-content {\n  max-width: min(680px, 96vw) !important;\n}\n.orca-df-scope .mom-calendar-content:has(.mom-calendar-heat-wrap) {\n  width: min(680px, 96vw) !important;\n}\n.orca-df-scope .mom-calendar-heat-wrap {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n  padding: 8px 8px 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.orca-df-scope .mom-calendar-heat-half {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-bottom: 14px;\n  border-bottom: 1px solid color-mix(in srgb, var(--orca-color-border, rgba(0,0,0,0.08)) 80%, transparent);\n}\n.orca-df-scope .mom-calendar-heat-half:last-child {\n  border-bottom: none;\n  padding-bottom: 0;\n}\n.orca-df-scope .mom-calendar-heat-caption {\n  font-size: 13px;\n  font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .mom-calendar-heat-empty {\n  font-size: 14px;\n  color: var(--orca-color-text-3, #8e8e93);\n  padding: 16px 0;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n  width: 100%;\n  justify-content: space-between;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-column {\n  flex: 1 1 0;\n  min-width: 12px;\n  max-width: 18px;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-cell {\n  width: 100%;\n  min-width: 12px;\n  min-height: 12px;\n  aspect-ratio: 1;\n  border-radius: 4px;\n  background-color: #EBEDF0;\n  transition: transform .12s ease;\n  cursor: default;\n  box-shadow: none;\n}\n.orca-df-scope .mom-calendar-cell[data-date] { cursor: pointer; }\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-cell:hover {\n  transform: scale(1.18);\n  box-shadow: none;\n  outline: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  outline-offset: 0;\n  z-index: 1;\n}\n.orca-df-scope .mom-calendar-cell.level-empty {\n  background-color: transparent;\n  opacity: 0;\n  pointer-events: none;\n}\n.orca-df-scope .mom-calendar-cell.level-empty:hover {\n  transform: none;\n  outline: none;\n}\n.orca-df-scope .mom-calendar-cell.level-0 { background-color: #EBEDF0; }\n.orca-df-scope .mom-calendar-cell.level-1 { background-color: #B6E3FF; }\n.orca-df-scope .mom-calendar-cell.level-2 { background-color: #54AEFF; }\n.orca-df-scope .mom-calendar-cell.level-3 { background-color: #218BFF; }\n.orca-df-scope .mom-calendar-cell.level-4 { background-color: #0550AE; }\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-months {\n  position: relative;\n  margin-top: 6px;\n  height: 20px;\n  min-width: 0;\n  width: 100%;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 13px;\n  color: var(--orca-color-text-3, #8e8e93);\n  white-space: nowrap;\n}\n/* ---- Tools / stats / export / images / layout ---- */\n.orca-df-quickbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-quick-kw { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-scope .mom-fab-stack .orca-df-search-fab.is-on,\n.orca-df-scope .mom-fab-stack .orca-df-tools-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-layout-compact .mom-cover { height: clamp(110px, 16vh, 180px); }\n.orca-df-layout-compact .mom-list, .orca-df-layout-compact .north-luna-moments-list { padding-left: 12px; padding-right: 12px; }\n.orca-df-layout-tall .mom-cover { height: clamp(220px, 34vh, 380px); }\n.orca-df-tools-backdrop, .orca-df-images-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-tools-pop {\n  z-index: 2147483000; width: 440px; max-width: calc(100vw - 48px); max-height: 80vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-tools-wide { width: 560px; }\n.orca-df-tools-head {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-tools-head-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }\n.orca-df-tools-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-tools-body { overflow: auto; flex: 1 1 auto; min-height: 80px; display: flex; flex-direction: column; gap: 10px; }\n.orca-df-tools-muted { font-size: 13px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-tools-label { font-size: 13px; font-weight: 500; }\n.orca-df-tools-input {\n  width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: var(--orca-color-bg-2, #f5f5f7); color: inherit; font-size: 14px;\n}\n.orca-df-tools-tile {\n  appearance: none; text-align: left; cursor: pointer;\n  display: flex; flex-direction: column; gap: 4px;\n  padding: 12px 14px; border-radius: 10px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  background: var(--orca-color-bg-2, #f5f5f7); color: inherit;\n}\n.orca-df-tools-tile:hover { border-color: var(--df-brand, #007AFF); }\n.orca-df-tools-tile b { font-size: 15px; }\n.orca-df-tools-tile span { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-tools-btn {\n  appearance: none; cursor: pointer; text-align: left;\n  padding: 10px 14px; border-radius: 8px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; color: inherit; font-size: 14px;\n}\n.orca-df-tools-btn.primary, .orca-df-tools-btn.is-on {\n  background: var(--df-brand, #007AFF); color: #fff; border-color: transparent;\n}\n.orca-df-tools-mini {\n  appearance: none; cursor: pointer; padding: 4px 10px; border-radius: 6px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-tools-mini:disabled { opacity: 0.4; cursor: default; }\n.orca-df-tools-actions { display: flex; flex-wrap: wrap; gap: 8px; }\n.orca-df-tools-status { font-size: 13px; color: var(--orca-color-text-2, #636366); }\n.orca-df-tools-sec { margin-top: 8px; }\n.orca-df-tools-sec-t { font-weight: 600; margin-bottom: 6px; }\n.orca-df-tools-row {\n  display: flex; justify-content: space-between; gap: 12px;\n  padding: 6px 0; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-stats-grid {\n  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;\n}\n@media (max-width: 520px) { .orca-df-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }\n.orca-df-stats-card {\n  padding: 12px 10px; border-radius: 10px;\n  background: var(--orca-color-bg-2, #f5f5f7); text-align: center;\n}\n.orca-df-stats-n { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }\n.orca-df-stats-l { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); margin-top: 2px; }\n.orca-df-tools-entry {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 10px 0; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-tools-entry-main { min-width: 0; flex: 1; }\n.orca-df-tools-entry-t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.orca-df-img-list { display: flex; flex-direction: column; gap: 8px; }\n.orca-df-img-row { display: flex; align-items: center; gap: 10px; }\n.orca-df-img-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: #eee; flex-shrink: 0; }\n.orca-df-img-meta { flex: 1; min-width: 0; }\n.orca-df-img-acts { display: flex; gap: 4px; flex-shrink: 0; }\n.orca-df-img-progress { height: 4px; border-radius: 2px; background: var(--orca-color-bg-2, #eee); overflow: hidden; }\n.orca-df-img-progress-bar { height: 100%; background: var(--df-brand, #007AFF); transition: width .2s ease; }";
 
 // ============================================================
 // src/orca-entry.js — Orca Note 适配层（日记流 orca-diaryflow）
@@ -5081,7 +6099,7 @@ var ORCA_CSS = "/* src/style.css */\n.mom-root {\n  position: relative;\n  heigh
 var ORCA_PANEL_TYPE = "orca-diaryflow.panel";
 var ORCA_BTN_ID = "orca-diaryflow.button";
 var ORCA_SIDETOOL_ID = "orca-diaryflow.sidetool";
-var ORCA_STYLE_ID = "orca-diaryflow-style-v34";
+var ORCA_STYLE_ID = "orca-diaryflow-style-v39";
 var orcaPluginName = "";
 var orcaRegisteredPanel = false;
 var orcaReady = false;
@@ -5546,6 +6564,9 @@ async function orcaRefreshFeed(opts) {
 
 function orcaApplyFeedWindow(cfg) {
   var all = orcaFeedAllItems || [];
+  if (typeof orcaToolsQuickFilterItems === "function" && orcaCtx && orcaCtx.filters) {
+    all = orcaToolsQuickFilterItems(all, orcaCtx.filters);
+  }
   var limit = Math.max(ORCA_FEED_PAGE_SIZE, Number(orcaFeedLimit) || ORCA_FEED_PAGE_SIZE);
   orcaFeedLimit = limit;
   var visible = all.slice(0, limit);
@@ -5621,7 +6642,7 @@ async function orcaManualRefreshFeed(ctx) {
 function orcaBuildCtx() {
   var c = {
     plugin: orcaShim,
-    filters: { kw: "", tags: [] },
+    filters: { kw: "", tags: [], hasImage: false, hasLocation: false, pinnedOnly: false },
     view: "feed",
     calYear: new Date().getFullYear(),
     mounts: [],
@@ -5775,38 +6796,14 @@ function orcaEnhanceFeedDom(el, ctx) {
     if (first) stack.insertBefore(syncBtn, first);
     else stack.appendChild(syncBtn);
   }
-  if (stack && !stack.querySelector("[data-df-act=open-trash]")) {
-    var trashBtn = document.createElement("button");
-    trashBtn.type = "button";
-    trashBtn.className = "mom-outline-fab orca-df-trash-fab";
-    trashBtn.setAttribute("data-df-act", "open-trash");
-    trashBtn.title = "回收站";
-    trashBtn.setAttribute("aria-label", "回收站");
-    trashBtn.innerHTML =
-      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
-      '<span class="orca-df-trash-fab-count" hidden>0</span>';
-    var syncEl = stack.querySelector("[data-df-act=refresh-feed]");
-    if (syncEl && syncEl.nextSibling) stack.insertBefore(trashBtn, syncEl.nextSibling);
-    else if (syncEl) stack.appendChild(trashBtn);
-    else stack.appendChild(trashBtn);
+  // 回收站 / 归档柜 / 搜索已并入「工具」；清掉旧版独立 FAB
+  if (stack) {
+    stack.querySelectorAll("[data-df-act=open-trash], [data-df-act=open-archive], [data-df-act=open-search]").forEach(function (n) {
+      n.remove();
+    });
   }
-  if (stack && !stack.querySelector("[data-df-act=open-archive]")) {
-    var archBtn = document.createElement("button");
-    archBtn.type = "button";
-    archBtn.className = "mom-outline-fab orca-df-archive-fab";
-    archBtn.setAttribute("data-df-act", "open-archive");
-    archBtn.title = "归档柜";
-    archBtn.setAttribute("aria-label", "归档柜");
-    archBtn.innerHTML =
-      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg>' +
-      '<span class="orca-df-archive-fab-count" hidden>0</span>';
-    var trashEl = stack.querySelector("[data-df-act=open-trash]");
-    if (trashEl && trashEl.nextSibling) stack.insertBefore(archBtn, trashEl.nextSibling);
-    else if (trashEl) stack.appendChild(archBtn);
-    else stack.appendChild(archBtn);
-  }
-  orcaRefreshTrashFab(ctx, el);
-  orcaRefreshArchiveFab(ctx, el);
+  if (typeof orcaEnhanceToolsUi === "function") orcaEnhanceToolsUi(el, ctx);
+  orcaRefreshToolsFab(ctx, el);
   // FAB 标签筛选高亮
   var tagFab = el.querySelector(".mom-tag-fab, [data-action=open-tag-filter]");
   if (tagFab) {
@@ -5814,7 +6811,7 @@ function orcaEnhanceFeedDom(el, ctx) {
     tagFab.classList.toggle("is-on", on);
     tagFab.title = on ? ("标签筛选 · #" + ctx.filters.tags[0]) : "标签筛选";
   }
-  // 标签筛选条（面板内关键词搜索已移除，改用虎鲸自带搜索）
+  // 标签筛选条
   if (!el.querySelector(".orca-df-tagbar")) {
     OrcaBlocks.collectUserTags().then(function (tags) {
       if (!el.isConnected) return;
@@ -5829,6 +6826,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         (active ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-tag">全部</button>' : "");
       var list = el.querySelector(".mom-list") || el.querySelector("[data-list]");
       if (list && list.parentNode) list.parentNode.insertBefore(bar, list);
+      if (typeof orcaEnhanceToolsUi === "function") orcaEnhanceToolsUi(el, ctx);
     }).catch(function () {});
   }
   // 卡片：精简底栏；「⋯」内联展开图标（置顶 / 标签 / 打开 / 删除）
@@ -5900,6 +6898,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         '<button type="button" class="north-luna-moments-action-btn' + (it.pinned ? " active is-on" : "") + '" data-action="pin" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(pinTitle) + '" aria-label="' + orcaEsc(pinTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v4l1 1 1-1v-4h5v-2l-2-2z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="归档" aria-label="归档"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-tag-btn' + (userTags.length ? " is-on" : "") + '" data-action="tag" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(tagTitle) + '" aria-label="' + orcaEsc(tagTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21.4 11.6l-9-9C12 2.2 11.5 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .5.2 1 .6 1.4l9 9c.4.4.9.6 1.4.6s1-.2 1.4-.6l7-7c.4-.4.6-.9.6-1.4 0-.5-.2-1-.6-1.4zM6.5 8C5.7 8 5 7.3 5 6.5S5.7 5 6.5 5 8 5.7 8 6.5 7.3 8 6.5 8z"></path></svg></button>' +
+        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="管理图片" aria-label="管理图片"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
         (bid && isFinite(Number(bid))
           ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="在虎鲸中打开" aria-label="在虎鲸中打开"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
@@ -6524,18 +7523,26 @@ function orcaDeleteComment(ctx, btn) {
     });
 }
 
-function orcaRefreshTrashFab(ctx, root) {
-  if (!OrcaBlocks || typeof OrcaBlocks.trashCount !== "function") return;
+function orcaRefreshToolsFab(ctx, root) {
   var scope = root || (ctx && ctx.container) || document;
-  OrcaBlocks.trashCount().then(function (n) {
+  var pTrash = (OrcaBlocks && typeof OrcaBlocks.trashCount === "function")
+    ? OrcaBlocks.trashCount()
+    : Promise.resolve(0);
+  var pArch = (OrcaBlocks && typeof OrcaBlocks.listArchivedFeed === "function")
+    ? OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
+      return (feed && feed.items && feed.items.length) || 0;
+    })
+    : Promise.resolve(0);
+  Promise.all([pTrash, pArch]).then(function (arr) {
+    var n = (Number(arr[0]) || 0) + (Number(arr[1]) || 0);
     var nodes = (scope.querySelectorAll
-      ? scope.querySelectorAll(".orca-df-trash-fab")
+      ? scope.querySelectorAll(".orca-df-tools-fab")
       : []);
     if (!nodes.length && typeof document !== "undefined") {
-      nodes = document.querySelectorAll(".orca-df-scope .orca-df-trash-fab");
+      nodes = document.querySelectorAll(".orca-df-scope .orca-df-tools-fab");
     }
     Array.prototype.forEach.call(nodes, function (btn) {
-      var badge = btn.querySelector(".orca-df-trash-fab-count");
+      var badge = btn.querySelector(".orca-df-tools-fab-count");
       if (!badge) return;
       if (n > 0) {
         badge.hidden = false;
@@ -6546,6 +7553,14 @@ function orcaRefreshTrashFab(ctx, root) {
       }
     });
   }).catch(function () { /* ignore */ });
+}
+
+function orcaRefreshTrashFab(ctx, root) {
+  orcaRefreshToolsFab(ctx, root);
+}
+
+function orcaRefreshArchiveFab(ctx, root) {
+  orcaRefreshToolsFab(ctx, root);
 }
 
 function orcaTrashFormatTime(ts) {
@@ -6898,31 +7913,6 @@ function orcaOpenMonthOutline(ctx) {
   document.addEventListener("keydown", onKey, true);
 }
 
-function orcaRefreshArchiveFab(ctx, root) {
-  if (!OrcaBlocks || typeof OrcaBlocks.listArchivedFeed !== "function") return;
-  var scope = root || (ctx && ctx.container) || document;
-  OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
-    var n = (feed && feed.items && feed.items.length) || 0;
-    var nodes = (scope.querySelectorAll
-      ? scope.querySelectorAll(".orca-df-archive-fab")
-      : []);
-    if (!nodes.length && typeof document !== "undefined") {
-      nodes = document.querySelectorAll(".orca-df-scope .orca-df-archive-fab");
-    }
-    Array.prototype.forEach.call(nodes, function (btn) {
-      var badge = btn.querySelector(".orca-df-archive-fab-count");
-      if (!badge) return;
-      if (n > 0) {
-        badge.hidden = false;
-        badge.textContent = n > 99 ? "99+" : String(n);
-      } else {
-        badge.hidden = true;
-        badge.textContent = "0";
-      }
-    });
-  }).catch(function () { /* ignore */ });
-}
-
 function orcaCloseArchiveDialog() {
   var old = document.querySelector(".orca-df-archive-backdrop");
   if (old) old.remove();
@@ -7032,6 +8022,9 @@ function orcaOpenArchiveDialog(ctx) {
 }
 
 function orcaHandleDfAct(ctx, act, btn) {
+  if (typeof orcaHandleToolsAct === "function" && orcaHandleToolsAct(ctx, act, btn)) {
+    return;
+  }
   if (act === "refresh-feed") {
     orcaManualRefreshFeed(ctx);
     return;
@@ -7047,6 +8040,7 @@ function orcaHandleDfAct(ctx, act, btn) {
   if (act === "clear-tag") {
     ctx.filters.tags = [];
     ctx.filters.kw = "";
+    if (typeof orcaToolsClearQuickFilters === "function") orcaToolsClearQuickFilters(ctx.filters);
     orcaRefreshFeed().then(function () { ctx.reApp(); });
     return;
   }

@@ -12,7 +12,7 @@ var DF_TUTORIAL_KEY = "tutorial-inserted-v1"; // 兼容旧标记；现以 dismis
 var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
 var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
 /** 使用说明正文版本：改 DF_TUTORIAL_TEXT 时必须递增，已有说明块会按此同步 */
-var DF_TUTORIAL_CONTENT_VER = "0.3.7";
+var DF_TUTORIAL_CONTENT_VER = "0.3.15";
 var DF_TUTORIAL_CONTENT_VER_KEY = "tutorial-content-ver";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
@@ -35,8 +35,11 @@ var DF_TUTORIAL_TEXT = [
   "封面区：设置封面、头像与签名",
   "底栏「地点」：写入正文末行「地点：…」，并同步属性",
   "评论：写入该条目下的虎鲸子块，可在日记页看到",
-  "「⋯」展开：置顶、归档、改标签、打开虎鲸、删除（进回收站）",
-  "FAB：标签筛选、月份大纲、回收站、归档柜；列表底部可「加载更多」",
+  "「⋯」展开：置顶、归档、改标签、管理图片、打开虎鲸、删除（进回收站）",
+  "FAB：同步、工具、标签筛选、月份大纲；列表底部可「加载更多」",
+  "—— 筛选与工具 ——",
+  "工具：归档柜、回收站、搜索、统计、导出、回顾、布局",
+  "快捷筛选：有图 / 有地点 / 仅置顶；布局可选紧凑 / 舒适 / 高封面（窄屏建议紧凑）",
   "—— 重要规则 ——",
   "只有带「日记流」标签的日记块才会进入时间线",
   "月份大纲可按年份定位，再点月份跳到时间线对应分组",
@@ -2625,6 +2628,7 @@ var OrcaBlocks = {
   markdownLineToFragments: dfMarkdownLineToFragments,
   contentToMarkdown: dfContentToMarkdown,
   syncImagesToBlock: dfSyncImagesToBlock,
+  srcToOrcaAsset: dfSrcToOrcaAsset,
   resolveOrcaAssetSrc: dfResolveOrcaAssetSrc,
   hasTag: dfHasTag
 };
