@@ -8407,6 +8407,7 @@ function orcaOpenComposeDialog(ctx) {
     // 也不要在事件分发中直接改 DOM，统一延后到下一个 tick。
     tplSel.addEventListener("change", function () {
       var v = String(tplSel.value || "");
+      // 选中自定义模板时保留「删除模板」按钮，便于删除
       if (tplDelBtn) tplDelBtn.hidden = v.charAt(0) !== "c";
       if (!v || !ta) return;
       var text = "";
@@ -8417,11 +8418,9 @@ function orcaOpenComposeDialog(ctx) {
         var ct = customT[Number(v.slice(1))];
         text = ct ? ct.text : "";
       }
-      if (!text) { setTimeout(function () { try { tplSel.value = ""; } catch (e) {} }, 0); return; }
+      if (!text) return;
       setTimeout(function () {
         ta.value = text;
-        try { tplSel.value = ""; } catch (eR) { /* ignore */ }
-        if (tplDelBtn) tplDelBtn.hidden = true;
         try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (eF) { /* ignore */ }
       }, 0);
     });
