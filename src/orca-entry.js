@@ -476,16 +476,19 @@ function orcaOpenComposeDialog(ctx) {
     renderImgs();
   });
   if (tplSel) {
+    // 注意：不要在原生 select 的 change 事件里同步弹 confirm（Electron 下会死锁）；
+    // 也不要在事件分发中直接改 DOM。统一延后到下一个 tick。
     tplSel.addEventListener("change", function () {
       var idx = Number(tplSel.value);
       var tpls = orcaComposeTemplates();
-      if (!tpls[idx]) return;
-      var text = tpls[idx].text || "";
-      if (!text) { tplSel.value = ""; return; }
-      if (ta.value.trim() && !window.confirm(dfT("用模板覆盖当前内容？"))) { tplSel.value = ""; return; }
-      ta.value = text;
-      try { ta.focus(); } catch (eF) { /* ignore */ }
-      tplSel.value = "";
+      var text = (tpls[idx] && tpls[idx].text) || "";
+      if (!text) { setTimeout(function () { try { tplSel.value = ""; } catch (e) {} }, 0); return; }
+      if (!ta) return;
+      setTimeout(function () {
+        ta.value = text;
+        try { tplSel.value = ""; } catch (eR) { /* ignore */ }
+        try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (eF) { /* ignore */ }
+      }, 0);
     });
   }
   if (ta) { try { ta.focus(); } catch (eF) { /* ignore */ } }

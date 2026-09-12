@@ -2326,7 +2326,6 @@ var DF_I18N_EN = {
     "Edit text, images and tags in the Orca journal • tap the button below to create and open",
   "新建日记": "New entry",
   "模板": "Template",
-  "用模板覆盖当前内容？": "Replace current content with the template?",
   "写点什么…": "Write something…",
   "标签（空格/逗号分隔）": "Tags (space/comma separated)",
   "天气": "Weather",
@@ -2483,22 +2482,6 @@ var DF_I18N_EN = {
   "正在生成…": "Generating…",
   "已导出长图": "Long image exported",
   "打印窗口被拦截": "Print window blocked",
-  "标签重命名": "Rename tags",
-  "批量改名 / 合并 / 删除标签": "Bulk rename / merge / delete tags",
-  "把一个用户标签在所有条目中改为新标签；新标签留空则删除该标签。":
-    "Rename a user tag on all entries; leave the new tag empty to delete it.",
-  "原标签": "Old tag",
-  "新标签（留空则删除）": "New tag (empty to delete)",
-  "新标签名": "New tag name",
-  "应用": "Apply",
-  "请选择原标签": "Choose the old tag",
-  "新标签与原标签相同": "New tag equals old tag",
-  "将 #": "Change #",
-  " 改为 ": " to ",
-  "（删除）": " (delete)",
-  "正在处理…": "Processing…",
-  "已处理 ": "Processed ",
-  "处理失败": "Update failed",
   "备份与恢复": "Backup & Restore",
   "导出 / 恢复 JSON 备份": "Export / restore JSON backup",
   "备份保存到插件备份目录（JSON）。恢复会新增条目，不改动现有数据。":
@@ -6287,7 +6270,6 @@ function orcaOpenToolsHub(ctx) {
     '<button type="button" class="orca-df-tools-tile" data-df-tools="layout"><b>布局</b><span>封面高度：紧凑 / 舒适 / 高封面</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="cleanup"><b>清理图片</b><span>移除未引用的插件图片</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="backup"><b>备份与恢复</b><span>导出 / 恢复 JSON 备份</span></button>' +
-    '<button type="button" class="orca-df-tools-tile" data-df-tools="tags"><b>标签重命名</b><span>批量改名 / 合并 / 删除标签</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="year"><b>年度报告</b><span>年度统计，可导出长图 / PDF</span></button>' +
     "</div></div>";
   dfMountDialog(host);
@@ -6328,7 +6310,6 @@ function orcaOpenToolsHub(ctx) {
     else if (act === "layout") orcaOpenLayoutDialog(ctx);
     else if (act === "cleanup") orcaOpenMediaCleanupDialog(ctx);
     else if (act === "backup") orcaOpenBackupDialog(ctx);
-    else if (act === "tags") orcaOpenTagRenameDialog(ctx);
     else if (act === "year") orcaOpenYearReportDialog(ctx);
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
@@ -7393,80 +7374,6 @@ async function orcaToolsShareEntry(item, cfg) {
   });
 }
 
-function orcaOpenTagRenameDialog(ctx) {
-  orcaCloseToolsDialog();
-  var host = document.createElement("div");
-  host.className = "orca-df-tools-backdrop orca-df-scope";
-  host.innerHTML =
-    '<div class="orca-df-tools-pop" role="dialog" aria-label="标签重命名">' +
-    '<div class="orca-df-tools-head"><span>标签重命名</span>' +
-    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
-    '<div class="orca-df-tools-body">' +
-    '<p class="orca-df-tools-muted">把一个用户标签在所有条目中改为新标签；新标签留空则删除该标签。</p>' +
-    '<label class="orca-df-tools-label">原标签</label>' +
-    '<select class="orca-df-tools-input" data-tr-from><option value="">加载中…</option></select>' +
-    '<label class="orca-df-tools-label">新标签（留空则删除）</label>' +
-    '<input type="text" class="orca-df-tools-input" data-tr-to placeholder="新标签名" maxlength="40" />' +
-    '<div class="orca-df-tools-actions">' +
-    '<button type="button" class="orca-df-tools-btn primary" data-tr="apply">应用</button>' +
-    "</div>" +
-    '<div class="orca-df-tools-status" data-tr-status hidden></div>' +
-    "</div></div>";
-  dfMountDialog(host);
-  var fromSel = host.querySelector("[data-tr-from]");
-  var toInp = host.querySelector("[data-tr-to]");
-  var statusEl = host.querySelector("[data-tr-status]");
-  var busy = false;
-  function setStatus(t) { statusEl.hidden = !t; statusEl.textContent = t || ""; }
-  OrcaBlocks.collectUserTags().then(function (tags) {
-    if (!fromSel || !fromSel.isConnected) return;
-    fromSel.innerHTML = '<option value="">—</option>' +
-      (tags || []).map(function (t) { return '<option value="' + orcaToolsEsc(t) + '">#' + orcaToolsEsc(t) + "</option>"; }).join("");
-  }).catch(function () { if (fromSel) fromSel.innerHTML = '<option value="">—</option>'; });
-  host.addEventListener("mousedown", function (e) { if (e.target === host) orcaCloseToolsDialog(); });
-  host.addEventListener("click", function (e) {
-    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
-    var btn = e.target.closest('[data-tr="apply"]');
-    if (!btn || busy) return;
-    var from = fromSel ? String(fromSel.value || "") : "";
-    var to = toInp ? String(toInp.value || "").replace(/^#/, "").trim() : "";
-    if (!from) { setStatus(dfT("请选择原标签")); return; }
-    if (to === from) { setStatus(dfT("新标签与原标签相同")); return; }
-    if (dfGetSetting("confirmDelete") && !window.confirm(dfT("将 #") + from + dfT(" 改为 ") + (to ? "#" + to : dfT("（删除）")) + "?")) return;
-    busy = true;
-    btn.disabled = true;
-    setStatus(dfT("正在处理…"));
-    OrcaBlocks.listFeed({ skipHeal: true, includeArchived: true, preferLive: true, fullText: false }).then(async function (feed) {
-      var items = (feed && feed.items) || [];
-      var targets = items.filter(function (it) { return (it.tags || []).indexOf(from) >= 0; });
-      var done = 0;
-      for (var i = 0; i < targets.length; i++) {
-        var it = targets[i];
-        var next = (it.tags || []).filter(function (t) { return t !== from; });
-        if (to && next.indexOf(to) < 0) next.push(to);
-        try { await OrcaBlocks.updateEntryTags(it.blockId || it.id, next); done++; } catch (e) { /* ignore */ }
-        btn.textContent = dfT("应用") + " " + done + "/" + targets.length;
-      }
-      setStatus(dfT("已处理 ") + done + dfT(" 条"));
-      return orcaRefreshFeed({ skipHeal: true, preferLive: true });
-    }).then(function () {
-      if (ctx && ctx.reApp) ctx.reApp();
-    }).catch(function () {
-      setStatus(dfT("处理失败"));
-    }).then(function () {
-      busy = false;
-      btn.disabled = false;
-      btn.textContent = dfT("应用");
-      OrcaBlocks.collectUserTags().then(function (tags) {
-        if (!fromSel || !fromSel.isConnected) return;
-        fromSel.innerHTML = '<option value="">—</option>' +
-          (tags || []).map(function (t) { return '<option value="' + orcaToolsEsc(t) + '">#' + orcaToolsEsc(t) + "</option>"; }).join("");
-      });
-    });
-  });
-  orcaToolsBindEsc(orcaCloseToolsDialog);
-}
-
 function orcaCloseImagesDialog() {
   orcaToolsCloseBackdrop(".orca-df-images-backdrop");
   if (orcaImagesBlobUrls.length) {
@@ -8327,16 +8234,19 @@ function orcaOpenComposeDialog(ctx) {
     renderImgs();
   });
   if (tplSel) {
+    // 注意：不要在原生 select 的 change 事件里同步弹 confirm（Electron 下会死锁）；
+    // 也不要在事件分发中直接改 DOM。统一延后到下一个 tick。
     tplSel.addEventListener("change", function () {
       var idx = Number(tplSel.value);
       var tpls = orcaComposeTemplates();
-      if (!tpls[idx]) return;
-      var text = tpls[idx].text || "";
-      if (!text) { tplSel.value = ""; return; }
-      if (ta.value.trim() && !window.confirm(dfT("用模板覆盖当前内容？"))) { tplSel.value = ""; return; }
-      ta.value = text;
-      try { ta.focus(); } catch (eF) { /* ignore */ }
-      tplSel.value = "";
+      var text = (tpls[idx] && tpls[idx].text) || "";
+      if (!text) { setTimeout(function () { try { tplSel.value = ""; } catch (e) {} }, 0); return; }
+      if (!ta) return;
+      setTimeout(function () {
+        ta.value = text;
+        try { tplSel.value = ""; } catch (eR) { /* ignore */ }
+        try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (eF) { /* ignore */ }
+      }, 0);
     });
   }
   if (ta) { try { ta.focus(); } catch (eF) { /* ignore */ } }
