@@ -3178,8 +3178,7 @@ var DF_SETTINGS_DEFAULTS = {
   autoCleanImages: false,
   exportImageMaxWidth: 0,
   autoBackup: false,
-  backupKeep: 7,
-  nativeEntryBody: false
+  backupKeep: 7
 };
 
 function dfSettingsObject() {
@@ -3268,12 +3267,6 @@ async function dfRegisterSettings() {
         description: dfT("自动备份最多保留的份数"),
         type: "number",
         defaultValue: DF_SETTINGS_DEFAULTS.backupKeep
-      },
-      nativeEntryBody: {
-        label: dfT("正文原生渲染（实验）"),
-        description: dfT("卡片正文改用虎鲸原生块渲染，尽量完整显示表格/颜色/嵌入等格式；如异常请关闭"),
-        type: "boolean",
-        defaultValue: DF_SETTINGS_DEFAULTS.nativeEntryBody
       }
     });
   } catch (e) {
