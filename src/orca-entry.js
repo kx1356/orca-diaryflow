@@ -357,6 +357,7 @@ function orcaOpenComposeDialog(ctx) {
           '<input type="datetime-local" class="mom-inp" data-date value="' + orcaEsc(orcaToDatetimeLocalValue(Date.now())) + '">' +
           '<select class="mom-inp orca-df-compose-mood" data-mood>' + moodOpts + "</select>" +
           '<input type="text" class="mom-inp orca-df-compose-weather" data-weather placeholder="' + orcaEsc(dfT("天气")) + '" maxlength="20">' +
+          '<input type="text" class="mom-inp orca-df-compose-loc" data-loc placeholder="' + orcaEsc(dfT("地点")) + '" maxlength="80">' +
         "</div>" +
       "</div>" +
       '<div class="mom-modal-foot">' +
@@ -373,6 +374,7 @@ function orcaOpenComposeDialog(ctx) {
   var dateInp = overlay.querySelector("[data-date]");
   var moodSel = overlay.querySelector("[data-mood]");
   var weatherInp = overlay.querySelector("[data-weather]");
+  var locInp = overlay.querySelector("[data-loc]");
   var busy = false;
 
   function renderImgs() {
@@ -401,7 +403,8 @@ function orcaOpenComposeDialog(ctx) {
         date: d,
         text: ta.value || "",
         tags: orcaParseTags(tagsInp.value),
-        images: files.map(function (f) { return f.__url; })
+        images: files.map(function (f) { return f.__url; }),
+        location: String(locInp && locInp.value || "").trim()
       });
       var id = block && block.id;
       var mood = moodSel.value || "";
