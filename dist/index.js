@@ -8952,9 +8952,16 @@ function orcaMountNativeBodies(el, ctx) {
   var R = window.React;
   var createRoot = window.createRoot || (window.ReactDOM && window.ReactDOM.createRoot);
   var Block = orca.components && orca.components.Block;
+  var Ctx = orca.contexts && orca.contexts.BlockEditorContext;
   var panelId = ctx && ctx.orcaPanelId;
   var Boundary = orcaGetNativeBoundary();
-  if (!R || !createRoot || !Block || !panelId || !Boundary) return;
+  if (!R || !createRoot || !Block || !panelId || !Boundary) {
+    orcaNativeDiagNotify({
+      hasReact: !!R, hasCreateRoot: !!createRoot, hasBlock: !!Block,
+      hasContext: !!Ctx, panelId: panelId || ""
+    });
+    return;
+  }
   var roots = [];
   (ctx.data().items || []).forEach(function (it) {
     if (!it) return;
@@ -8974,12 +8981,18 @@ function orcaMountNativeBodies(el, ctx) {
     }
     if (textEl) textEl.style.display = "none";
     var self = { textEl: textEl, holder: holder };
+    var node = R.createElement(Block, {
+      panelId: panelId, blockId: Number(bid), blockLevel: 0, indentLevel: 0, renderingMode: "simple"
+    });
+    if (Ctx && Ctx.Provider) {
+      node = R.createElement(Ctx.Provider, {
+        value: { editor: R.createRef(), panelId: panelId, rootBlockId: Number(bid), active: false }
+      }, node);
+    }
     try {
       var root = createRoot(holder);
       root.render(
-        R.createElement(Boundary, { onError: function () { if (self.textEl) self.textEl.style.display = ""; } },
-          R.createElement(Block, { panelId: panelId, blockId: Number(bid), blockLevel: 0, indentLevel: 0, renderingMode: "simple" })
-        )
+        R.createElement(Boundary, { onError: function () { if (self.textEl) self.textEl.style.display = ""; } }, node)
       );
       roots.push({ root: root, node: holder });
     } catch (eMount) {
@@ -8988,6 +9001,37 @@ function orcaMountNativeBodies(el, ctx) {
     }
   });
   el.__dfNativeRoots = roots;
+  setTimeout(function () {
+    var empty = 0;
+    roots.forEach(function (r) {
+      if (r.node && r.node.isConnected && r.node.childNodes.length === 0) {
+        empty++;
+        var t = r.node.nextElementSibling;
+        if (t && t.classList && t.classList.contains("north-luna-moments-item-text")) t.style.display = "";
+      }
+    });
+    if (empty && !orcaNativeDiagDone) {
+      orcaNativeDiagDone = true;
+      try { console.warn("[orca-diaryflow] native block rendered empty; hasContext=", !!Ctx, "panelId=", panelId); } catch (e) { /* ignore */ }
+      try { orca.notify("warn", "原生渲染为空（可能不支持在非编辑器面板渲染）", { title: "日记流" }); } catch (e2) { /* ignore */ }
+    }
+  }, 700);
+}
+
+var orcaNativeDiagDone = false;
+function orcaNativeDiagNotify(env) {
+  if (orcaNativeDiagDone) return;
+  orcaNativeDiagDone = true;
+  var miss = [];
+  if (!env.hasReact) miss.push("React");
+  if (!env.hasCreateRoot) miss.push("createRoot");
+  if (!env.hasBlock) miss.push("components.Block");
+  if (!env.panelId) miss.push("panelId");
+  if (!env.hasContext) miss.push("contexts.BlockEditorContext");
+  try { console.warn("[orca-diaryflow] native body unavailable:", miss.join(", "), env); } catch (e) { /* ignore */ }
+  try {
+    orca.notify("warn", "原生渲染不可用：" + miss.join(", "), { title: "日记流" });
+  } catch (e2) { /* ignore */ }
 }
 
 /** 仅本地化 feed 内 vendor 控件/空状态的静态文案，绝不触碰用户内容 */
