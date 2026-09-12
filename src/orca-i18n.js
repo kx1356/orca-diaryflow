@@ -117,6 +117,7 @@ var DF_I18N_EN = {
   "无法创建日记流面板": "Could not create the Diary Flow panel",
   "暂无月份分组": "No month groups",
   "该月暂无日记": "No entries in that month",
+  "该日期暂无动态，已打开当天日记": "No entry on that date — opened that day's journal",
   "日历": "Calendar",
   "照片": "Photos",
   "热度": "Heatmap",

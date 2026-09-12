@@ -1257,6 +1257,35 @@ function orcaOpenImagesDialog(ctx, item) {
     return { src: src, status: "ready", error: "" };
   });
   var busy = false;
+  var dragIdx = -1;
+  listEl.addEventListener("dragstart", function (e) {
+    var row = e.target.closest && e.target.closest("[data-idx]");
+    if (!row) return;
+    dragIdx = Number(row.getAttribute("data-idx"));
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    row.classList.add("is-dragging");
+  });
+  listEl.addEventListener("dragend", function (e) {
+    var row = e.target.closest && e.target.closest("[data-idx]");
+    if (row) row.classList.remove("is-dragging");
+    dragIdx = -1;
+  });
+  listEl.addEventListener("dragover", function (e) {
+    if (dragIdx < 0) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  });
+  listEl.addEventListener("drop", function (e) {
+    var row = e.target.closest && e.target.closest("[data-idx]");
+    if (!row || dragIdx < 0) return;
+    e.preventDefault();
+    var to = Number(row.getAttribute("data-idx"));
+    if (!isFinite(to) || to === dragIdx) return;
+    var moved = rows.splice(dragIdx, 1)[0];
+    rows.splice(to, 0, moved);
+    dragIdx = -1;
+    render();
+  });
 
   function setProgress(done, total) {
     var pct = total ? Math.round((done / total) * 100) : 0;
@@ -1277,7 +1306,7 @@ function orcaOpenImagesDialog(ctx, item) {
       var downLabel = dfLocaleIsEn() ? "Down" : "下";
       var rmLabel = dfLocaleIsEn() ? "Del" : "删";
       return (
-        '<div class="orca-df-img-row" data-idx="' + i + '">' +
+        '<div class="orca-df-img-row" draggable="true" data-idx="' + i + '">' +
         '<img class="orca-df-img-thumb" src="' + orcaToolsEsc(thumb) + '" alt="" />' +
         '<div class="orca-df-img-meta"><div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div></div>" +
         '<div class="orca-df-img-acts">' +

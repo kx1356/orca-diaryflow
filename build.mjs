@@ -1392,7 +1392,9 @@ const extraCss = [
   ".orca-df-compose-mood { flex: 0 0 92px; }",
   ".orca-df-compose-weather { flex: 0 0 96px; }",
   ".orca-df-meta-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }",
-  ".orca-df-meta-chip { font-size: 12px; padding: 1px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }"
+  ".orca-df-meta-chip { font-size: 12px; padding: 1px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }",
+  ".orca-df-img-row { cursor: grab; }",
+  ".orca-df-img-row.is-dragging { opacity: .45; }"
 ].join("\n");
 const allCss = css + extraCss;
 

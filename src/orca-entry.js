@@ -2265,6 +2265,59 @@ function orcaJumpToMonth(ctx, monthKey) {
   }, 80);
 }
 
+/** 点日历某天：扩充窗口后滚到该条目；无条目则打开当天日记 */
+function orcaJumpToDate(ctx, dateStr) {
+  if (!dateStr) return;
+  var all = orcaFeedAllItems || [];
+  var idx = -1;
+  for (var i = 0; i < all.length; i++) {
+    if (typeof orcaToolsItemDay === "function" && orcaToolsItemDay(all[i]) === dateStr) { idx = i; break; }
+  }
+  if (idx >= 0) {
+    var need = idx + dfFeedPageSize();
+    if ((orcaFeedLimit || 0) < need) {
+      orcaFeedLimit = need;
+      orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+      if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+    }
+    setTimeout(function () {
+      var root = (ctx && ctx.container) || document;
+      var target = (root.querySelector && root.querySelector('.north-luna-moments-item[data-date="' + dateStr + '"]')) ||
+        document.querySelector('.orca-df-scope .north-luna-moments-item[data-date="' + dateStr + '"]');
+      if (target) {
+        try { target.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { /* ignore */ }
+        target.classList.add("mom-flash");
+        setTimeout(function () { target.classList.remove("mom-flash"); }, 1600);
+      }
+    }, 80);
+    return;
+  }
+  var d = new Date(dateStr + "T00:00:00");
+  if (!isNaN(d.getTime())) {
+    try { orca.nav.openInLastPanel("journal", { date: d }); } catch (e2) { /* ignore */ }
+    orcaShowMessage("该日期暂无动态，已打开当天日记");
+  }
+}
+
+var orcaCalendarJumpBound = false;
+function orcaBindCalendarJump() {
+  if (orcaCalendarJumpBound) return;
+  orcaCalendarJumpBound = true;
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented) return;
+    var cell = e.target && e.target.closest && e.target.closest(".mom-calendar-modal [data-date]");
+    if (!cell) return;
+    var ds = cell.getAttribute("data-date");
+    if (!ds) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var modal = cell.closest(".mom-calendar-modal");
+    var back = modal && modal.closest(".mom-overlay");
+    if (back) { try { back.remove(); } catch (e2) { /* ignore */ } }
+    orcaJumpToDate(orcaCtx, ds);
+  }, true);
+}
+
 function orcaOpenMonthOutline(ctx) {
   orcaCloseMonthOutline();
   var groups = orcaBuildMonthGroups(orcaFeedAllItems || []);
@@ -2862,6 +2915,7 @@ async function load(name) {
   orcaInjectStyles();
   orcaWatchTheme();
   orcaWatchLocale();
+  orcaBindCalendarJump();
   await dfRegisterSettings();
   orcaMomentsData = storage.defaultData();
   orcaCtx = orcaBuildCtx();
