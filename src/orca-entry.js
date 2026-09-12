@@ -387,6 +387,15 @@ function orcaOpenComposeDialog(ctx) {
           '<button type="button" class="mom-btn mom-btn-small" data-tpl-confirm>' + dfT("保存") + "</button>" +
           '<button type="button" class="mom-btn mom-btn-small" data-tpl-cancel>' + dfT("取消") + "</button>" +
         "</div>" +
+        '<div class="orca-df-compose-toolbar">' +
+          '<button type="button" data-fmt="b" title="' + orcaEsc(dfT("粗体")) + '"><b>B</b></button>' +
+          '<button type="button" data-fmt="i" title="' + orcaEsc(dfT("斜体")) + '"><i>I</i></button>' +
+          '<button type="button" data-fmt="s" title="' + orcaEsc(dfT("删除线")) + '"><s>S</s></button>' +
+          '<button type="button" data-fmt="u" title="' + orcaEsc(dfT("下划线")) + '"><u>U</u></button>' +
+          '<button type="button" data-fmt="c" title="' + orcaEsc(dfT("行内代码")) + '">&lt;/&gt;</button>' +
+          '<button type="button" data-fmt="mark" title="' + orcaEsc(dfT("高亮")) + '">==</button>' +
+          '<button type="button" data-fmt="link" title="' + orcaEsc(dfT("链接")) + '">🔗</button>' +
+        "</div>" +
         '<textarea class="mom-inp orca-df-compose-text" data-text rows="4" placeholder="' + orcaEsc(dfT("写点什么…")) + '"></textarea>' +
         '<div class="orca-df-compose-imgs" data-imgs></div>' +
         '<div class="orca-df-compose-row">' +
@@ -438,6 +447,36 @@ function orcaOpenComposeDialog(ctx) {
     try { overlay.remove(); } catch (e) { /* ignore */ }
     revokeAll();
   }
+  function applyFmt(kind) {
+    if (!ta) return;
+    var s = ta.selectionStart, e = ta.selectionEnd, val = ta.value;
+    var sel = val.slice(s, e);
+    function wrap(before, after) {
+      ta.value = val.slice(0, s) + before + sel + after + val.slice(e);
+      ta.focus();
+      var a = s + before.length, b = a + sel.length;
+      try { ta.setSelectionRange(a, b); } catch (eS) { /* ignore */ }
+    }
+    if (kind === "b") wrap("**", "**");
+    else if (kind === "i") wrap("*", "*");
+    else if (kind === "s") wrap("~~", "~~");
+    else if (kind === "u") wrap("__", "__");
+    else if (kind === "c") wrap("`", "`");
+    else if (kind === "mark") wrap("==", "==");
+    else if (kind === "link") {
+      if (sel) {
+        ta.value = val.slice(0, s) + "[" + sel + "](url)" + val.slice(e);
+        ta.focus();
+        var up = s + 1 + sel.length + 2;
+        try { ta.setSelectionRange(up, up + 3); } catch (eL) { /* ignore */ }
+      } else {
+        ta.value = val.slice(0, s) + "[](url)" + val.slice(e);
+        ta.focus();
+        try { ta.setSelectionRange(s + 1, s + 1); } catch (eL2) { /* ignore */ }
+      }
+    }
+  }
+
   async function submit(openAfter) {
     if (busy) return;
     busy = true;
@@ -474,6 +513,8 @@ function orcaOpenComposeDialog(ctx) {
   }
   overlay.addEventListener("click", function (e) {
     if (e.target === overlay || e.target.closest("[data-x]")) { close(); return; }
+    var fmtBtn = e.target.closest("[data-fmt]");
+    if (fmtBtn) { applyFmt(fmtBtn.getAttribute("data-fmt")); return; }
     if (e.target.closest("[data-add-img]")) { fileInput.click(); return; }
     if (e.target.closest("[data-publish-open]")) { submit(true); return; }
     if (e.target.closest("[data-publish]")) { submit(false); return; }
