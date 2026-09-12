@@ -8,7 +8,9 @@ var DF_SETTINGS_DEFAULTS = {
   trashRetentionDays: 30,
   confirmDelete: true,
   autoCleanImages: false,
-  exportImageMaxWidth: 0
+  exportImageMaxWidth: 0,
+  autoBackup: false,
+  backupKeep: 7
 };
 
 function dfSettingsObject() {
@@ -85,6 +87,18 @@ async function dfRegisterSettings() {
         description: dfT("导出 Word/PDF 时内嵌图片的最大宽度（像素，0 表示不压缩）"),
         type: "number",
         defaultValue: DF_SETTINGS_DEFAULTS.exportImageMaxWidth
+      },
+      autoBackup: {
+        label: dfT("自动备份"),
+        description: dfT("启动后自动备份（每天一次）到插件备份目录"),
+        type: "boolean",
+        defaultValue: DF_SETTINGS_DEFAULTS.autoBackup
+      },
+      backupKeep: {
+        label: dfT("备份保留份数"),
+        description: dfT("自动备份最多保留的份数"),
+        type: "number",
+        defaultValue: DF_SETTINGS_DEFAULTS.backupKeep
       }
     });
   } catch (e) {

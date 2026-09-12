@@ -20,6 +20,7 @@ var orcaFeedSyncUnsub = null;
 var orcaSettingsLocaleUnsub = null;
 var orcaSettingsLocale = "";
 var orcaAutoCleanupScheduled = false;
+var orcaAutoBackupScheduled = false;
 var orcaFeedSyncMutedUntil = 0;
 var orcaFeedSyncInFlight = false;
 var orcaFeedSyncFp = "";
@@ -648,6 +649,23 @@ function orcaScheduleAutoMediaCleanup() {
       });
     }).catch(function () { /* ignore */ });
   }, 20000);
+}
+
+/** 启动后按设置自动备份（每天一次，文件名按日期，自动保留 N 份） */
+function orcaScheduleAutoBackup() {
+  if (orcaAutoBackupScheduled) return;
+  orcaAutoBackupScheduled = true;
+  try {
+    if (!dfGetSetting("autoBackup")) return;
+  } catch (e0) { return; }
+  setTimeout(function () {
+    if (typeof orcaToolsWriteBackupFile !== "function") return;
+    orcaToolsWriteBackupFile().then(function (r) {
+      console.log("[orca-diaryflow] auto backup:", r && r.name, r && r.count);
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] auto backup failed", e);
+    });
+  }, 30000);
 }
 
 /** 监听语言切换：重注册设置页标签（中/英）并刷新主题 */
@@ -2881,6 +2899,7 @@ async function load(name) {
     orcaReady = true;
     orcaStartFeedSyncWatch();
     orcaScheduleAutoMediaCleanup();
+    orcaScheduleAutoBackup();
     var cbs = orcaReadyCbs;
     orcaReadyCbs = [];
     cbs.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });

@@ -2464,6 +2464,27 @@ var DF_I18N_EN = {
   "导出图片最大宽度": "Export image max width",
   "导出 Word/PDF 时内嵌图片的最大宽度（像素，0 表示不压缩）":
     "Max width (px) of embedded images when exporting Word/PDF (0 = no compression)",
+  "自动备份": "Auto backup",
+  "启动后自动备份（每天一次）到插件备份目录": "Back up automatically to the plugin backup folder once a day on startup",
+  "备份保留份数": "Backups to keep",
+  "自动备份最多保留的份数": "Maximum number of auto backups to keep",
+  "备份与恢复": "Backup & Restore",
+  "导出 / 恢复 JSON 备份": "Export / restore JSON backup",
+  "备份保存到插件备份目录（JSON）。恢复会新增条目，不改动现有数据。":
+    "Backups are saved as JSON in the plugin backup folder. Restoring adds new entries and never modifies existing data.",
+  "立即备份": "Back up now",
+  "从文件导入": "Import from file",
+  "暂无备份": "No backups",
+  "导入失败": "Import failed",
+  "恢复该备份？将新增 ": "Restore this backup? It will add ",
+  "正在恢复…": "Restoring…",
+  "已恢复 ": "Restored ",
+  "恢复失败": "Restore failed",
+  "正在备份…": "Backing up…",
+  "已备份 ": "Backed up ",
+  "备份失败": "Backup failed",
+  "读取中…": "Reading…",
+  "读取失败": "Read failed",
   "约保留 ": "Kept about ",
   " 天": " days"
 };
@@ -2565,7 +2586,9 @@ var DF_SETTINGS_DEFAULTS = {
   trashRetentionDays: 30,
   confirmDelete: true,
   autoCleanImages: false,
-  exportImageMaxWidth: 0
+  exportImageMaxWidth: 0,
+  autoBackup: false,
+  backupKeep: 7
 };
 
 function dfSettingsObject() {
@@ -2642,6 +2665,18 @@ async function dfRegisterSettings() {
         description: dfT("导出 Word/PDF 时内嵌图片的最大宽度（像素，0 表示不压缩）"),
         type: "number",
         defaultValue: DF_SETTINGS_DEFAULTS.exportImageMaxWidth
+      },
+      autoBackup: {
+        label: dfT("自动备份"),
+        description: dfT("启动后自动备份（每天一次）到插件备份目录"),
+        type: "boolean",
+        defaultValue: DF_SETTINGS_DEFAULTS.autoBackup
+      },
+      backupKeep: {
+        label: dfT("备份保留份数"),
+        description: dfT("自动备份最多保留的份数"),
+        type: "number",
+        defaultValue: DF_SETTINGS_DEFAULTS.backupKeep
       }
     });
   } catch (e) {
@@ -6209,6 +6244,7 @@ function orcaOpenToolsHub(ctx) {
     '<button type="button" class="orca-df-tools-tile" data-df-tools="recap"><b>回顾</b><span>去年今日、随机一条</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="layout"><b>布局</b><span>封面高度：紧凑 / 舒适 / 高封面</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="cleanup"><b>清理图片</b><span>移除未引用的插件图片</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="backup"><b>备份与恢复</b><span>导出 / 恢复 JSON 备份</span></button>' +
     "</div></div>";
   dfMountDialog(host);
   var archHint = host.querySelector("[data-df-tools-arch-hint]");
@@ -6247,6 +6283,7 @@ function orcaOpenToolsHub(ctx) {
     else if (act === "search") orcaOpenSearchDialog(ctx);
     else if (act === "layout") orcaOpenLayoutDialog(ctx);
     else if (act === "cleanup") orcaOpenMediaCleanupDialog(ctx);
+    else if (act === "backup") orcaOpenBackupDialog(ctx);
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
 }
@@ -6805,6 +6842,194 @@ function orcaOpenMediaCleanupDialog(ctx) {
   load();
 }
 
+// ---------- 备份与恢复 ----------
+async function orcaToolsListBackups() {
+  try {
+    var r = await orca.invokeBackend("list-plugin-files", orcaPluginName, "backup");
+    var arr = Array.isArray(r) ? r : (r && (r.files || r.data));
+    if (arr) {
+      return arr.map(function (x) { return typeof x === "string" ? x : (x && (x.name || x.path)) || ""; })
+        .map(function (n) { return String(n).split("/").pop(); })
+        .filter(function (n) { return /\.json$/i.test(n); })
+        .sort();
+    }
+  } catch (e) { /* ignore */ }
+  return [];
+}
+
+async function orcaToolsBackupData() {
+  var feed = await OrcaBlocks.listFeed({ skipHeal: true, includeArchived: true, preferLive: true, fullText: true });
+  var cfg = (orcaCtx && orcaCtx.data && orcaCtx.data() && orcaCtx.data().config) || {};
+  return {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    config: cfg,
+    items: (feed && feed.items) || []
+  };
+}
+
+async function orcaToolsPruneBackups() {
+  var keep = dfGetNumberSetting("backupKeep", 1);
+  var list = await orcaToolsListBackups();
+  var removed = 0;
+  while (list.length > keep) {
+    var name = list.shift();
+    try { await orca.invokeBackend("remove-plugin-file", orcaPluginName, "backup/" + name); removed++; } catch (e) { /* ignore */ }
+  }
+  return removed;
+}
+
+async function orcaToolsWriteBackupFile() {
+  var data = await orcaToolsBackupData();
+  var d = new Date();
+  var name = "diaryflow-" + d.getFullYear() + ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2) + ".json";
+  var rel = "backup/" + name;
+  var raw = JSON.stringify(data);
+  try {
+    await orca.invokeBackend("set-plugin-file", orcaPluginName, rel, raw);
+  } catch (e1) {
+    await orca.invokeBackend("set-plugin-file", orcaPluginName, rel, new TextEncoder().encode(raw));
+  }
+  await orcaToolsPruneBackups();
+  return { name: name, count: (data.items || []).length };
+}
+
+async function orcaToolsReadBackup(name) {
+  var raw = null;
+  try { raw = await orca.invokeBackend("get-plugin-file", orcaPluginName, "backup/" + name); } catch (e) { raw = null; }
+  if (raw == null) return null;
+  if (typeof raw !== "string") {
+    try { raw = new TextDecoder().decode(raw instanceof ArrayBuffer ? new Uint8Array(raw) : raw); } catch (e2) { raw = String(raw); }
+  }
+  try { return JSON.parse(raw); } catch (e3) { return null; }
+}
+
+async function orcaToolsImportBackup(data) {
+  var items = (data && data.items) || [];
+  var n = 0;
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (!it) continue;
+    var d = it.createdAt ? new Date(it.createdAt) : new Date(String(it.created || "").replace(" ", "T"));
+    if (isNaN(d.getTime())) d = new Date();
+    try {
+      var block = await OrcaBlocks.createEntry({
+        date: d,
+        text: it.text || "",
+        tags: it.tags || [],
+        images: it.images || [],
+        location: it.location || ""
+      });
+      var bid = block && (block.id != null ? block.id : block);
+      if (bid && (it.mood || it.weather) && OrcaBlocks.updateEntryMeta) {
+        try { await OrcaBlocks.updateEntryMeta(bid, { mood: it.mood || "", weather: it.weather || "" }); } catch (eM) { /* ignore */ }
+      }
+      n++;
+    } catch (e) {
+      console.warn("[orca-diaryflow] import item failed", i, e);
+    }
+  }
+  return n;
+}
+
+function orcaOpenBackupDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="备份与恢复">' +
+    '<div class="orca-df-tools-head"><span>备份与恢复</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">备份保存到插件备份目录（JSON）。恢复会新增条目，不改动现有数据。</p>' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-bak="now">立即备份</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-bak="import-file">从文件导入</button>' +
+    "</div>" +
+    '<input type="file" accept="application/json,.json" hidden data-df-bak-file />' +
+    '<div class="orca-df-bak-list"><div class="orca-df-tools-muted">加载中…</div></div>' +
+    '<div class="orca-df-tools-status" data-df-bak-status hidden></div>' +
+    "</div></div>";
+  dfMountDialog(host);
+  var listEl = host.querySelector(".orca-df-bak-list");
+  var statusEl = host.querySelector("[data-df-bak-status]");
+  var fileInput = host.querySelector("[data-df-bak-file]");
+  var busy = false;
+
+  function setStatus(t) {
+    if (!statusEl) return;
+    statusEl.hidden = !t;
+    statusEl.textContent = t || "";
+  }
+  async function refresh() {
+    var names = await orcaToolsListBackups();
+    if (!names.length) { listEl.innerHTML = '<div class="orca-df-tools-muted">暂无备份</div>'; return; }
+    listEl.innerHTML = names.slice().reverse().map(function (n) {
+      return '<div class="orca-df-tools-row"><span>' + orcaToolsEsc(n) + "</span>" +
+        '<button type="button" class="orca-df-tools-btn" data-df-bak="restore" data-name="' + orcaToolsEsc(n) + '">恢复</button></div>';
+    }).join("");
+  }
+  function doImport(data) {
+    if (!data || !Array.isArray(data.items)) { setStatus(dfT("导入失败")); return; }
+    var cnt = data.items.length;
+    if (dfGetSetting("confirmDelete") && !window.confirm(dfT("恢复该备份？将新增 ") + cnt + dfT(" 条"))) return;
+    busy = true;
+    setStatus(dfT("正在恢复…"));
+    orcaToolsImportBackup(data).then(function (n) {
+      setStatus(dfT("已恢复 ") + n + dfT(" 条"));
+      orcaShowMessage("已恢复 " + n + " 条");
+      return orcaRefreshFeed({ skipHeal: true, preferLive: true });
+    }).then(function () {
+      if (ctx && ctx.reApp) ctx.reApp();
+      busy = false;
+    }).catch(function () {
+      setStatus(dfT("恢复失败"));
+      busy = false;
+    });
+  }
+  host.addEventListener("mousedown", function (e) { if (e.target === host) orcaCloseToolsDialog(); });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-bak]");
+    if (!btn || busy) return;
+    var act = btn.getAttribute("data-df-bak");
+    if (act === "now") {
+      busy = true;
+      setStatus(dfT("正在备份…"));
+      orcaToolsWriteBackupFile().then(function (r) {
+        setStatus(dfT("已备份 ") + r.count + dfT(" 条"));
+        orcaShowMessage("已备份");
+        return refresh();
+      }).catch(function () { setStatus(dfT("备份失败")); }).then(function () { busy = false; });
+    } else if (act === "import-file") {
+      fileInput.click();
+    } else if (act === "restore") {
+      var name = btn.getAttribute("data-name");
+      busy = true;
+      setStatus(dfT("读取中…"));
+      orcaToolsReadBackup(name).then(function (data) {
+        busy = false;
+        doImport(data);
+      }).catch(function () { busy = false; setStatus(dfT("读取失败")); });
+    }
+  });
+  fileInput.addEventListener("change", function () {
+    var f = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var data = null;
+      try { data = JSON.parse(String(fr.result || "")); } catch (e) { data = null; }
+      doImport(data);
+    };
+    fr.onerror = function () { setStatus(dfT("导入失败")); };
+    fr.readAsText(f);
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  refresh();
+}
+
 function orcaCloseImagesDialog() {
   orcaToolsCloseBackdrop(".orca-df-images-backdrop");
   if (orcaImagesBlobUrls.length) {
@@ -7162,6 +7387,7 @@ var orcaFeedSyncUnsub = null;
 var orcaSettingsLocaleUnsub = null;
 var orcaSettingsLocale = "";
 var orcaAutoCleanupScheduled = false;
+var orcaAutoBackupScheduled = false;
 var orcaFeedSyncMutedUntil = 0;
 var orcaFeedSyncInFlight = false;
 var orcaFeedSyncFp = "";
@@ -7790,6 +8016,23 @@ function orcaScheduleAutoMediaCleanup() {
       });
     }).catch(function () { /* ignore */ });
   }, 20000);
+}
+
+/** 启动后按设置自动备份（每天一次，文件名按日期，自动保留 N 份） */
+function orcaScheduleAutoBackup() {
+  if (orcaAutoBackupScheduled) return;
+  orcaAutoBackupScheduled = true;
+  try {
+    if (!dfGetSetting("autoBackup")) return;
+  } catch (e0) { return; }
+  setTimeout(function () {
+    if (typeof orcaToolsWriteBackupFile !== "function") return;
+    orcaToolsWriteBackupFile().then(function (r) {
+      console.log("[orca-diaryflow] auto backup:", r && r.name, r && r.count);
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] auto backup failed", e);
+    });
+  }, 30000);
 }
 
 /** 监听语言切换：重注册设置页标签（中/英）并刷新主题 */
@@ -10023,6 +10266,7 @@ async function load(name) {
     orcaReady = true;
     orcaStartFeedSyncWatch();
     orcaScheduleAutoMediaCleanup();
+    orcaScheduleAutoBackup();
     var cbs = orcaReadyCbs;
     orcaReadyCbs = [];
     cbs.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });

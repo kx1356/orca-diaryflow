@@ -318,6 +318,27 @@ var DF_I18N_EN = {
   "导出图片最大宽度": "Export image max width",
   "导出 Word/PDF 时内嵌图片的最大宽度（像素，0 表示不压缩）":
     "Max width (px) of embedded images when exporting Word/PDF (0 = no compression)",
+  "自动备份": "Auto backup",
+  "启动后自动备份（每天一次）到插件备份目录": "Back up automatically to the plugin backup folder once a day on startup",
+  "备份保留份数": "Backups to keep",
+  "自动备份最多保留的份数": "Maximum number of auto backups to keep",
+  "备份与恢复": "Backup & Restore",
+  "导出 / 恢复 JSON 备份": "Export / restore JSON backup",
+  "备份保存到插件备份目录（JSON）。恢复会新增条目，不改动现有数据。":
+    "Backups are saved as JSON in the plugin backup folder. Restoring adds new entries and never modifies existing data.",
+  "立即备份": "Back up now",
+  "从文件导入": "Import from file",
+  "暂无备份": "No backups",
+  "导入失败": "Import failed",
+  "恢复该备份？将新增 ": "Restore this backup? It will add ",
+  "正在恢复…": "Restoring…",
+  "已恢复 ": "Restored ",
+  "恢复失败": "Restore failed",
+  "正在备份…": "Backing up…",
+  "已备份 ": "Backed up ",
+  "备份失败": "Backup failed",
+  "读取中…": "Reading…",
+  "读取失败": "Read failed",
   "约保留 ": "Kept about ",
   " 天": " days"
 };
