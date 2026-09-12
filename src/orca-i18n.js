@@ -56,7 +56,6 @@ var DF_I18N_EN = {
   "暂无用户标签": "No user tags",
   "归档": "Archive",
   "管理图片": "Manage images",
-  "在虎鲸中打开": "Open in Orca",
   "更多": "More",
   "更多操作": "More actions",
   "收起": "Collapse",

@@ -2202,7 +2202,6 @@ var DF_I18N_EN = {
   "暂无用户标签": "No user tags",
   "归档": "Archive",
   "管理图片": "Manage images",
-  "在虎鲸中打开": "Open in Orca",
   "更多": "More",
   "更多操作": "More actions",
   "收起": "Collapse",
@@ -2709,7 +2708,7 @@ var DF_MIGRATED_KEY = "moments-migrated";
 var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
 var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
 /** 使用说明正文版本：改 DF_TUTORIAL_TEXT 时必须递增，已有说明块会按此同步 */
-var DF_TUTORIAL_CONTENT_VER = "0.3.20";
+var DF_TUTORIAL_CONTENT_VER = "0.3.21";
 var DF_TUTORIAL_CONTENT_VER_KEY = "tutorial-content-ver";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
@@ -2732,7 +2731,7 @@ var DF_TUTORIAL_TEXT = [
   "封面区：设置封面、头像与签名",
   "底栏「地点」：写入正文末行「地点：…」，并同步属性",
   "评论：写入该条目下的虎鲸子块，可在日记页看到",
-  "「⋯」展开：置顶、归档、改标签、心情天气、分享图、打开虎鲸、删除（进回收站）",
+  "「⋯」展开：置顶、归档、改标签、心情天气、分享图、删除（进回收站）",
   "FAB：同步、工具、标签筛选、月份大纲；列表底部可「加载更多」",
   "—— 筛选与工具 ——",
   "标签筛选：点 FAB 选标签；筛选中再点 FAB，或再点同一标签，即可取消",
@@ -2755,7 +2754,7 @@ var DF_TUTORIAL_TEXT_EN = [
   "Cover area: set cover, avatar and signature",
   "Bottom “Location”: writes “地点：…” as the last line and syncs a property",
   "Comments: written as Orca child blocks under the entry, visible on the journal page",
-  "“⋯”: pin, archive, edit tags, mood/weather, share image, open in Orca, delete (to trash)",
+  "“⋯”: pin, archive, edit tags, mood/weather, share image, delete (to trash)",
   "FAB: sync, tools, tag filter, month outline; “Load more” at the bottom of the list",
   "—— Filters & tools ——",
   "Tag filter: tap the FAB to pick a tag; tap the FAB again or the same tag to clear",
@@ -8838,9 +8837,6 @@ function orcaEnhanceFeedDom(el, ctx) {
         '<button type="button" class="north-luna-moments-action-btn' + (it.pinned ? " active is-on" : "") + '" data-action="pin" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(pinTitle) + '" aria-label="' + orcaEsc(pinTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v4l1 1 1-1v-4h5v-2l-2-2z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("归档")) + '" aria-label="' + orcaEsc(dfT("归档")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-tag-btn' + (userTags.length ? " is-on" : "") + '" data-action="tag" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(tagTitle) + '" aria-label="' + orcaEsc(tagTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21.4 11.6l-9-9C12 2.2 11.5 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .5.2 1 .6 1.4l9 9c.4.4.9.6 1.4.6s1-.2 1.4-.6l7-7c.4-.4.6-.9.6-1.4 0-.5-.2-1-.6-1.4zM6.5 8C5.7 8 5 7.3 5 6.5S5.7 5 6.5 5 8 5.7 8 6.5 7.3 8 6.5 8z"></path></svg></button>' +
-        (bid && isFinite(Number(bid))
-          ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
-          : "") +
         '<button type="button" class="north-luna-moments-action-btn orca-df-share-btn" data-action="share" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("生成分享图")) + '" aria-label="' + orcaEsc(dfT("生成分享图")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A3 3 0 1 0 6 15a2.99 2.99 0 0 0 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a2.92 2.92 0 1 0 2.92-2.92z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-meta-btn' + ((it.mood || it.weather) ? " is-on" : "") + '" data-action="meta" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("心情 / 天气")) + '" aria-label="' + orcaEsc(dfT("心情 / 天气")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.9-3.5H7.1c.7 2 2.6 3.5 4.9 3.5z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("删除")) + '" aria-label="' + orcaEsc(dfT("删除")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
