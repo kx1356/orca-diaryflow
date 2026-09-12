@@ -1,0 +1,17 @@
+---
+description: 集市顶层插件名保持英文 Diary Flow
+alwaysApply: true
+---
+
+# 集市展示名：顶层用英文
+
+`orcaNoteMarketplace.name`（以及 awesome-orcanote `plugins.json` 条目的顶层 `name`）**必须保持英文**：
+
+- 正确：`"name": "Diary Flow"`
+- 中文写在 `translations.zh.name`：`"日记流"`
+- `plugin.json` 的 `displayName.default` 也用英文 `Diary Flow`，`zh_CN` 用 `日记流`
+
+## 反例
+
+- 把顶层 `name` 改成「日记流」
+- 只改中文翻译、却顺带改掉英文顶层名

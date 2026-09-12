@@ -173,26 +173,60 @@ function orcaToolsBuildMarkdown(items, cfg) {
   return lines.join("\n");
 }
 
-/** Word(.doc) 导出：自实现 HTML，图片尽力转 dataURL（dfasset / file://） */
+/** 按最大宽度把 dataURL 缩为 JPEG（用于导出，减小体积） */
+function orcaToolsCompressDataUrl(dataUrl, maxWidth) {
+  if (!maxWidth || typeof dataUrl !== "string" || dataUrl.indexOf("data:image/") !== 0) {
+    return Promise.resolve(dataUrl);
+  }
+  return new Promise(function (resolve) {
+    try {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || img.width || 0;
+          var h = img.naturalHeight || img.height || 0;
+          if (!w || w <= maxWidth) { resolve(dataUrl); return; }
+          var scale = maxWidth / w;
+          var cw = Math.max(1, Math.round(w * scale));
+          var ch = Math.max(1, Math.round(h * scale));
+          var c = document.createElement("canvas");
+          c.width = cw; c.height = ch;
+          var cx = c.getContext("2d");
+          cx.fillStyle = "#fff";
+          cx.fillRect(0, 0, cw, ch);
+          cx.drawImage(img, 0, 0, cw, ch);
+          resolve(c.toDataURL("image/jpeg", 0.82));
+        } catch (e) { resolve(dataUrl); }
+      };
+      img.onerror = function () { resolve(dataUrl); };
+      img.src = dataUrl;
+    } catch (e) { resolve(dataUrl); }
+  });
+}
+
+/** Word(.doc) 导出：自实现 HTML，图片尽力转 dataURL（dfasset / file://）并按设置压缩 */
 async function orcaToolsImageToDataUrl(src) {
   if (typeof src !== "string" || !src) return src;
-  if (/^data:/i.test(src)) return src;
-  try {
-    if (src.indexOf("dfasset:") === 0 && globalThis.__DF_ASSETS && typeof globalThis.__DF_ASSETS.toDataUrl === "function") {
-      return (await globalThis.__DF_ASSETS.toDataUrl(src)) || src;
-    }
-    if (/^file:/i.test(src)) {
-      var resp = await fetch(src);
-      var blob = await resp.blob();
-      return await new Promise(function (resolve, reject) {
-        var fr = new FileReader();
-        fr.onload = function () { resolve(fr.result); };
-        fr.onerror = reject;
-        fr.readAsDataURL(blob);
-      });
-    }
-  } catch (e) { /* ignore, fallback src */ }
-  return src;
+  var maxWidth = dfGetExportImageMaxWidth();
+  var dataUrl = src;
+  if (!/^data:/i.test(src)) {
+    try {
+      if (src.indexOf("dfasset:") === 0 && globalThis.__DF_ASSETS && typeof globalThis.__DF_ASSETS.toDataUrl === "function") {
+        dataUrl = (await globalThis.__DF_ASSETS.toDataUrl(src)) || src;
+      } else if (/^file:/i.test(src)) {
+        var resp = await fetch(src);
+        var blob = await resp.blob();
+        dataUrl = await new Promise(function (resolve, reject) {
+          var fr = new FileReader();
+          fr.onload = function () { resolve(fr.result); };
+          fr.onerror = reject;
+          fr.readAsDataURL(blob);
+        });
+      }
+    } catch (e) { /* ignore, fallback src */ }
+  }
+  if (maxWidth) dataUrl = await orcaToolsCompressDataUrl(dataUrl, maxWidth);
+  return dataUrl;
 }
 
 async function orcaToolsBuildWordHtml(items, cfg) {
@@ -1241,6 +1275,10 @@ function orcaEnhanceToolsUi(el, ctx) {
     '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">' + dfT("有图") + "</button>" +
     '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">' + dfT("有地点") + "</button>" +
     '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">' + dfT("仅置顶") + "</button>" +
+    ((f.dateFrom || f.dateTo)
+      ? '<button type="button" class="orca-df-tagchip is-on" data-df-act="clear-date" title="' + orcaToolsEsc(dfT("清除日期")) + '">' +
+        dfT("日期：") + orcaToolsEsc((f.dateFrom || "…") + " ~ " + (f.dateTo || "…")) + "</button>"
+      : "") +
     (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">' + dfT("清除筛选") + "</button>" : "") +
     (f.kw ? '<span class="orca-df-quick-kw">' + dfT("搜索：") + orcaToolsEsc(f.kw) + "</span>" : "");
 
@@ -1283,6 +1321,15 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-pinned") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.pinnedOnly = !ctx.filters.pinnedOnly;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
+    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
+    DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
+    return true;
+  }
+  if (act === "clear-date") {
+    if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+    ctx.filters.dateFrom = "";
+    ctx.filters.dateTo = "";
     if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });

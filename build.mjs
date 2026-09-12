@@ -1373,7 +1373,8 @@ const extraCss = [
   ".orca-df-media-list { max-height: 46vh; overflow: auto; margin: 6px 0 10px; }",
   ".orca-df-search-quick { display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 0 10px; }",
   ".orca-df-search-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }",
-  ".orca-df-search-dates { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }"
+  ".orca-df-search-dates { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }",
+  ".orca-df-list-sort { height: 26px; padding: 0 6px; border-radius: 7px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.12)); background: var(--orca-color-bg-2, rgba(120,120,128,.08)); color: inherit; font: inherit; font-size: 13px; outline: none; }"
 ].join("\n");
 const allCss = css + extraCss;
 

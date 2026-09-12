@@ -125,6 +125,11 @@ var DF_I18N_EN = {
   "暂无记录": "No records",
   "搜索标题…": "Search titles…",
   "没有匹配的条目": "No matching entries",
+  "标题": "Title",
+  "删除时间（新→旧）": "Deleted (newest first)",
+  "删除时间（旧→新）": "Deleted (oldest first)",
+  "时间（新→旧）": "Date (newest first)",
+  "时间（旧→新）": "Date (oldest first)",
   "点年份快速定位": "Tap a year to jump",
   "这一年没有日记。": "No entries this year.",
   "月份大纲": "Month outline",
@@ -154,7 +159,24 @@ var DF_I18N_EN = {
   "删除评论失败": "Failed to delete comment",
   "编辑": "Edit",
   "编辑评论": "Edit comment",
+  "评论": "Comments",
+  "发送": "Send",
   "写评论…": "Write a comment…",
+  "写评论...": "Write a comment...",
+  "播放视频": "Play video",
+  "已点赞": "Liked",
+  "点赞": "Like",
+  "取消赞": "Unlike",
+  "发表日记": "New diary entry",
+  "在虎鲸中新建": "Create in Orca",
+  "在虎鲸中编辑": "Edit in Orca",
+  "在虎鲸中写": "Write in Orca",
+  "还没有动态": "No entries yet",
+  "记录下这一刻，让日子可以回头。": "Capture this moment so the days can be revisited.",
+  "可以写文字、上传图片，还能加上标签 • 点击下方按钮发布第一条":
+    "Write text, add images and tags • tap the button below to post your first entry",
+  "在虎鲸日记里编辑文字、图片与标签 • 点下方按钮新建并打开":
+    "Edit text, images and tags in the Orca journal • tap the button below to create and open",
   "评论已更新": "Comment updated",
   "评论更新失败": "Failed to update comment",
   "评论已写入日记": "Comment written to the diary",
@@ -262,6 +284,8 @@ var DF_I18N_EN = {
   "仅置顶": "Pinned only",
   "清除筛选": "Clear filters",
   "搜索：": "Search: ",
+  "日期：": "Date: ",
+  "清除日期": "Clear date",
   "工具（归档/回收站/搜索/统计/导出…）":
     "Tools (archive / trash / search / stats / export …)",
   "已插入使用说明（置顶）": "Inserted the guide (pinned)",
@@ -281,6 +305,9 @@ var DF_I18N_EN = {
   "自动清理图片": "Auto-clean images",
   "启动后自动移除未被引用的插件图片（回收站与归档条目引用会保留）":
     "Automatically remove unreferenced plugin images on startup (trash and archived references are kept)",
+  "导出图片最大宽度": "Export image max width",
+  "导出 Word/PDF 时内嵌图片的最大宽度（像素，0 表示不压缩）":
+    "Max width (px) of embedded images when exporting Word/PDF (0 = no compression)",
   "约保留 ": "Kept about ",
   " 天": " days"
 };

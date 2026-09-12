@@ -2624,6 +2624,23 @@ async function ensureTutorialInserted() {
   return { skipped: false, created: true, contentVer: DF_TUTORIAL_CONTENT_VER, blockId: newId };
 }
 
+/** 一次性清理旧 overlay 中遗留的 liked 字段（点赞功能已移除） */
+async function dfCleanupLegacyOverlays() {
+  var index = await dfLoadIndex();
+  var ov = index.overlays || {};
+  var changed = false;
+  Object.keys(ov).forEach(function (k) {
+    if (ov[k] && Object.prototype.hasOwnProperty.call(ov[k], "liked")) {
+      delete ov[k].liked;
+      changed = true;
+    }
+  });
+  if (changed) {
+    try { await dfSaveIndexQueued(index); } catch (e) { /* ignore */ }
+  }
+  return changed;
+}
+
 async function migrateMomentsRecords(loadLegacyFn) {
   var flag = await orca.plugins.getData(orcaPluginName, DF_MIGRATED_KEY);
   if (flag === true || flag === "true" || flag === 1) {
@@ -2739,6 +2756,7 @@ var OrcaBlocks = {
   openEntry: openEntry,
   ensureTutorialInserted: ensureTutorialInserted,
   migrateMomentsRecords: migrateMomentsRecords,
+  cleanupLegacyOverlays: dfCleanupLegacyOverlays,
   blockToFeedItem: dfBlockToFeedItem,
   stripInlineTagText: dfStripInlineTagText,
   markdownLineToFragments: dfMarkdownLineToFragments,
@@ -3079,7 +3097,8 @@ var DF_SETTINGS_DEFAULTS = {
   itemsPerPage: 25,
   trashRetentionDays: 30,
   confirmDelete: true,
-  autoCleanImages: false
+  autoCleanImages: false,
+  exportImageMaxWidth: 0
 };
 
 function dfSettingsObject() {
@@ -3116,6 +3135,13 @@ function dfTrashRetentionDays() {
   return dfGetNumberSetting("trashRetentionDays", 1);
 }
 
+/** 导出内嵌图片最大宽度（设置项 exportImageMaxWidth，0=不压缩） */
+function dfGetExportImageMaxWidth() {
+  var n = Number(dfGetSetting("exportImageMaxWidth"));
+  if (!isFinite(n) || n < 0) n = 0;
+  return Math.floor(n);
+}
+
 async function dfRegisterSettings() {
   if (!orca.plugins || typeof orca.plugins.setSettingsSchema !== "function") return;
   try {
@@ -3143,6 +3169,12 @@ async function dfRegisterSettings() {
         description: dfT("启动后自动移除未被引用的插件图片（回收站与归档条目引用会保留）"),
         type: "boolean",
         defaultValue: DF_SETTINGS_DEFAULTS.autoCleanImages
+      },
+      exportImageMaxWidth: {
+        label: dfT("导出图片最大宽度"),
+        description: dfT("导出 Word/PDF 时内嵌图片的最大宽度（像素，0 表示不压缩）"),
+        type: "number",
+        defaultValue: DF_SETTINGS_DEFAULTS.exportImageMaxWidth
       }
     });
   } catch (e) {

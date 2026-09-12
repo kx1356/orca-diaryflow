@@ -1,0 +1,23 @@
+---
+description: 集市/仓库发布用同一个 PR，迭代只追加 commit，不要每次新开 PR
+alwaysApply: true
+---
+
+# 一个 PR，更新 commit 即可
+
+对本仓库（orca-diaryflow）的 GitHub 发布 / awesome-orcanote / 集市相关改动：
+
+- **默认复用已有开放 PR**：在同一分支上继续 commit 并 push，让原 PR 自动更新。
+- **不要**每次功能小改都新建 PR。
+- 仅在以下情况才新开 PR：用户明确要求、原 PR 已合并关闭且无法再推、或目标分支/主题明显不同（需先问用户）。
+
+## 操作习惯
+
+1. 先查是否已有 open PR：`gh pr list --head <branch>` / `gh pr view`
+2. 有则：改代码 → commit（仅当用户要求提交时）→ `git push` 到同一分支
+3. 无则：再按用户指示创建**一个** PR
+
+## 反例
+
+- 归档一版一个 PR、回收站再一个 PR、教程再一个 PR
+- 未确认现有 PR 状态就直接 `gh pr create`

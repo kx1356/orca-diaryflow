@@ -23,6 +23,7 @@ jobs:
       - name: Run harness tests
         run: |
           node tools/test-harness/md-frag-test.mjs
+          node tools/test-harness/i18n-filter-test.mjs
           node tools/test-harness/blocks-fusion-test.mjs
           node tools/test-harness/run-test.mjs dist/index.js
       - name: Check release essentials

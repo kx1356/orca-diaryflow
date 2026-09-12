@@ -1,0 +1,19 @@
+---
+description: 集市图标优先 SVG，按 awesome-orcanote 文档配置
+alwaysApply: true
+---
+
+# 集市图标必须用 SVG
+
+按 [awesome-orcanote CONTRIBUTING](https://github.com/sethyuan/awesome-orcanote/blob/main/CONTRIBUTING.md) 与既有插件（如 pizhu）：
+
+1. 仓库根目录提供 `icon.svg`（推荐；尺寸 ≤60×60，可用 viewBox）。
+2. `plugins.json` 使用 **`icon_svg`**（不要用 `icon_png`），内容用官方脚本生成：
+   `node scripts/minify-svg.js <path-to-svg>`
+3. 发布 zip 内必须含 `icon.svg`；`plugin.json` 的 `icon` 字段指向 **`icon.svg`**（不要只指 `icon.png`）。
+4. 顶层 `name` 仍为英文 `Diary Flow`；中文只在 `translations.zh.name`。
+
+## 反例
+
+- 集市条目仍填 `icon_png`
+- zip / `plugin.json` 只用 PNG，审核会认为「图标不是 SVG」

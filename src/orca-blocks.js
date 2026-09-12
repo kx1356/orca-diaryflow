@@ -2624,6 +2624,23 @@ async function ensureTutorialInserted() {
   return { skipped: false, created: true, contentVer: DF_TUTORIAL_CONTENT_VER, blockId: newId };
 }
 
+/** 一次性清理旧 overlay 中遗留的 liked 字段（点赞功能已移除） */
+async function dfCleanupLegacyOverlays() {
+  var index = await dfLoadIndex();
+  var ov = index.overlays || {};
+  var changed = false;
+  Object.keys(ov).forEach(function (k) {
+    if (ov[k] && Object.prototype.hasOwnProperty.call(ov[k], "liked")) {
+      delete ov[k].liked;
+      changed = true;
+    }
+  });
+  if (changed) {
+    try { await dfSaveIndexQueued(index); } catch (e) { /* ignore */ }
+  }
+  return changed;
+}
+
 async function migrateMomentsRecords(loadLegacyFn) {
   var flag = await orca.plugins.getData(orcaPluginName, DF_MIGRATED_KEY);
   if (flag === true || flag === "true" || flag === 1) {
@@ -2739,6 +2756,7 @@ var OrcaBlocks = {
   openEntry: openEntry,
   ensureTutorialInserted: ensureTutorialInserted,
   migrateMomentsRecords: migrateMomentsRecords,
+  cleanupLegacyOverlays: dfCleanupLegacyOverlays,
   blockToFeedItem: dfBlockToFeedItem,
   stripInlineTagText: dfStripInlineTagText,
   markdownLineToFragments: dfMarkdownLineToFragments,

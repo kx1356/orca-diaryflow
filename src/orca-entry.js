@@ -367,6 +367,7 @@ function orcaIsEditingInOrca() {
 
 function orcaScheduleFeedSync() {
   if (!orcaReady) return;
+  if (!orcaCtx || !orcaCtx.mounts || !orcaCtx.mounts.length) return;
   if (Date.now() < orcaFeedSyncMutedUntil) return;
   if (orcaIsEditingInOrca()) {
     // 编辑中延后，避免删缓存/覆盖导致光标与滚动跳动
@@ -388,6 +389,8 @@ function orcaScheduleFeedSync() {
 
 async function orcaRunFeedSync() {
   if (!orcaReady || !OrcaBlocks) return;
+  // 无已挂载面板时无需重建（后台块变化不触发全量刷新）
+  if (!orcaCtx || !orcaCtx.mounts || !orcaCtx.mounts.length) return;
   if (Date.now() < orcaFeedSyncMutedUntil) return;
   if (orcaIsEditingInOrca()) {
     orcaScheduleFeedSync();
@@ -950,8 +953,40 @@ function orcaEnhanceFeedDom(el, ctx) {
     content.appendChild(row);
   });
   orcaEnhanceComments(el);
+  orcaLocalizeVendorUi(el);
   orcaLazyHydrateDeepBodies(el, ctx);
   orcaEnsureLoadMoreButton(el, ctx);
+}
+
+/** 仅本地化 feed 内 vendor 控件/空状态的静态文案，绝不触碰用户内容 */
+function orcaLocalizeVendorUi(el) {
+  if (!el || !dfLocaleIsEn()) return;
+  function trAttr(sel, attr) {
+    el.querySelectorAll(sel).forEach(function (n) {
+      var v = n.getAttribute(attr);
+      if (v && /[\u4e00-\u9fff]/.test(v)) n.setAttribute(attr, dfT(v));
+    });
+  }
+  trAttr('[data-action="toggle-comments"]', "title");
+  trAttr('[data-action="toggle-comments"]', "aria-label");
+  trAttr('[data-action="open-outline"]', "title");
+  trAttr('[data-action="open-editor"]', "title");
+  trAttr('[data-action="edit"]', "title");
+  trAttr('[data-action="play-vid"]', "title");
+  trAttr('.north-luna-moments-comment-del[data-action="del-comment"]', "title");
+  trAttr('.north-luna-moments-comment-del[data-action="del-comment"]', "aria-label");
+  el.querySelectorAll(".north-luna-moments-comment-input").forEach(function (n) {
+    var v = n.getAttribute("placeholder");
+    if (v && /[\u4e00-\u9fff]/.test(v)) n.setAttribute("placeholder", dfT(v));
+  });
+  el.querySelectorAll(".north-luna-moments-comment-send").forEach(function (n) {
+    if (n.textContent && /[\u4e00-\u9fff]/.test(n.textContent)) n.textContent = dfT(n.textContent.trim());
+  });
+  [".mom-empty-title", ".mom-empty-sub", ".mom-empty-hint", ".mom-empty-btn"].forEach(function (sel) {
+    el.querySelectorAll(sel).forEach(function (n) {
+      if (n.textContent && /[\u4e00-\u9fff]/.test(n.textContent)) n.textContent = dfT(n.textContent.trim());
+    });
+  });
 }
 
 /** 给每条评论注入「编辑」按钮（vendor 只提供删除） */
@@ -1709,6 +1744,11 @@ function orcaOpenTrashDialog(ctx) {
     "<span>回收站</span>" +
     '<div class="orca-df-trash-head-tools">' +
     '<input type="search" class="orca-df-list-search" data-df-trash-search placeholder="' + orcaEsc(dfT("搜索标题…")) + '" />' +
+    '<select class="orca-df-list-sort" data-df-trash-sort>' +
+    '<option value="deleted-desc">' + orcaEsc(dfT("删除时间（新→旧）")) + "</option>" +
+    '<option value="deleted-asc">' + orcaEsc(dfT("删除时间（旧→新）")) + "</option>" +
+    '<option value="title">' + orcaEsc(dfT("标题")) + "</option>" +
+    "</select>" +
     '<span class="orca-df-trash-hint">保留约 30 天</span>' +
     '<button type="button" class="orca-df-trash-close" data-df-trash="close" aria-label="关闭">×</button>' +
     "</div></div>" +
@@ -1724,6 +1764,7 @@ function orcaOpenTrashDialog(ctx) {
   var trashItems = [];
   var trashShown = DF_LIST_PAGE;
   var trashSearchEl = host.querySelector("[data-df-trash-search]");
+  var trashSortEl = host.querySelector("[data-df-trash-sort]");
   var trashHintEl = host.querySelector(".orca-df-trash-hint");
   if (trashHintEl) {
     trashHintEl.textContent = dfLocaleIsEn()
@@ -1761,6 +1802,15 @@ function orcaOpenTrashDialog(ctx) {
       body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("没有匹配的条目") + "</div>";
       return;
     }
+    var tmode = trashSortEl ? String(trashSortEl.value || "deleted-desc") : "deleted-desc";
+    list = list.slice();
+    if (tmode === "deleted-asc") {
+      list.sort(function (a, b) { return (a.deletedAt || 0) - (b.deletedAt || 0); });
+    } else if (tmode === "title") {
+      list.sort(function (a, b) { return String(a.title || "").localeCompare(String(b.title || "")); });
+    } else {
+      list.sort(function (a, b) { return (b.deletedAt || 0) - (a.deletedAt || 0); });
+    }
     var shown = list.slice(0, trashShown);
     renderRows(shown);
     if (list.length > shown.length) {
@@ -1784,6 +1834,12 @@ function orcaOpenTrashDialog(ctx) {
 
   if (trashSearchEl) {
     trashSearchEl.addEventListener("input", function () {
+      trashShown = DF_LIST_PAGE;
+      applyTrashFilter();
+    });
+  }
+  if (trashSortEl) {
+    trashSortEl.addEventListener("change", function () {
       trashShown = DF_LIST_PAGE;
       applyTrashFilter();
     });
@@ -2120,6 +2176,11 @@ function orcaOpenArchiveDialog(ctx) {
     "<span>归档柜</span>" +
     '<div class="orca-df-archive-head-tools">' +
     '<input type="search" class="orca-df-list-search" data-df-arch-search placeholder="' + orcaEsc(dfT("搜索标题…")) + '" />' +
+    '<select class="orca-df-list-sort" data-df-arch-sort>' +
+    '<option value="time-desc">' + orcaEsc(dfT("时间（新→旧）")) + "</option>" +
+    '<option value="time-asc">' + orcaEsc(dfT("时间（旧→新）")) + "</option>" +
+    '<option value="title">' + orcaEsc(dfT("标题")) + "</option>" +
+    "</select>" +
     '<span class="orca-df-archive-hint">仍保留在日记页</span>' +
     '<button type="button" class="orca-df-archive-close" data-df-arch="close" aria-label="关闭">×</button>' +
     "</div></div>" +
@@ -2133,6 +2194,7 @@ function orcaOpenArchiveDialog(ctx) {
   var archiveItems = [];
   var archiveShown = DF_LIST_PAGE;
   var archiveSearchEl = host.querySelector("[data-df-arch-search]");
+  var archiveSortEl = host.querySelector("[data-df-arch-sort]");
 
   function renderRows(items) {
     if (!items.length) {
@@ -2173,6 +2235,17 @@ function orcaOpenArchiveDialog(ctx) {
       body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("没有匹配的条目") + "</div>";
       return;
     }
+    var amode = archiveSortEl ? String(archiveSortEl.value || "time-desc") : "time-desc";
+    list = list.slice();
+    if (amode === "time-asc") {
+      list.sort(function (a, b) { return orcaItemTs(a) - orcaItemTs(b); });
+    } else if (amode === "title") {
+      list.sort(function (a, b) {
+        return String(a.text || "").localeCompare(String(b.text || ""));
+      });
+    } else {
+      list.sort(function (a, b) { return orcaItemTs(b) - orcaItemTs(a); });
+    }
     var shown = list.slice(0, archiveShown);
     renderRows(shown);
     if (list.length > shown.length) {
@@ -2196,6 +2269,12 @@ function orcaOpenArchiveDialog(ctx) {
 
   if (archiveSearchEl) {
     archiveSearchEl.addEventListener("input", function () {
+      archiveShown = DF_LIST_PAGE;
+      applyArchiveFilter();
+    });
+  }
+  if (archiveSortEl) {
+    archiveSortEl.addEventListener("change", function () {
       archiveShown = DF_LIST_PAGE;
       applyArchiveFilter();
     });
@@ -2574,6 +2653,11 @@ async function load(name) {
       if (OrcaBlocks.purgeExpiredTrash) await OrcaBlocks.purgeExpiredTrash();
     } catch (eTrash) {
       console.warn("[orca-diaryflow] trash purge expired", eTrash);
+    }
+    try {
+      if (OrcaBlocks.cleanupLegacyOverlays) await OrcaBlocks.cleanupLegacyOverlays();
+    } catch (eClean) {
+      console.warn("[orca-diaryflow] cleanup legacy overlays", eClean);
     }
     try {
       await orcaLoadFilters();
