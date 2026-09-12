@@ -3996,8 +3996,8 @@ async function dfBlockToFeedItem(block, overlay, opts) {
     pinned: !!(overlay.pinned || dfProp(block, "df.pinned")),
     archived: dfIsArchived(block, overlay),
     location: dfResolveLocation(block, overlay),
-    mood: String(dfProp(block, "df.mood") || overlay.mood || ""),
-    weather: String(dfProp(block, "df.weather") || overlay.weather || ""),
+    mood: dfResolveMood(block, overlay),
+    weather: dfResolveWeather(block, overlay),
     tags: tags,
     refs: refs,
     needsFullText: !!needsFullText
@@ -4048,12 +4048,27 @@ async function listArchivedFeed(opts) {
   return listFeed(Object.assign({}, opts || {}, { archivedOnly: true, skipHeal: true }));
 }
 
+/** 优先读正文「地点：」行（日记页可见可改），再回退属性 / overlay */
 function dfResolveLocation(block, overlay) {
+  var fromLine = dfLineValueFromChildren(block, "地点：");
+  if (fromLine) return fromLine;
   var fromProp = dfProp(block, DF_LOC_PROP);
   if (fromProp != null && String(fromProp).trim()) return String(fromProp).trim();
   var fromOv = overlay && overlay.location;
   if (fromOv != null && String(fromOv).trim()) return String(fromOv).trim();
   return "";
+}
+
+function dfResolveMood(block, overlay) {
+  var fromLine = dfLineValueFromChildren(block, "心情：");
+  if (fromLine) return fromLine;
+  return String(dfProp(block, "df.mood") || (overlay && overlay.mood) || "");
+}
+
+function dfResolveWeather(block, overlay) {
+  var fromLine = dfLineValueFromChildren(block, "天气：");
+  if (fromLine) return fromLine;
+  return String(dfProp(block, "df.weather") || (overlay && overlay.weather) || "");
 }
 
 /** 属性与 overlay 对齐：有属性则回写 overlay，避免双源漂移 */
@@ -4544,12 +4559,23 @@ async function createEntry(opts) {
       }
     }
   }
-  if (opts.location && String(opts.location).trim()) {
+  if (opts.location && String(opts.location).trim() && dfIsId(newId)) {
+    var locText = String(opts.location).trim();
     try {
       await dfWithEditor(async function () {
         await dfEditorCommand("core.editor.setProperties", null, [newId], [
-          { name: DF_LOC_PROP, type: DF_PROP_TEXT, value: String(opts.location).trim() }
+          { name: DF_LOC_PROP, type: DF_PROP_TEXT, value: locText }
         ]);
+        // 与「改地点」一致：正文末行写入「地点：…」，日记页可见
+        var root = orca.state.blocks[newId] || { id: newId };
+        await dfEditorCommand(
+          "core.editor.insertBlock",
+          null,
+          root,
+          "lastChild",
+          dfMarkdownLineToFragments("地点：" + locText),
+          { type: "text" }
+        );
       }, date, { keepFocus: keepFocus });
     } catch (eLoc) {
       console.warn("[orca-diaryflow] set location prop on create failed", eLoc);
@@ -4904,13 +4930,20 @@ async function updateEntryTime(blockId, date) {
   return { block: block, moved: moved, createdAt: d.getTime() };
 }
 
-function dfIsLocationLineText(s) {
+var DF_LOC_PREFIX = "地点：";
+var DF_MOOD_PREFIX = "心情：";
+var DF_WEATHER_PREFIX = "天气：";
+
+function dfIsPrefixedLineText(s, prefix) {
   s = String(s || "").trim();
-  return /^地点\s*[:：]/.test(s) || /^📍/.test(s);
+  if (!s) return false;
+  var name = prefix.replace(/[:：]$/, "");
+  if (s.indexOf(name + "：") === 0 || s.indexOf(name + ":") === 0) return true;
+  return prefix === DF_LOC_PREFIX && /^📍/.test(s);
 }
 
-/** 收集条目树中表示「地点：…」的文字块（不含媒体 / 独立日记流子条目） */
-async function dfCollectLocationLineBlocks(root) {
+/** 收集条目树中形如「前缀值」的单行文字块（不含媒体 / 独立日记流子条目） */
+async function dfCollectPrefixedLineBlocks(root, prefix) {
   var found = [];
   if (!root || !dfIsId(root.id)) return found;
   async function walk(b, isRoot) {
@@ -4923,8 +4956,7 @@ async function dfCollectLocationLineBlocks(root) {
     var md = "";
     try { md = dfContentToMarkdown(b.content || [], b) || ""; } catch (e1) { md = ""; }
     var line = String(plain || md || "").replace(/\r\n/g, "\n").trim();
-    // 单行地点块；或整段唯一一行是地点
-    if (line && dfIsLocationLineText(line.split("\n")[0]) && line.split("\n").filter(Boolean).length <= 1) {
+    if (line && dfIsPrefixedLineText(line.split("\n")[0], prefix) && line.split("\n").filter(Boolean).length <= 1) {
       found.push(b);
     }
     var kids = b.children || [];
@@ -4946,6 +4978,55 @@ async function dfCollectLocationLineBlocks(root) {
   return found;
 }
 
+/** 在 dfWithEditor 内调用：更新 / 插入 / 删除「前缀值」行 */
+async function dfUpsertPrefixedLine(id, prefix, value) {
+  var block = await dfGetBlock(id);
+  var lineBlocks = await dfCollectPrefixedLineBlocks(block || { id: id }, prefix);
+  var lineText = value ? (prefix + value) : "";
+  if (!value) {
+    var toDel = [];
+    for (var di = 0; di < lineBlocks.length; di++) {
+      var db = lineBlocks[di];
+      if (!db || !dfIsId(db.id)) continue;
+      if (db.id === id) {
+        await dfEditorCommand("core.editor.setBlocksContent", null, [{ id: id, content: [{ t: "t", v: "" }] }], false);
+      } else {
+        toDel.push(db.id);
+      }
+    }
+    if (toDel.length) { try { await dfEditorCommand("core.editor.deleteBlocks", null, toDel); } catch (eDel) { /* ignore */ } }
+  } else if (lineBlocks.length) {
+    await dfEditorCommand("core.editor.setBlocksContent", null, [{ id: lineBlocks[0].id, content: dfMarkdownLineToFragments(lineText) }], false);
+    var extras = [];
+    for (var ei = 1; ei < lineBlocks.length; ei++) {
+      if (lineBlocks[ei] && lineBlocks[ei].id && lineBlocks[ei].id !== id) extras.push(lineBlocks[ei].id);
+    }
+    if (extras.length) { try { await dfEditorCommand("core.editor.deleteBlocks", null, extras); } catch (eEx) { /* ignore */ } }
+  } else {
+    var root = orca.state.blocks[id] || { id: id };
+    await dfEditorCommand("core.editor.insertBlock", null, root, "lastChild", dfMarkdownLineToFragments(lineText), { type: "text" });
+  }
+}
+
+/** 同步读取直接子块中的「前缀」行值（children 需已加载，供 feed 读取） */
+function dfLineValueFromChildren(block, prefix) {
+  var kids = (block && block.children) || [];
+  var states = orca.state.blocks || {};
+  for (var i = 0; i < kids.length; i++) {
+    var c = states[kids[i]];
+    if (!c) continue;
+    var raw = "";
+    try { raw = dfPlainContentText(c) || ""; } catch (e0) { raw = ""; }
+    if (!raw) { try { raw = dfContentToMarkdown(c.content || [], c) || ""; } catch (e1) { raw = ""; } }
+    var line = String(raw).replace(/\r\n/g, "\n").split("\n")[0].trim();
+    if (line && dfIsPrefixedLineText(line, prefix)) {
+      var name = prefix.replace(/[:：]$/, "");
+      return line.replace(/^📍\s*/, "").replace(new RegExp("^" + name + "\\s*[:：]\\s*"), "").trim();
+    }
+  }
+  return "";
+}
+
 /**
  * 地点：双写 overlay + 块属性 df.location，并定向更新/插入「地点：」子块。
  * 禁止删光子树再 flatten（会丢嵌套大纲）。
@@ -4959,63 +5040,17 @@ async function updateEntryLocation(blockId, location) {
 
   await dfWithEditor(async function () {
     if (loc) {
-      await dfEditorCommand("core.editor.setProperties", null, [id], [
-        { name: DF_LOC_PROP, type: DF_PROP_TEXT, value: loc }
-      ]);
+      try {
+        await dfEditorCommand("core.editor.setProperties", null, [id], [
+          { name: DF_LOC_PROP, type: DF_PROP_TEXT, value: loc }
+        ]);
+      } catch (eP) { /* ignore */ }
     } else {
       try {
         await dfEditorCommand("core.editor.deleteProperties", null, [id], [DF_LOC_PROP]);
-      } catch (eDel) {
-        // 属性本就不存在时忽略
-      }
+      } catch (eDel) { /* ignore */ }
     }
-
-    var block = await dfGetBlock(id);
-    var locBlocks = await dfCollectLocationLineBlocks(block || { id: id });
-    var lineText = loc ? ("地点：" + loc) : "";
-
-    if (!loc) {
-      var toDel = [];
-      for (var di = 0; di < locBlocks.length; di++) {
-        var db = locBlocks[di];
-        if (!db || !dfIsId(db.id)) continue;
-        if (db.id === id) {
-          // 根块整段就是地点行：清空内容，保留块与子树
-          await dfEditorCommand("core.editor.setBlocksContent", null, [{
-            id: id,
-            content: [{ t: "t", v: "" }]
-          }], false);
-        } else {
-          toDel.push(db.id);
-        }
-      }
-      if (toDel.length) {
-        try { await dfEditorCommand("core.editor.deleteBlocks", null, toDel); } catch (eDel2) { /* ignore */ }
-      }
-    } else if (locBlocks.length) {
-      var primary = locBlocks[0];
-      await dfEditorCommand("core.editor.setBlocksContent", null, [{
-        id: primary.id,
-        content: dfMarkdownLineToFragments(lineText)
-      }], false);
-      var extras = [];
-      for (var ei = 1; ei < locBlocks.length; ei++) {
-        if (locBlocks[ei] && locBlocks[ei].id && locBlocks[ei].id !== id) extras.push(locBlocks[ei].id);
-      }
-      if (extras.length) {
-        try { await dfEditorCommand("core.editor.deleteBlocks", null, extras); } catch (eEx) { /* ignore */ }
-      }
-    } else {
-      var root = orca.state.blocks[id] || { id: id };
-      await dfEditorCommand(
-        "core.editor.insertBlock",
-        null,
-        root,
-        "lastChild",
-        dfMarkdownLineToFragments(lineText),
-        { type: "text" }
-      );
-    }
+    await dfUpsertPrefixedLine(id, DF_LOC_PREFIX, loc);
   });
 
   try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
@@ -5043,6 +5078,9 @@ async function updateEntryMeta(blockId, meta) {
     if (dels.length) {
       try { await dfEditorCommand("core.editor.deleteProperties", null, [id], dels); } catch (eDel) { /* ignore */ }
     }
+    // 同步写入正文行，日记页可见、可编辑
+    await dfUpsertPrefixedLine(id, DF_MOOD_PREFIX, mood);
+    await dfUpsertPrefixedLine(id, DF_WEATHER_PREFIX, weather);
   });
   try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
   return { block: await dfGetBlock(id), mood: mood, weather: weather };

@@ -200,6 +200,14 @@ const feedC2 = await OB.listFeed({});
 const c2 = ((feedC2.items[0] || {}).comments || []).find((c) => c.text === "改后评论");
 console.log("cache comment edit reflected:", !!c1, "->", !!c2);
 
+// 地点：创建时应写入正文行并可被 feed 读取
+const locEntry = await OB.createEntry({ text: "带地点", location: "咖啡馆" });
+const feedLoc = await OB.listFeed({});
+const locItem = feedLoc.items.find((x) => x.text && x.text.indexOf("带地点") >= 0);
+const locOk = !!(locItem && locItem.location === "咖啡馆");
+console.log("location from body line:", locOk, locItem && locItem.location);
+await OB.deleteEntry(locEntry.id);
+
 await OB.deleteEntry(created.id);
 const feed4 = await OB.listFeed({});
 console.log("after delete:", feed4.items.length);
@@ -208,7 +216,7 @@ const ok = feed1.items.length === 1 && feed2.items.length === 1 && feed3.items.l
   && feed1.items[0].tags.includes("工作")
   && !/#日记流|#工作/.test(feed1.items[0].text || "")
   && stripOk
-  && !!c1 && !!c2
+  && !!c1 && !!c2 && locOk
   && (feed1.items[0].images || []).length >= 1;
 console.log(ok ? "PASS" : "FAIL");
 process.exit(ok ? 0 : 1);
