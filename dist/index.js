@@ -2467,6 +2467,9 @@ var DF_I18N_EN = {
     "Max width (px) of embedded images when exporting Word/PDF (0 = no compression)",
   "自动备份": "Auto backup",
   "启动后自动备份（每天一次）到插件备份目录": "Back up automatically to the plugin backup folder once a day on startup",
+  "悬停原生预览": "Hover preview",
+  "鼠标悬停卡片时用虎鲸原生预览显示该条目（只读，格式完整）":
+    "Show the entry in Orca's native preview on card hover (read-only, full fidelity)",
   "备份保留份数": "Backups to keep",
   "自动备份最多保留的份数": "Maximum number of auto backups to keep",
   "年度报告": "Year in review",
@@ -2597,7 +2600,8 @@ var DF_SETTINGS_DEFAULTS = {
   autoCleanImages: false,
   exportImageMaxWidth: 0,
   autoBackup: false,
-  backupKeep: 7
+  backupKeep: 7,
+  hoverPreview: true
 };
 
 function dfSettingsObject() {
@@ -2686,6 +2690,12 @@ async function dfRegisterSettings() {
         description: dfT("自动备份最多保留的份数"),
         type: "number",
         defaultValue: DF_SETTINGS_DEFAULTS.backupKeep
+      },
+      hoverPreview: {
+        label: dfT("悬停原生预览"),
+        description: dfT("鼠标悬停卡片时用虎鲸原生预览显示该条目（只读，格式完整）"),
+        type: "boolean",
+        defaultValue: DF_SETTINGS_DEFAULTS.hoverPreview
       }
     });
   } catch (e) {
@@ -9508,6 +9518,45 @@ function orcaBindFeedActions(el, ctx) {
       });
     }
   }, true);
+  if (!el.__dfHoverPreview) {
+    el.__dfHoverPreview = true;
+    var hoverTimer = null;
+    var hoverClose = null;
+    var hoverCard = null;
+    function clearHover() {
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+      if (hoverClose) { try { hoverClose(); } catch (e0) { /* ignore */ } hoverClose = null; }
+      hoverCard = null;
+    }
+    el.addEventListener("mouseover", function (e) {
+      try { if (!dfGetSetting("hoverPreview")) return; } catch (eS) { /* ignore */ }
+      var card = e.target && e.target.closest && e.target.closest(".north-luna-moments-item, .mom-item");
+      if (!card || !el.contains(card)) return;
+      if (card === hoverCard) return;
+      clearHover();
+      if (orcaIsEditingInOrca()) return;
+      var id = card.getAttribute("data-id");
+      var it = (ctx.data().items || []).find(function (x) { return String(x.id) === String(id); });
+      var bid = it && (it.blockId || Number(it.id));
+      if (!bid || !isFinite(Number(bid))) return;
+      if (!(orca.utils && typeof orca.utils.showBlockPreview === "function")) return;
+      hoverCard = card;
+      var anchor = card.querySelector(".north-luna-moments-item-text") || card;
+      hoverTimer = setTimeout(function () {
+        hoverTimer = null;
+        if (hoverCard !== card) return;
+        try { hoverClose = orca.utils.showBlockPreview(Number(bid), anchor); } catch (eP) { hoverClose = null; }
+      }, 600);
+    });
+    el.addEventListener("mouseout", function (e) {
+      var card = e.target && e.target.closest && e.target.closest(".north-luna-moments-item, .mom-item");
+      if (!card) return;
+      var to = e.relatedTarget;
+      if (to && card.contains(to)) return;
+      clearHover();
+    });
+    el.addEventListener("mouseleave", clearHover);
+  }
   if (!el.__dfMoreClose) {
     el.__dfMoreClose = function (ev) {
       if (ev.target && ev.target.closest && ev.target.closest(".orca-df-more-inline, [data-action=more]")) return;

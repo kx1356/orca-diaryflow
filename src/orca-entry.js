@@ -1970,6 +1970,45 @@ function orcaBindFeedActions(el, ctx) {
       });
     }
   }, true);
+  if (!el.__dfHoverPreview) {
+    el.__dfHoverPreview = true;
+    var hoverTimer = null;
+    var hoverClose = null;
+    var hoverCard = null;
+    function clearHover() {
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+      if (hoverClose) { try { hoverClose(); } catch (e0) { /* ignore */ } hoverClose = null; }
+      hoverCard = null;
+    }
+    el.addEventListener("mouseover", function (e) {
+      try { if (!dfGetSetting("hoverPreview")) return; } catch (eS) { /* ignore */ }
+      var card = e.target && e.target.closest && e.target.closest(".north-luna-moments-item, .mom-item");
+      if (!card || !el.contains(card)) return;
+      if (card === hoverCard) return;
+      clearHover();
+      if (orcaIsEditingInOrca()) return;
+      var id = card.getAttribute("data-id");
+      var it = (ctx.data().items || []).find(function (x) { return String(x.id) === String(id); });
+      var bid = it && (it.blockId || Number(it.id));
+      if (!bid || !isFinite(Number(bid))) return;
+      if (!(orca.utils && typeof orca.utils.showBlockPreview === "function")) return;
+      hoverCard = card;
+      var anchor = card.querySelector(".north-luna-moments-item-text") || card;
+      hoverTimer = setTimeout(function () {
+        hoverTimer = null;
+        if (hoverCard !== card) return;
+        try { hoverClose = orca.utils.showBlockPreview(Number(bid), anchor); } catch (eP) { hoverClose = null; }
+      }, 600);
+    });
+    el.addEventListener("mouseout", function (e) {
+      var card = e.target && e.target.closest && e.target.closest(".north-luna-moments-item, .mom-item");
+      if (!card) return;
+      var to = e.relatedTarget;
+      if (to && card.contains(to)) return;
+      clearHover();
+    });
+    el.addEventListener("mouseleave", clearHover);
+  }
   if (!el.__dfMoreClose) {
     el.__dfMoreClose = function (ev) {
       if (ev.target && ev.target.closest && ev.target.closest(".orca-df-more-inline, [data-action=more]")) return;
