@@ -1,4 +1,4 @@
-// orca-diaryflow v0.3.19 — light compose + Orca blocks (plan C)
+// orca-diaryflow v0.3.20 — light compose + Orca blocks (plan C)
 // Orca Note adaptation: panel, plugin-file media, block store, tags/refs/search
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -3939,6 +3939,7 @@ function dfFeedListFp(block, overlay) {
       l: (overlay && overlay.location) || "",
       c: (overlay && overlay.createdAt) || "",
       i: (overlay && overlay.images) || [],
+      im: (overlay && overlay.imagesMeta) || [],
       k: (overlay && overlay.comments) || []
     })
   ];
@@ -8292,7 +8293,10 @@ function orcaFeedFingerprint(items) {
       it.text || "",
       (it.tags || []).join(","),
       (it.images || []).join("|"),
+      (it.imagesMeta || []).join("~"),
       it.location || "",
+      it.mood || "",
+      it.weather || "",
       it.pinned ? 1 : 0,
       it.archived ? 1 : 0,
       (it.comments && it.comments.length) || 0

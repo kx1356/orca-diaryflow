@@ -1417,7 +1417,7 @@ const extraCss = [
 ].join("\n");
 const allCss = css + extraCss;
 
-const VERSION = "0.3.19";
+const VERSION = "0.3.20";
 const REPO_URL = "https://github.com/kx1356/orca-diaryflow";
 
 // ---------- 组装输出 ----------

@@ -1220,6 +1220,7 @@ function dfFeedListFp(block, overlay) {
       l: (overlay && overlay.location) || "",
       c: (overlay && overlay.createdAt) || "",
       i: (overlay && overlay.images) || [],
+      im: (overlay && overlay.imagesMeta) || [],
       k: (overlay && overlay.comments) || []
     })
   ];

@@ -707,7 +707,10 @@ function orcaFeedFingerprint(items) {
       it.text || "",
       (it.tags || []).join(","),
       (it.images || []).join("|"),
+      (it.imagesMeta || []).join("~"),
       it.location || "",
+      it.mood || "",
+      it.weather || "",
       it.pinned ? 1 : 0,
       it.archived ? 1 : 0,
       (it.comments && it.comments.length) || 0
