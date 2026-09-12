@@ -321,9 +321,6 @@ var DF_I18N_EN = {
     "Max width (px) of embedded images when exporting Word/PDF (0 = no compression)",
   "自动备份": "Auto backup",
   "启动后自动备份（每天一次）到插件备份目录": "Back up automatically to the plugin backup folder once a day on startup",
-  "悬停原生预览": "Hover preview",
-  "鼠标悬停卡片时用虎鲸原生预览显示该条目（只读，格式完整）":
-    "Show the entry in Orca's native preview on card hover (read-only, full fidelity)",
   "备份保留份数": "Backups to keep",
   "自动备份最多保留的份数": "Maximum number of auto backups to keep",
   "年度报告": "Year in review",

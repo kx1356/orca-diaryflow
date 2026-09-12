@@ -10,8 +10,7 @@ var DF_SETTINGS_DEFAULTS = {
   autoCleanImages: false,
   exportImageMaxWidth: 0,
   autoBackup: false,
-  backupKeep: 7,
-  hoverPreview: true
+  backupKeep: 7
 };
 
 function dfSettingsObject() {
@@ -100,12 +99,6 @@ async function dfRegisterSettings() {
         description: dfT("自动备份最多保留的份数"),
         type: "number",
         defaultValue: DF_SETTINGS_DEFAULTS.backupKeep
-      },
-      hoverPreview: {
-        label: dfT("悬停原生预览"),
-        description: dfT("鼠标悬停卡片时用虎鲸原生预览显示该条目（只读，格式完整）"),
-        type: "boolean",
-        defaultValue: DF_SETTINGS_DEFAULTS.hoverPreview
       }
     });
   } catch (e) {
