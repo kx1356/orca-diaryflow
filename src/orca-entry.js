@@ -2471,62 +2471,6 @@ function orcaJumpToMonth(ctx, monthKey) {
   }, 80);
 }
 
-function orcaSleep(ms) {
-  return new Promise(function (resolve) { setTimeout(resolve, ms); });
-}
-
-/** 从虎鲸块（日记条目或其子块）→ 定位日记流卡片 */
-async function orcaGoToCardByBlock(blockId) {
-  if (!OrcaBlocks) return;
-  var id = typeof blockId === "number" ? blockId : Number(blockId);
-  if (!id || !isFinite(id)) { orcaShowMessage("无效块"); return; }
-  var entryId = null;
-  var cur = orca.state.blocks[id] || await OrcaBlocks.getBlock(id);
-  for (var g = 0; cur && g < 40; g++) {
-    if (OrcaBlocks.hasTag && OrcaBlocks.hasTag(cur, OrcaBlocks.TAG)) { entryId = cur.id; break; }
-    if (!dfIsId(cur.parent)) break;
-    cur = orca.state.blocks[cur.parent] || await OrcaBlocks.getBlock(cur.parent);
-  }
-  if (!entryId) { orcaShowMessage("该块不属于日记流条目"); return; }
-  var panelId = orcaFindPanelId(orca.state.panels);
-  if (!panelId) {
-    orcaOpenPanel();
-    await orcaSleep(260);
-    panelId = orcaFindPanelId(orca.state.panels);
-  }
-  if (panelId) { try { orca.nav.switchFocusTo(panelId); } catch (eF) { /* ignore */ } }
-  await orcaRefreshFeed({ skipHeal: true, preferLive: true });
-  function findIdx() {
-    var all = orcaFeedAllItems || [];
-    for (var i = 0; i < all.length; i++) {
-      if (String(all[i].blockId || all[i].id) === String(entryId)) return i;
-    }
-    return -1;
-  }
-  var idx = findIdx();
-  if (idx < 0 && orcaCtx && orcaCtx.filters) {
-    orcaCtx.filters.kw = "";
-    orcaCtx.filters.tags = [];
-    if (typeof orcaToolsClearQuickFilters === "function") orcaToolsClearQuickFilters(orcaCtx.filters);
-    orcaPersistFilters();
-    await orcaRefreshFeed({ skipHeal: true, preferLive: true });
-    idx = findIdx();
-  }
-  if (idx < 0) { orcaShowMessage("时间线中未找到该条目（可能已归档）"); return; }
-  var need = idx + dfFeedPageSize();
-  if ((orcaFeedLimit || 0) < need) {
-    orcaFeedLimit = need;
-    orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
-    if (orcaCtx && typeof orcaCtx.reApp === "function") orcaCtx.reApp();
-  }
-  await orcaSleep(90);
-  var target = document.querySelector('.orca-df-scope .north-luna-moments-item[data-id="' + entryId + '"], .orca-df-scope .mom-item[data-id="' + entryId + '"]');
-  if (!target) { orcaShowMessage("时间线中未找到该条目"); return; }
-  try { target.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (eSc) { /* ignore */ }
-  target.classList.add("mom-flash");
-  setTimeout(function () { target.classList.remove("mom-flash"); }, 1600);
-}
-
 /** 点日历某天：扩充窗口后滚到该条目；无条目则打开当天日记 */
 function orcaJumpToDate(ctx, dateStr) {
   if (!dateStr) return;
@@ -3172,58 +3116,6 @@ function orcaRegisterSidetool() {
   }
 }
 
-/** 在虎鲸编辑器侧注册「在日记流中定位」：块右键菜单 / #日记流 标签右键菜单 / 斜杠命令 */
-function orcaRegisterIntegrations() {
-  var MenuText = orca.components && orca.components.MenuText;
-  try {
-    if (orca.blockMenuCommands && MenuText) {
-      orca.blockMenuCommands.registerBlockMenuCommand(ORCA_BTN_ID + ".gotoCard", {
-        worksOnMultipleBlocks: false,
-        render: function (blockId, rootBlockId, close) {
-          return h(MenuText, {
-            preIcon: "ti ti-layout-list",
-            title: dfT("在日记流中定位"),
-            onClick: function () { close(); orcaGoToCardByBlock(blockId); }
-          });
-        }
-      });
-    }
-  } catch (e) { console.warn("[orca-diaryflow] block menu reg failed", e); }
-  try {
-    if (orca.tagMenuCommands && MenuText) {
-      orca.tagMenuCommands.registerTagMenuCommand(ORCA_BTN_ID + ".tagGotoCard", {
-        render: function (tagBlock, close, tagRef) {
-          var bid = tagRef && tagRef.from;
-          if (!bid) return null;
-          return h(MenuText, {
-            preIcon: "ti ti-layout-list",
-            title: dfT("在日记流中定位"),
-            onClick: function () { close(); orcaGoToCardByBlock(bid); }
-          });
-        }
-      });
-    }
-  } catch (e2) { console.warn("[orca-diaryflow] tag menu reg failed", e2); }
-  try {
-    orca.commands.registerEditorCommand(orcaPluginName + ".gotoCard", async function (args) {
-      try {
-        var cursor = args && args[2];
-        var bid = cursor && cursor.anchor && cursor.anchor.blockId;
-        if (bid) await orcaGoToCardByBlock(bid);
-      } catch (e) { console.warn("[orca-diaryflow] gotoCard", e); }
-      return null;
-    }, function () { /* undo noop */ }, { label: dfT("在日记流中定位") });
-    if (orca.slashCommands) {
-      orca.slashCommands.registerSlashCommand(orcaPluginName + ".gotoCard", {
-        icon: "ti ti-layout-list",
-        group: "Diary Flow",
-        title: dfT("在日记流中定位"),
-        command: orcaPluginName + ".gotoCard"
-      });
-    }
-  } catch (e3) { console.warn("[orca-diaryflow] slash reg failed", e3); }
-}
-
 async function load(name) {
   orcaPluginName = name;
   orcaInjectStyles();
@@ -3283,7 +3175,6 @@ async function load(name) {
   }
   orcaRegisterHeadbar();
   orcaRegisterSidetool();
-  orcaRegisterIntegrations();
   console.log("[orca-diaryflow] 日记流插件已加载（深融合虎鲸）");
   return true;
 }
@@ -3301,10 +3192,6 @@ async function unload() {
       orca.editorSidetools.unregisterEditorSidetool(ORCA_SIDETOOL_ID);
     }
   } catch (e) {}
-  try { if (orca.blockMenuCommands) orca.blockMenuCommands.unregisterBlockMenuCommand(ORCA_BTN_ID + ".gotoCard"); } catch (e4) {}
-  try { if (orca.tagMenuCommands) orca.tagMenuCommands.unregisterTagMenuCommand(ORCA_BTN_ID + ".tagGotoCard"); } catch (e5) {}
-  try { orca.commands.unregisterEditorCommand(orcaPluginName + ".gotoCard"); } catch (e6) {}
-  try { if (orca.slashCommands) orca.slashCommands.unregisterSlashCommand(orcaPluginName + ".gotoCard"); } catch (e7) {}
   if (orcaRegisteredPanel) {
     try { orca.panels.unregisterPanel(ORCA_PANEL_TYPE); } catch (e) {}
     orcaRegisteredPanel = false;

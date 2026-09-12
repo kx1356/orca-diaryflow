@@ -171,7 +171,6 @@ var DF_I18N_EN = {
   "✏️ 图表": "✏️ Diagram",
   "∑ 公式": "∑ Formula",
   "</> HTML": "</> HTML",
-  "在日记流中定位": "Locate in Diary Flow",
   "评论": "Comments",
   "发送": "Send",
   "写评论…": "Write a comment…",
