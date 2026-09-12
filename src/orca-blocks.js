@@ -1281,6 +1281,9 @@ async function dfBlockToFeedItem(block, overlay, opts) {
     blockId: block.id,
     text: text,
     images: images,
+    imagesMeta: Array.isArray(overlay.imagesMeta)
+      ? overlay.imagesMeta.filter(function (x) { return typeof x === "string"; }).slice(0, 9)
+      : [],
     link: "",
     linkTitle: "",
     created: dfFmtCreated(created),
@@ -1922,6 +1925,11 @@ async function updateEntry(blockId, payload) {
   if (payload.images !== undefined) {
     patch.images = orcaImgs.length ? orcaImgs : (Array.isArray(payload.images) ? payload.images.filter(Boolean).slice(0, 9) : []);
     patch.imagesPushedToOrca = orcaImgs.length > 0 || !(payload.images && payload.images.length);
+  }
+  if (payload.imagesMeta !== undefined) {
+    patch.imagesMeta = Array.isArray(payload.imagesMeta)
+      ? payload.imagesMeta.map(function (s) { return String(s == null ? "" : s); }).slice(0, 9)
+      : [];
   }
   if (payload.pinned !== undefined) patch.pinned = !!payload.pinned;
   // 评论主存虎鲸子块；updateEntry 不再把 comments 写进 overlay

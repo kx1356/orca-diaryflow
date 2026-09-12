@@ -1157,6 +1157,18 @@ function orcaEnhanceFeedDom(el, ctx) {
         contentEl.appendChild(chipRow);
       }
     }
+    if (it.imagesMeta && it.imagesMeta.some(function (c) { return c && String(c).trim(); })) {
+      var capContent = card.querySelector(".north-luna-moments-item-content, .mom-item-content") || card;
+      if (capContent && !capContent.querySelector(".orca-df-captions")) {
+        var capRow = document.createElement("div");
+        capRow.className = "orca-df-captions";
+        capRow.innerHTML = it.imagesMeta.map(function (c, i) {
+          if (!c || !String(c).trim()) return "";
+          return '<span class="orca-df-caption">' + (i + 1) + ". " + orcaEsc(String(c).trim()) + "</span>";
+        }).join("");
+        capContent.appendChild(capRow);
+      }
+    }
     if (card.querySelector(".orca-df-refs")) return;
     if (!it.refs || !it.refs.length) return;
     var row = document.createElement("div");

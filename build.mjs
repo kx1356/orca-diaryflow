@@ -1395,7 +1395,10 @@ const extraCss = [
   ".orca-df-meta-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }",
   ".orca-df-meta-chip { font-size: 12px; padding: 1px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }",
   ".orca-df-img-row { cursor: grab; }",
-  ".orca-df-img-row.is-dragging { opacity: .45; }"
+  ".orca-df-img-row.is-dragging { opacity: .45; }",
+  ".orca-df-img-cap { width: 100%; box-sizing: border-box; height: 24px; font-size: 12px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.1)); background: transparent; color: inherit; margin-bottom: 2px; }",
+  ".orca-df-captions { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; }",
+  ".orca-df-caption { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }"
 ].join("\n");
 const allCss = css + extraCss;
 

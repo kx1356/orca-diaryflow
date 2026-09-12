@@ -207,6 +207,7 @@ var DF_I18N_EN = {
   "导出 Word（.doc）": "Export Word (.doc)",
   "已导出 Word（": "Exported Word (",
   "图": "Image ",
+  "图片说明": "Caption",
   "全部取消归档": "Unarchive all",
   "全部取消归档？共 ": "Unarchive all? ",
   "全部恢复": "Restore all",

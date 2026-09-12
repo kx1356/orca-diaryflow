@@ -161,7 +161,8 @@ function orcaToolsBuildMarkdown(items, cfg) {
     if (tags.length) lines.push(dfT("标签：") + tags.map(function (t) { return "#" + t; }).join(" "));
     if (it.text) lines.push("", it.text, "");
     (it.images || []).forEach(function (src, i) {
-      lines.push("![" + dfT("图") + (i + 1) + "](" + src + ")");
+      var cap = (it.imagesMeta && it.imagesMeta[i]) || (dfT("图") + (i + 1));
+      lines.push("![" + cap + "](" + src + ")");
     });
     if (it.comments && it.comments.length) {
       it.comments.forEach(function (c) {
@@ -242,7 +243,9 @@ async function orcaToolsBuildWordHtml(items, cfg) {
     var srcs = (it.images || []).filter(Boolean);
     for (var j = 0; j < srcs.length; j++) {
       var ds = await orcaToolsImageToDataUrl(srcs[j]);
-      imgs += '<div style="margin:6px 0"><img src="' + orcaToolsEsc(ds) + '" style="max-width:100%"></div>';
+      var cap = it.imagesMeta && it.imagesMeta[j] ? String(it.imagesMeta[j]).trim() : "";
+      imgs += '<div style="margin:6px 0"><img src="' + orcaToolsEsc(ds) + '" style="max-width:100%">' +
+        (cap ? ('<div style="color:#888;font-size:12px">' + orcaToolsEsc(cap) + "</div>") : "") + "</div>";
     }
     var cmts = (it.comments || []).map(function (c) {
       return orcaToolsEsc((c && c.name) || dfT("我")) + "：" + orcaToolsEsc((c && c.text) || "");
@@ -1253,8 +1256,13 @@ function orcaOpenImagesDialog(ctx, item) {
   var bar = host.querySelector(".orca-df-img-progress-bar");
   var status = host.querySelector(".orca-df-img-status");
   var fileInput = host.querySelector("[data-df-img-file]");
-  var rows = (item.images || []).filter(Boolean).slice(0, 9).map(function (src) {
-    return { src: src, status: "ready", error: "" };
+  var rows = (item.images || []).filter(Boolean).slice(0, 9).map(function (src, i) {
+    return {
+      src: src,
+      status: "ready",
+      error: "",
+      caption: (item.imagesMeta && item.imagesMeta[i]) || ""
+    };
   });
   var busy = false;
   var dragIdx = -1;
@@ -1286,6 +1294,12 @@ function orcaOpenImagesDialog(ctx, item) {
     dragIdx = -1;
     render();
   });
+  listEl.addEventListener("input", function (e) {
+    var inp = e.target && e.target.closest && e.target.closest("[data-cap]");
+    if (!inp) return;
+    var i = Number(inp.getAttribute("data-cap"));
+    if (rows[i]) rows[i].caption = inp.value;
+  });
 
   function setProgress(done, total) {
     var pct = total ? Math.round((done / total) * 100) : 0;
@@ -1308,7 +1322,10 @@ function orcaOpenImagesDialog(ctx, item) {
       return (
         '<div class="orca-df-img-row" draggable="true" data-idx="' + i + '">' +
         '<img class="orca-df-img-thumb" src="' + orcaToolsEsc(thumb) + '" alt="" />' +
-        '<div class="orca-df-img-meta"><div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div></div>" +
+        '<div class="orca-df-img-meta">' +
+          '<input type="text" class="orca-df-img-cap" data-cap="' + i + '" maxlength="80" placeholder="' + orcaToolsEsc(dfT("图片说明")) + '" value="' + orcaToolsEsc(r.caption || "") + '" />' +
+          '<div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div>" +
+        "</div>" +
         '<div class="orca-df-img-acts">' +
         '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>' + upLabel + "</button>" +
         '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>' + downLabel + "</button>" +
@@ -1400,11 +1417,15 @@ function orcaOpenImagesDialog(ctx, item) {
           busy = false;
           return null;
         }
-        var imgs = rows.filter(function (r) { return r.status === "ready"; }).map(function (r) { return r.src; }).slice(0, 9);
-        return OrcaBlocks.updateEntry(bid, { images: imgs });
+        var ready = rows.filter(function (r) { return r.status === "ready"; }).slice(0, 9);
+        var imgs = ready.map(function (r) { return r.src; });
+        var metas = ready.map(function (r) { return r.caption || ""; });
+        return OrcaBlocks.updateEntry(bid, { images: imgs, imagesMeta: metas });
       }).then(function (res) {
         if (res == null) return;
-        item.images = rows.filter(function (r) { return r.status === "ready"; }).map(function (r) { return r.src; }).slice(0, 9);
+        var ready2 = rows.filter(function (r) { return r.status === "ready"; }).slice(0, 9);
+        item.images = ready2.map(function (r) { return r.src; });
+        item.imagesMeta = ready2.map(function (r) { return r.caption || ""; });
         orcaShowMessage("图片已保存");
         orcaCloseImagesDialog();
         return orcaRefreshFeed({ keepLimit: true, skipHeal: true, preferLive: true }).then(function () {
