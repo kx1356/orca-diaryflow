@@ -1315,6 +1315,8 @@ const extraCss = [
   ".orca-df-tools-tile:hover { border-color: var(--df-brand, #007AFF); }",
   ".orca-df-tools-tile b { font-size: 15px; }",
   ".orca-df-tools-tile span { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }",
+  ".orca-df-tools-body.orca-df-tools-hub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-content: start; }",
+  ".orca-df-tools-hub .orca-df-tools-tile { margin: 0; }",
   ".orca-df-tools-btn {",
   "  appearance: none; cursor: pointer; text-align: left;",
   "  padding: 10px 14px; border-radius: 8px;",

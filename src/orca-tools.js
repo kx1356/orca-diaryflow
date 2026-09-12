@@ -421,10 +421,10 @@ function orcaOpenToolsHub(ctx) {
   var host = document.createElement("div");
   host.className = "orca-df-tools-backdrop orca-df-scope";
   host.innerHTML =
-    '<div class="orca-df-tools-pop" role="dialog" aria-label="日记流工具">' +
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="日记流工具">' +
     '<div class="orca-df-tools-head"><span>工具</span>' +
     '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
-    '<div class="orca-df-tools-body">' +
+    '<div class="orca-df-tools-body orca-df-tools-hub">' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="archive"><b>归档柜</b><span data-df-tools-arch-hint>已归档条目</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="trash"><b>回收站</b><span data-df-tools-trash-hint>删除后约保留 30 天</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="search"><b>搜索</b><span>在日记流内按关键词筛选</span></button>' +
