@@ -1,0 +1,1 @@
+      yearSel.innerHTML = sortedYears.map((y) => `<option value="${y}"${y === ctx.calYear ? " selected" : ""}>${dfLocaleIsEn() ? y : y + "年"}</option>`).join("");

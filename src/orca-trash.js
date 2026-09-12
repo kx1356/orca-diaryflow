@@ -131,7 +131,6 @@ async function dfSnapshotEntryForTrash(blockId) {
     location: location || "",
     comments: comments,
     overlay: {
-      liked: !!overlay.liked,
       pinned: !!overlay.pinned,
       archived: !!overlay.archived || dfIsArchived(block, overlay),
       createdAt: overlay.createdAt || null,
@@ -160,7 +159,7 @@ async function dfMoveEntryToTrash(blockId) {
 
 async function trashList() {
   var list = await dfTrashReadIndex();
-  var ttl = DF_TRASH_RETENTION_DAYS * 864e5;
+  var ttl = dfTrashRetentionDays() * 864e5;
   var now = Date.now();
   return list.map(function (e) {
     return Object.assign({}, e, {
@@ -201,7 +200,6 @@ async function restoreTrashItem(trashId) {
     tags: record.tags || [],
     images: record.images || [],
     location: record.location || "",
-    liked: !!(record.overlay && record.overlay.liked),
     pinned: !!(record.overlay && record.overlay.pinned),
     isTutorial: !!(record.overlay && record.overlay.isTutorial)
   });
@@ -219,7 +217,6 @@ async function restoreTrashItem(trashId) {
     comments: [],
     commentsStorage: "orca-blocks",
     location: record.location || "",
-    liked: !!(record.overlay && record.overlay.liked),
     pinned: !!(record.overlay && record.overlay.pinned),
     isTutorial: !!(record.overlay && record.overlay.isTutorial)
   };
@@ -239,7 +236,7 @@ async function restoreTrashItem(trashId) {
 
   await dfTrashRemoveFile(meta.fileName || dfTrashFileName(want));
   await dfTrashWriteIndex(list.filter(function (e) { return !(e && String(e.trashId) === want); }));
-  return { blockId: newId, title: record.title };
+  return { blockId: newId, title: record.title, wasArchived: !!(record.overlay && record.overlay.archived) };
 }
 
 async function purgeTrashItem(trashId) {
@@ -264,7 +261,7 @@ async function purgeAllTrash() {
 }
 
 async function purgeExpiredTrash() {
-  var ttl = DF_TRASH_RETENTION_DAYS * 864e5;
+  var ttl = dfTrashRetentionDays() * 864e5;
   var now = Date.now();
   var list = await dfTrashReadIndex();
   var keep = [];
@@ -281,6 +278,25 @@ async function purgeExpiredTrash() {
   return { removed: list.length - keep.length };
 }
 
+/** 收集所有回收站快照中引用的插件媒体文件名（自动清理时避免误删） */
+async function dfTrashAllMediaRefs() {
+  var refs = {};
+  var list = await dfTrashReadIndex();
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    if (!e) continue;
+    var rec = null;
+    try { rec = await dfTrashReadFile(e.fileName || dfTrashFileName(e.trashId)); } catch (err) { rec = null; }
+    var imgs = (rec && rec.images) || [];
+    for (var j = 0; j < imgs.length; j++) {
+      var s = imgs[j];
+      var m = typeof s === "string" && s.match(/^dfasset:\/\/media\/(.+)$/);
+      if (m && m[1]) refs[decodeURIComponent(m[1])] = true;
+    }
+  }
+  return refs;
+}
+
 // 挂到 OrcaBlocks（本文件在 orca-blocks.js 之后拼接）
 (function dfAttachTrashApi() {
   var api = {
@@ -290,6 +306,7 @@ async function purgeExpiredTrash() {
     purgeTrashItem: purgeTrashItem,
     purgeAllTrash: purgeAllTrash,
     purgeExpiredTrash: purgeExpiredTrash,
+    trashAllMediaRefs: dfTrashAllMediaRefs,
     TRASH_RETENTION_DAYS: DF_TRASH_RETENTION_DAYS,
     TRASH_INDEX_KEY: DF_TRASH_INDEX_KEY
   };

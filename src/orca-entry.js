@@ -15,17 +15,53 @@ var orcaMomentsData = null;
 var orcaCtx = null;
 var orcaThemeObserver = null;
 var orcaIsDark = false;
-var orcaEditPanelId = null;
 var orcaFeedSyncTimer = null;
 var orcaFeedSyncUnsub = null;
+var orcaSettingsLocaleUnsub = null;
+var orcaSettingsLocale = "";
+var orcaAutoCleanupScheduled = false;
 var orcaFeedSyncMutedUntil = 0;
 var orcaFeedSyncInFlight = false;
 var orcaFeedSyncFp = "";
 var orcaFeedFocusHandler = null;
 var orcaFeedVisHandler = null;
-var ORCA_FEED_PAGE_SIZE = 25;
 var orcaFeedAllItems = [];
-var orcaFeedLimit = ORCA_FEED_PAGE_SIZE;
+var orcaFeedLimit = 25;
+var DF_FILTERS_KEY = "feed-filters";
+/** 回收站/归档柜列表每页条数 */
+var DF_LIST_PAGE = 50;
+
+/** 把当前筛选状态写入插件数据（重开面板后恢复） */
+function orcaPersistFilters() {
+  if (!orcaCtx) return;
+  try {
+    var f = orcaCtx.filters || {};
+    dfSetData(DF_FILTERS_KEY, {
+      kw: f.kw || "",
+      tags: Array.isArray(f.tags) ? f.tags.filter(Boolean).slice(0, 1) : [],
+      hasImage: !!f.hasImage,
+      hasLocation: !!f.hasLocation,
+      pinnedOnly: !!f.pinnedOnly,
+      dateFrom: f.dateFrom || "",
+      dateTo: f.dateTo || ""
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function orcaLoadFilters() {
+  if (!orcaCtx) return;
+  try {
+    var v = await dfGetData(DF_FILTERS_KEY);
+    if (!v || typeof v !== "object") return;
+    orcaCtx.filters.kw = typeof v.kw === "string" ? v.kw : "";
+    orcaCtx.filters.tags = Array.isArray(v.tags) ? v.tags.filter(Boolean).slice(0, 1) : [];
+    orcaCtx.filters.hasImage = !!v.hasImage;
+    orcaCtx.filters.hasLocation = !!v.hasLocation;
+    orcaCtx.filters.pinnedOnly = !!v.pinnedOnly;
+    orcaCtx.filters.dateFrom = typeof v.dateFrom === "string" ? v.dateFrom : "";
+    orcaCtx.filters.dateTo = typeof v.dateTo === "string" ? v.dateTo : "";
+  } catch (e) { /* ignore */ }
+}
 
 globalThis.__DF_IS_DARK = function () { return orcaIsDark; };
 
@@ -240,7 +276,8 @@ var orcaShim = {
 };
 
 function orcaShowMessage(m) {
-  try { orca.notify("info", m); } catch (e) { console.log("[orca-diaryflow]", m); }
+  var msg = dfT(m);
+  try { orca.notify("info", msg); } catch (e) { console.log("[orca-diaryflow]", msg); }
 }
 
 var storage = require_storage();
@@ -283,7 +320,7 @@ async function orcaStartNewEntryInOrca(ctx) {
     }
   } catch (e) {
     console.error("[orca-diaryflow] new entry", e);
-    orca.notify("error", "新建失败: " + (e && e.message || e), { title: "日记流" });
+    orca.notify("error", dfT("新建失败: ") + (e && e.message || e), { title: dfT("日记流") });
   }
 }
 
@@ -302,7 +339,6 @@ function orcaFeedFingerprint(items) {
       (it.tags || []).join(","),
       (it.images || []).join("|"),
       it.location || "",
-      it.liked ? 1 : 0,
       it.pinned ? 1 : 0,
       it.archived ? 1 : 0,
       (it.comments && it.comments.length) || 0
@@ -409,6 +445,48 @@ function orcaStartFeedSyncWatch() {
   try { document.addEventListener("visibilitychange", orcaFeedVisHandler); } catch (e3) { /* ignore */ }
 }
 
+/** 启动后按设置自动清理未引用的插件图片（默认关闭；回收站/归档引用受保护） */
+function orcaScheduleAutoMediaCleanup() {
+  if (orcaAutoCleanupScheduled) return;
+  orcaAutoCleanupScheduled = true;
+  try {
+    if (!dfGetSetting("autoCleanImages")) return;
+  } catch (e0) { return; }
+  setTimeout(function () {
+    if (orcaIsEditingInOrca()) return;
+    if (typeof orcaToolsListOrphanMedia !== "function" || typeof orcaToolsCleanupOrphanMedia !== "function") return;
+    orcaToolsListOrphanMedia().then(function (names) {
+      if (!names || !names.length) return null;
+      return orcaToolsCleanupOrphanMedia(names).then(function (removed) {
+        if (removed) console.log("[orca-diaryflow] auto cleaned orphan images:", removed);
+      });
+    }).catch(function () { /* ignore */ });
+  }, 20000);
+}
+
+/** 监听语言切换：重注册设置页标签（中/英）并刷新主题 */
+function orcaWatchLocale() {
+  orcaSettingsLocale = String((orca.state && orca.state.locale) || "");
+  if (orcaSettingsLocaleUnsub) {
+    try { orcaSettingsLocaleUnsub(); } catch (e0) { /* ignore */ }
+    orcaSettingsLocaleUnsub = null;
+  }
+  var sub = orcaGetValtioSubscribe();
+  if (!sub || !orca.state) return;
+  try {
+    orcaSettingsLocaleUnsub = sub(orca.state, function () {
+      var loc = String((orca.state && orca.state.locale) || "");
+      if (loc === orcaSettingsLocale) return;
+      orcaSettingsLocale = loc;
+      dfRegisterSettings().catch(function () { /* ignore */ });
+      orcaApplyTheme();
+    });
+  } catch (e) {
+    console.warn("[orca-diaryflow] locale watch failed", e);
+    orcaSettingsLocaleUnsub = null;
+  }
+}
+
 function orcaStopFeedSyncWatch() {
   if (orcaFeedSyncTimer) {
     clearTimeout(orcaFeedSyncTimer);
@@ -460,7 +538,7 @@ async function orcaRefreshFeed(opts) {
     if (!it) return;
     it.text = OrcaBlocks.stripInlineTagText(it.text || "", it.tags || []);
   });
-  if (!opts.keepLimit) orcaFeedLimit = ORCA_FEED_PAGE_SIZE;
+  if (!opts.keepLimit) orcaFeedLimit = dfFeedPageSize();
   orcaApplyFeedWindow(cfg);
   try { await DF_ASSETS.hydrate(orcaMomentsData); } catch (e) { /* ignore */ }
   orcaFeedSyncFp = orcaFeedFingerprint(orcaFeedAllItems);
@@ -474,7 +552,8 @@ function orcaApplyFeedWindow(cfg) {
   if (typeof orcaToolsQuickFilterItems === "function" && orcaCtx && orcaCtx.filters) {
     all = orcaToolsQuickFilterItems(all, orcaCtx.filters);
   }
-  var limit = Math.max(ORCA_FEED_PAGE_SIZE, Number(orcaFeedLimit) || ORCA_FEED_PAGE_SIZE);
+  var page = dfFeedPageSize();
+  var limit = Math.max(page, Number(orcaFeedLimit) || page);
   orcaFeedLimit = limit;
   var visible = all.slice(0, limit);
   var prevCfg = (orcaMomentsData && orcaMomentsData.config) || {};
@@ -489,7 +568,7 @@ function orcaApplyFeedWindow(cfg) {
 
 function orcaLoadMoreFeed(ctx) {
   if (!orcaMomentsData || !orcaMomentsData._hasMore) return;
-  orcaFeedLimit += ORCA_FEED_PAGE_SIZE;
+  orcaFeedLimit += dfFeedPageSize();
   orcaApplyFeedWindow(orcaMomentsData.config);
   DF_ASSETS.hydrate(orcaMomentsData).then(function () {
     if (ctx && typeof ctx.reApp === "function") ctx.reApp();
@@ -549,7 +628,7 @@ async function orcaManualRefreshFeed(ctx) {
 function orcaBuildCtx() {
   var c = {
     plugin: orcaShim,
-    filters: { kw: "", tags: [], hasImage: false, hasLocation: false, pinnedOnly: false },
+    filters: { kw: "", tags: [], hasImage: false, hasLocation: false, pinnedOnly: false, dateFrom: "", dateTo: "" },
     view: "feed",
     calYear: new Date().getFullYear(),
     mounts: [],
@@ -567,7 +646,6 @@ function orcaBuildCtx() {
           var key = String(it.blockId || it.id);
           var prev = idx.overlays[key] || {};
           idx.overlays[key] = Object.assign({}, prev, {
-            liked: !!it.liked,
             pinned: !!it.pinned,
             archived: !!it.archived,
             location: it.location || "",
@@ -624,6 +702,22 @@ function orcaCloseTagFilterPopover(ctx) {
   }
 }
 
+/** 设标签筛选；再点同一标签则取消。返回是否仍在筛选。 */
+function orcaSetTagFilter(ctx, tag) {
+  if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+  var cur = (ctx.filters.tags || [])[0] || "";
+  var next = tag ? String(tag) : "";
+  if (!next || next === cur) {
+    ctx.filters.tags = [];
+    orcaPersistFilters();
+    return false;
+  }
+  ctx.filters.tags = [next];
+  ctx.filters.kw = "";
+  orcaPersistFilters();
+  return true;
+}
+
 function orcaOpenTagFilter(ctx, btn) {
   if (!ctx) return;
   var existing = document.querySelector(".orca-df-tag-popover");
@@ -631,20 +725,30 @@ function orcaOpenTagFilter(ctx, btn) {
     orcaCloseTagFilterPopover(ctx);
     return;
   }
+  // 已在标签筛选中：再点 FAB = 取消筛选
+  var activeNow = ((ctx.filters && ctx.filters.tags) || [])[0] || "";
+  if (activeNow) {
+    orcaSetTagFilter(ctx, "");
+    orcaRefreshFeed().then(function () {
+      if (ctx.reApp) ctx.reApp();
+      orcaShowMessage("已取消标签筛选");
+    });
+    return;
+  }
   OrcaBlocks.collectUserTags().then(function (tags) {
     var pop = document.createElement("div");
     pop.className = "orca-df-tag-popover orca-df-scope";
     var active = ((ctx.filters && ctx.filters.tags) || [])[0] || "";
-    var rows = '<button type="button" class="orca-df-tag-popover-item' + (!active ? " is-on" : "") + '" data-df-act="clear-tag">全部</button>';
+    var rows = '<button type="button" class="orca-df-tag-popover-item' + (!active ? " is-on" : "") + '" data-df-act="clear-tag">' + dfT("全部") + "</button>";
     if (!tags.length) {
-      rows += '<div class="orca-df-tag-popover-empty">暂无标签</div>';
+      rows += '<div class="orca-df-tag-popover-empty">' + dfT("暂无标签") + "</div>";
     } else {
       rows += tags.map(function (t) {
         var on = active === t ? " is-on" : "";
         return '<button type="button" class="orca-df-tag-popover-item' + on + '" data-df-act="filter-tag" data-tag="' + orcaEsc(t) + '">#' + orcaEsc(t) + "</button>";
       }).join("");
     }
-    pop.innerHTML = '<div class="orca-df-tag-popover-title">标签筛选</div>' + rows;
+    pop.innerHTML = '<div class="orca-df-tag-popover-title">' + dfT("标签筛选") + "</div>" + rows;
     document.body.appendChild(pop);
     var fabRect = (btn && btn.getBoundingClientRect()) || { left: 0, bottom: 0, top: 0 };
     pop.style.right = Math.max(12, window.innerWidth - fabRect.left + 8) + "px";
@@ -667,18 +771,19 @@ function orcaOpenTagFilter(ctx, btn) {
       e.preventDefault();
       e.stopPropagation();
       var act = item.getAttribute("data-df-act");
+      var on = false;
       if (act === "clear-tag") {
-        ctx.filters.tags = [];
+        on = orcaSetTagFilter(ctx, "");
       } else if (act === "filter-tag") {
-        var t = item.getAttribute("data-tag");
-        ctx.filters.tags = t ? [t] : [];
-        ctx.filters.kw = "";
+        on = orcaSetTagFilter(ctx, item.getAttribute("data-tag"));
       }
       orcaCloseTagFilterPopover(ctx);
       orcaRefreshFeed().then(function () {
         ctx.reApp();
-        if (ctx.filters.tags && ctx.filters.tags[0]) {
+        if (on && ctx.filters.tags && ctx.filters.tags[0]) {
           orcaShowMessage("已按标签过滤 #" + ctx.filters.tags[0]);
+        } else {
+          orcaShowMessage("已取消标签筛选");
         }
       });
     });
@@ -729,8 +834,8 @@ function orcaEnhanceFeedDom(el, ctx) {
         var on = active === t ? " is-on" : "";
         return '<button type="button" class="orca-df-tagchip' + on + '" data-df-act="filter-tag" data-tag="' + orcaEsc(t) + '">#' + orcaEsc(t) + "</button>";
       }).join("");
-      bar.innerHTML = '<span class="orca-df-tagbar-label">标签</span>' + chips +
-        (active ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-tag">全部</button>' : "");
+      bar.innerHTML = '<span class="orca-df-tagbar-label">' + dfT("标签") + "</span>" + chips +
+        (active ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-tag">' + dfT("全部") + "</button>" : "");
       var list = el.querySelector(".mom-list") || el.querySelector("[data-list]");
       if (list && list.parentNode) list.parentNode.insertBefore(bar, list);
       if (typeof orcaEnhanceToolsUi === "function") orcaEnhanceToolsUi(el, ctx);
@@ -761,7 +866,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         locBtn.setAttribute("data-mid", String(it.id));
         locBtn.setAttribute("data-id", String(it.id));
         locBtn.setAttribute("data-action", "location");
-        locBtn.title = it.location ? ("地点：" + it.location) : "添加地点";
+        locBtn.title = it.location ? (dfT("地点：") + it.location) : dfT("添加地点");
         locBtn.setAttribute("aria-label", locBtn.title);
         locBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z"></path></svg>';
         if (it.location) locBtn.classList.add("is-on");
@@ -786,13 +891,13 @@ function orcaEnhanceFeedDom(el, ctx) {
         moreBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>';
         bar.appendChild(moreBtn);
       }
-      moreBtn.title = "更多";
-      moreBtn.setAttribute("aria-label", "更多");
+      moreBtn.title = dfT("更多");
+      moreBtn.setAttribute("aria-label", dfT("更多"));
       moreBtn.setAttribute("aria-expanded", "false");
       // 内联展开的次级图标组（每次刷新同步置顶/标签态）
       var userTags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
-      var pinTitle = it.pinned ? "取消置顶" : "置顶";
-      var tagTitle = userTags.length ? ("标签：" + userTags.map(function (t) { return "#" + t; }).join(" ")) : "标签";
+      var pinTitle = dfT(it.pinned ? "取消置顶" : "置顶");
+      var tagTitle = userTags.length ? (dfT("标签：") + userTags.map(function (t) { return "#" + t; }).join(" ")) : dfT("标签");
       var extra = bar.querySelector(".orca-df-more-inline");
       if (!extra) {
         extra = document.createElement("span");
@@ -803,13 +908,13 @@ function orcaEnhanceFeedDom(el, ctx) {
       }
       extra.innerHTML =
         '<button type="button" class="north-luna-moments-action-btn' + (it.pinned ? " active is-on" : "") + '" data-action="pin" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(pinTitle) + '" aria-label="' + orcaEsc(pinTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v4l1 1 1-1v-4h5v-2l-2-2z"></path></svg></button>' +
-        '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="归档" aria-label="归档"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
+        '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("归档")) + '" aria-label="' + orcaEsc(dfT("归档")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-tag-btn' + (userTags.length ? " is-on" : "") + '" data-action="tag" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(tagTitle) + '" aria-label="' + orcaEsc(tagTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21.4 11.6l-9-9C12 2.2 11.5 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .5.2 1 .6 1.4l9 9c.4.4.9.6 1.4.6s1-.2 1.4-.6l7-7c.4-.4.6-.9.6-1.4 0-.5-.2-1-.6-1.4zM6.5 8C5.7 8 5 7.3 5 6.5S5.7 5 6.5 5 8 5.7 8 6.5 7.3 8 6.5 8z"></path></svg></button>' +
-        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="管理图片" aria-label="管理图片"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
+        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("管理图片")) + '" aria-label="' + orcaEsc(dfT("管理图片")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
         (bid && isFinite(Number(bid))
-          ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="在虎鲸中打开" aria-label="在虎鲸中打开"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
+          ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
-        '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="删除" aria-label="删除"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
+        '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("删除")) + '" aria-label="' + orcaEsc(dfT("删除")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
       bar.classList.remove("is-more-open");
     }
     // meta 地点可点编辑；无地点时不额外插空行（靠动作栏添加）
@@ -844,8 +949,33 @@ function orcaEnhanceFeedDom(el, ctx) {
     var content = card.querySelector(".north-luna-moments-item-content, .mom-item-content") || card;
     content.appendChild(row);
   });
+  orcaEnhanceComments(el);
   orcaLazyHydrateDeepBodies(el, ctx);
   orcaEnsureLoadMoreButton(el, ctx);
+}
+
+/** 给每条评论注入「编辑」按钮（vendor 只提供删除） */
+function orcaEnhanceComments(el) {
+  if (!el) return;
+  el.querySelectorAll(".north-luna-moments-comment-item").forEach(function (item) {
+    var right = item.querySelector(".north-luna-moments-comment-actions-right");
+    if (!right || right.querySelector('[data-action="edit-comment"]')) return;
+    var panel = item.closest(".north-luna-moments-comment-panel");
+    var mid = panel ? panel.getAttribute("data-mid") : "";
+    var cid = item.getAttribute("data-cid");
+    if (!mid || !cid) return;
+    var edit = document.createElement("span");
+    edit.className = "north-luna-moments-comment-del orca-df-comment-edit";
+    edit.setAttribute("data-mid", mid);
+    edit.setAttribute("data-id", mid);
+    edit.setAttribute("data-cid", cid);
+    edit.setAttribute("data-action", "edit-comment");
+    edit.setAttribute("role", "button");
+    edit.title = dfT("编辑");
+    edit.setAttribute("aria-label", dfT("编辑"));
+    edit.innerHTML = '<svg class="icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+    right.insertBefore(edit, right.firstChild);
+  });
 }
 
 /** 深层嵌套条目：进视口后再拉全文，避免 listFeed 全树加载 */
@@ -904,9 +1034,12 @@ function orcaEnsureLoadMoreButton(el, ctx) {
   var total = data._allCount || shown;
   var wrap = document.createElement("div");
   wrap.className = "orca-df-load-more";
+  var moreLabel = dfLocaleIsEn()
+    ? ("Load more (" + shown + " / " + total + ")")
+    : ("加载更多（" + shown + " / " + total + "）");
   wrap.innerHTML =
     '<button type="button" class="orca-df-load-more-btn" data-action="load-more-feed">' +
-    "加载更多（" + shown + " / " + total + "）" +
+    moreLabel +
     "</button>";
   host.appendChild(wrap);
 }
@@ -917,8 +1050,8 @@ function orcaCollapseAllMoreBars(exceptBar) {
     b.classList.remove("is-more-open");
     var mb = b.querySelector('[data-action="more"]');
     if (mb) {
-      mb.title = "更多";
-      mb.setAttribute("aria-label", "更多");
+      mb.title = dfT("更多");
+      mb.setAttribute("aria-label", dfT("更多"));
       mb.setAttribute("aria-expanded", "false");
     }
   });
@@ -957,7 +1090,7 @@ function orcaChangeEntryTime(ctx, it) {
         '<button type="button" class="mom-btn mom-btn-primary" data-save>确定</button>' +
       "</div>" +
     "</div>";
-  document.body.appendChild(overlay);
+  dfMountDialog(overlay);
   function close() {
     try { overlay.remove(); } catch (e) { /* ignore */ }
   }
@@ -981,7 +1114,7 @@ function orcaChangeEntryTime(ctx, it) {
       close();
     }).catch(function (e) {
       console.error("[orca-diaryflow] update time", e);
-      orca.notify("error", "改时间失败: " + (e && e.message || e), { title: "日记流" });
+      orca.notify("error", dfT("改时间失败: ") + (e && e.message || e), { title: dfT("日记流") });
     });
   }
   overlay.addEventListener("click", function (e) {
@@ -1013,7 +1146,7 @@ function orcaChangeEntryLocation(ctx, it) {
         '<button type="button" class="mom-btn mom-btn-primary" data-save>确定</button>' +
       "</div>" +
     "</div>";
-  document.body.appendChild(overlay);
+  dfMountDialog(overlay);
   var inp = overlay.querySelector("[data-loc]");
   if (inp) {
     try { inp.focus(); inp.select(); } catch (eF) { /* ignore */ }
@@ -1032,7 +1165,7 @@ function orcaChangeEntryLocation(ctx, it) {
       close();
     }).catch(function (e) {
       console.error("[orca-diaryflow] update location", e);
-      orca.notify("error", "改地点失败: " + (e && e.message || e), { title: "日记流" });
+      orca.notify("error", dfT("改地点失败: ") + (e && e.message || e), { title: dfT("日记流") });
     });
   }
   overlay.addEventListener("click", function (e) {
@@ -1087,7 +1220,7 @@ function orcaChangeEntryTags(ctx, it) {
         '<button type="button" class="mom-btn mom-btn-primary" data-save>确定</button>' +
       "</div>" +
     "</div>";
-  document.body.appendChild(overlay);
+  dfMountDialog(overlay);
   var listEl = overlay.querySelector("[data-tag-list]");
   var newInp = overlay.querySelector("[data-new-tag]");
 
@@ -1147,7 +1280,7 @@ function orcaChangeEntryTags(ctx, it) {
       close();
     }).catch(function (e) {
       console.error("[orca-diaryflow] update tags", e);
-      orca.notify("error", "改标签失败: " + (e && e.message || e), { title: "日记流" });
+      orca.notify("error", dfT("改标签失败: ") + (e && e.message || e), { title: dfT("日记流") });
     });
   }
 
@@ -1254,6 +1387,12 @@ function orcaBindFeedActions(el, ctx) {
       orcaDeleteComment(ctx, btn);
       return;
     }
+    if (action === "edit-comment") {
+      e.preventDefault();
+      e.stopPropagation();
+      orcaEditComment(ctx, btn);
+      return;
+    }
     if (action === "load-more-feed") {
       e.preventDefault();
       e.stopPropagation();
@@ -1268,8 +1407,8 @@ function orcaBindFeedActions(el, ctx) {
       var willOpen = !bar.classList.contains("is-more-open");
       orcaCollapseAllMoreBars(willOpen ? bar : null);
       bar.classList.toggle("is-more-open", willOpen);
-      btn.title = willOpen ? "收起" : "更多";
-      btn.setAttribute("aria-label", willOpen ? "收起" : "更多");
+      btn.title = dfT(willOpen ? "收起" : "更多");
+      btn.setAttribute("aria-label", dfT(willOpen ? "收起" : "更多"));
       btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
       return;
     }
@@ -1321,7 +1460,8 @@ function orcaBindFeedActions(el, ctx) {
       var aid = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
       var ait = (ctx.data().items || []).find(function (x) { return String(x.id) === String(aid); });
       if (!ait) return;
-      if (!window.confirm("归档这条日记？\n主时间线将隐藏，可在归档柜取消归档。\n" + String(ait.text || "").slice(0, 40))) return;
+      var archMsg = dfT("归档这条日记？\n主时间线将隐藏，可在归档柜取消归档。\n") + String(ait.text || "").slice(0, 40);
+      if (dfGetSetting("confirmDelete") && !window.confirm(archMsg)) return;
       OrcaBlocks.setEntryArchived(ait.blockId || ait.id, true).then(function () {
         return orcaRefreshFeed({ keepLimit: true });
       }).then(function () {
@@ -1340,7 +1480,8 @@ function orcaBindFeedActions(el, ctx) {
       var delId = btn.dataset.id;
       var delIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(delId); });
       if (!delIt) return;
-      if (!window.confirm("将这条日记移入回收站？\n（可在回收站恢复，约保留 30 天）\n" + String(delIt.text || "").slice(0, 40))) return;
+      var delMsg = dfT("将这条日记移入回收站？\n（可在回收站恢复，约保留 30 天）\n") + String(delIt.text || "").slice(0, 40);
+      if (dfGetSetting("confirmDelete") && !window.confirm(delMsg)) return;
       OrcaBlocks.deleteEntry(delIt.blockId || delIt.id).then(function () {
         return orcaRefreshFeed({ keepLimit: true });
       }).then(function () {
@@ -1358,9 +1499,11 @@ function orcaBindFeedActions(el, ctx) {
       e.stopPropagation();
       var tag = btn.getAttribute("data-tag");
       if (!tag) return;
-      ctx.filters.tags = [tag];
-      ctx.filters.kw = "";
-      orcaRefreshFeed().then(function () { ctx.reApp(); orcaShowMessage("已按标签过滤 #" + tag); });
+      var on = orcaSetTagFilter(ctx, tag);
+      orcaRefreshFeed().then(function () {
+        ctx.reApp();
+        orcaShowMessage(on ? ("已按标签过滤 #" + tag) : "已取消标签筛选");
+      });
     }
   }, true);
   if (!el.__dfMoreClose) {
@@ -1384,7 +1527,7 @@ function orcaSendComment(ctx, btn) {
   var input = panel && panel.querySelector(".north-luna-moments-comment-input");
   var text = ((input && input.value) || "").trim();
   if (!text) return;
-  var nickname = ((ctx.data().config) || {}).nickname || "我";
+  var nickname = ((ctx.data().config) || {}).nickname || dfT("我");
   var now = new Date();
   function p2(n) { return String(n).padStart(2, "0"); }
   var time = now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate()) +
@@ -1417,7 +1560,7 @@ function orcaDeleteComment(ctx, btn) {
     it = (orcaFeedAllItems || []).find(function (x) { return String(x.id) === String(id); });
   }
   if (!it || !cid) return;
-  if (!window.confirm("删除这条评论？")) return;
+  if (dfGetSetting("confirmDelete") && !window.confirm(dfT("删除这条评论？"))) return;
   OrcaBlocks.deleteComment(it.blockId || it.id, cid)
     .then(function () { return orcaRefreshFeed({ keepLimit: true }); })
     .then(function () {
@@ -1428,6 +1571,61 @@ function orcaDeleteComment(ctx, btn) {
       console.warn("[orca-diaryflow] del comment", e);
       orcaShowMessage("删除评论失败");
     });
+}
+
+function orcaEditComment(ctx, btn) {
+  if (!OrcaBlocks || !btn) return;
+  var id = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
+  var cid = btn.dataset.cid || btn.getAttribute("data-cid");
+  var it = (ctx.data().items || []).find(function (x) { return String(x.id) === String(id); });
+  if (!it) it = (orcaFeedAllItems || []).find(function (x) { return String(x.id) === String(id); });
+  if (!it || !cid) return;
+  var cur = "";
+  (it.comments || []).forEach(function (c) {
+    if (String(c && c.id) === String(cid)) cur = String(c.text || "");
+  });
+  var overlay = document.createElement("div");
+  overlay.className = "mom-overlay mom-time orca-df-comment-overlay";
+  overlay.innerHTML =
+    '<div class="mom-modal mom-modal-sm">' +
+      '<div class="mom-modal-head"><span>' + dfT("编辑评论") + '</span><button type="button" class="mom-modal-x" data-x>×</button></div>' +
+      '<div class="mom-modal-body">' +
+        '<input type="text" class="mom-inp" data-cmt maxlength="200" value="' + orcaEsc(cur) + '" placeholder="' + orcaEsc(dfT("写评论…")) + '">' +
+      "</div>" +
+      '<div class="mom-modal-foot">' +
+        '<button type="button" class="mom-btn" data-x>' + dfT("取消") + "</button>" +
+        '<button type="button" class="mom-btn mom-btn-primary" data-save>' + dfT("确定") + "</button>" +
+      "</div>" +
+    "</div>";
+  dfMountDialog(overlay);
+  var inp = overlay.querySelector("[data-cmt]");
+  if (inp) { try { inp.focus(); inp.select(); } catch (eF) { /* ignore */ } }
+  function close() {
+    try { overlay.remove(); } catch (e) { /* ignore */ }
+  }
+  function save() {
+    var v = inp && inp.value != null ? String(inp.value).trim() : "";
+    if (!v) { orcaShowMessage("评论不能为空"); return; }
+    orcaMuteFeedSync(2500);
+    OrcaBlocks.updateComment(it.blockId || it.id, cid, v).then(function () {
+      return orcaRefreshFeed({ keepLimit: true, skipHeal: true, preferLive: true });
+    }).then(function () {
+      if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+      orcaShowMessage("评论已更新");
+      close();
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] update comment", e);
+      orcaShowMessage("评论更新失败");
+    });
+  }
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay || e.target.closest("[data-x]")) close();
+    else if (e.target.closest("[data-save]")) save();
+  });
+  overlay.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); }
+  });
 }
 
 function orcaRefreshToolsFab(ctx, root) {
@@ -1482,6 +1680,11 @@ function orcaTrashFormatTime(ts) {
 
 function orcaTrashRemainingText(ms) {
   var days = ms / 864e5;
+  if (dfLocaleIsEn()) {
+    if (days <= 0) return "Expires today";
+    if (days < 1) return "Less than 1 day left";
+    return Math.ceil(days) + " days left";
+  }
   if (days <= 0) return "今天过期";
   if (days < 1) return "剩不到 1 天";
   return "剩 " + Math.ceil(days) + " 天";
@@ -1505,48 +1708,86 @@ function orcaOpenTrashDialog(ctx) {
     '<div class="orca-df-trash-head">' +
     "<span>回收站</span>" +
     '<div class="orca-df-trash-head-tools">' +
+    '<input type="search" class="orca-df-list-search" data-df-trash-search placeholder="' + orcaEsc(dfT("搜索标题…")) + '" />' +
     '<span class="orca-df-trash-hint">保留约 30 天</span>' +
     '<button type="button" class="orca-df-trash-close" data-df-trash="close" aria-label="关闭">×</button>' +
     "</div></div>" +
     '<div class="orca-df-trash-body"><div class="orca-df-trash-empty">加载中…</div></div>' +
     '<div class="orca-df-trash-foot">' +
+    '<button type="button" class="orca-df-trash-act" data-df-trash="restore-all">全部恢复</button>' +
     '<button type="button" class="orca-df-trash-act danger" data-df-trash="purge-all">清空回收站</button>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
 
   var body = host.querySelector(".orca-df-trash-body");
   var busy = false;
+  var trashItems = [];
+  var trashShown = DF_LIST_PAGE;
+  var trashSearchEl = host.querySelector("[data-df-trash-search]");
+  var trashHintEl = host.querySelector(".orca-df-trash-hint");
+  if (trashHintEl) {
+    trashHintEl.textContent = dfLocaleIsEn()
+      ? ("Kept about " + dfTrashRetentionDays() + " days")
+      : ("保留约 " + dfTrashRetentionDays() + " 天");
+  }
 
   function renderRows(items) {
     if (!items.length) {
-      body.innerHTML = '<div class="orca-df-trash-empty">回收站为空</div>';
+      body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("回收站为空") + "</div>";
       return;
     }
     body.innerHTML = items.map(function (it) {
       return (
         '<div class="orca-df-trash-row" data-trash-id="' + orcaEsc(it.trashId) + '">' +
         '<div class="orca-df-trash-meta">' +
-        '<div class="orca-df-trash-title" title="' + orcaEsc(it.title || "") + '">' + orcaEsc(it.title || "(无标题)") + "</div>" +
+        '<div class="orca-df-trash-title" title="' + orcaEsc(it.title || "") + '">' + orcaEsc(it.title || dfT("(无标题)")) + "</div>" +
         '<div class="orca-df-trash-sub">' + orcaEsc(orcaTrashFormatTime(it.deletedAt)) +
         " · " + orcaEsc(orcaTrashRemainingText(it.remainingMs)) + "</div>" +
         "</div>" +
         '<div class="orca-df-trash-actions">' +
-        '<button type="button" class="orca-df-trash-act" data-df-trash="restore" data-id="' + orcaEsc(it.trashId) + '">恢复</button>' +
-        '<button type="button" class="orca-df-trash-act danger" data-df-trash="purge" data-id="' + orcaEsc(it.trashId) + '">彻底删除</button>' +
+        '<button type="button" class="orca-df-trash-act" data-df-trash="restore" data-id="' + orcaEsc(it.trashId) + '">' + dfT("恢复") + "</button>" +
+        '<button type="button" class="orca-df-trash-act danger" data-df-trash="purge" data-id="' + orcaEsc(it.trashId) + '">' + dfT("彻底删除") + "</button>" +
         "</div></div>"
       );
     }).join("");
   }
 
+  function applyTrashFilter() {
+    var q = trashSearchEl && trashSearchEl.value ? String(trashSearchEl.value).trim().toLowerCase() : "";
+    var list = q
+      ? trashItems.filter(function (it) { return String(it && it.title || "").toLowerCase().indexOf(q) >= 0; })
+      : trashItems;
+    if (q && !list.length) {
+      body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("没有匹配的条目") + "</div>";
+      return;
+    }
+    var shown = list.slice(0, trashShown);
+    renderRows(shown);
+    if (list.length > shown.length) {
+      var mt = dfLocaleIsEn()
+        ? ("Load more (" + shown.length + " / " + list.length + ")")
+        : ("加载更多（" + shown.length + " / " + list.length + "）");
+      body.insertAdjacentHTML("beforeend",
+        '<div class="orca-df-list-more"><button type="button" class="orca-df-tools-btn" data-df-trash="more">' + mt + "</button></div>");
+    }
+  }
+
   function refresh() {
     return OrcaBlocks.trashList().then(function (items) {
-      renderRows(items || []);
+      trashItems = items || [];
+      applyTrashFilter();
       orcaRefreshTrashFab(ctx);
     }).catch(function () {
-      body.innerHTML = '<div class="orca-df-trash-empty">加载失败</div>';
+      body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("加载失败") + "</div>";
     });
   }
 
+  if (trashSearchEl) {
+    trashSearchEl.addEventListener("input", function () {
+      trashShown = DF_LIST_PAGE;
+      applyTrashFilter();
+    });
+  }
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseTrashDialog();
   });
@@ -1558,12 +1799,48 @@ function orcaOpenTrashDialog(ctx) {
       orcaCloseTrashDialog();
       return;
     }
+    if (act === "more") {
+      trashShown += DF_LIST_PAGE;
+      applyTrashFilter();
+      return;
+    }
     if (busy) return;
+    if (act === "restore-all") {
+      if (!trashItems.length) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("全部恢复？共 ") + trashItems.length + dfT(" 条"))) return;
+      busy = true;
+      btn.disabled = true;
+      var rids = trashItems.map(function (it) { return it.trashId; });
+      var rdone = 0;
+      Promise.resolve().then(function loop(i) {
+        if (i >= rids.length) return null;
+        return OrcaBlocks.restoreTrashItem(rids[i]).then(function () {
+          rdone++;
+          btn.textContent = dfT("全部恢复") + " " + rdone + "/" + rids.length;
+          return loop(i + 1);
+        });
+      }).then(function () {
+        orcaShowMessage("已恢复");
+        return orcaRefreshFeed({ keepLimit: true });
+      }).then(function () {
+        if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+        return refresh();
+      }).catch(function (err) {
+        orcaShowMessage(String(err && err.message || "恢复失败"));
+      }).then(function () {
+        busy = false;
+        btn.disabled = false;
+        btn.textContent = dfT("全部恢复");
+      });
+      return;
+    }
     if (act === "restore") {
       busy = true;
       OrcaBlocks.restoreTrashItem(btn.getAttribute("data-id"))
         .then(function (r) {
-          orcaShowMessage("已恢复：" + ((r && r.title) || ""));
+          var rt = (r && r.title) || "";
+          if (r && r.wasArchived) orcaShowMessage("已恢复（原归档条目已回到时间线）：" + rt);
+          else orcaShowMessage("已恢复：" + rt);
           return orcaRefreshFeed({ keepLimit: true });
         })
         .then(function () {
@@ -1577,7 +1854,7 @@ function orcaOpenTrashDialog(ctx) {
       return;
     }
     if (act === "purge") {
-      if (!window.confirm("彻底删除该条目？不可恢复。")) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("彻底删除该条目？不可恢复。"))) return;
       busy = true;
       OrcaBlocks.purgeTrashItem(btn.getAttribute("data-id"))
         .then(function () { return refresh(); })
@@ -1588,7 +1865,7 @@ function orcaOpenTrashDialog(ctx) {
     if (act === "purge-all") {
       var rows = host.querySelectorAll(".orca-df-trash-row").length;
       if (!rows) return;
-      if (!window.confirm("确定清空回收站？共 " + rows + " 项将永久删除，不可恢复。")) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("确定清空回收站？共 ") + rows + dfT("项将永久删除，不可恢复。"))) return;
       busy = true;
       OrcaBlocks.purgeAllTrash()
         .then(function () {
@@ -1633,7 +1910,11 @@ function orcaMonthLabel(monthKey) {
   var m = Number(parts[1]);
   if (!y || !m) return String(monthKey || "");
   var now = new Date();
-  if (y === now.getFullYear() && m === now.getMonth() + 1) return "本月";
+  var isCurrent = y === now.getFullYear() && m === now.getMonth() + 1;
+  if (dfLocaleIsEn()) {
+    return isCurrent ? "This month" : (DF_I18N_MONTHS[m - 1] + " " + y);
+  }
+  if (isCurrent) return "本月";
   return y + "年" + m + "月";
 }
 
@@ -1673,7 +1954,7 @@ function orcaJumpToMonth(ctx, monthKey) {
     orcaShowMessage("该月暂无日记");
     return;
   }
-  var needLimit = needIdx + ORCA_FEED_PAGE_SIZE;
+  var needLimit = needIdx + dfFeedPageSize();
   if ((orcaFeedLimit || 0) < needLimit) {
     orcaFeedLimit = needLimit;
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
@@ -1734,7 +2015,7 @@ function orcaOpenMonthOutline(ctx) {
     '<div class="orca-df-outline-hint">点年份快速定位</div>' +
     '<div class="orca-df-outline-months"></div>' +
     "</div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
 
   var yearsEl = host.querySelector(".orca-df-outline-years");
   var monthsEl = host.querySelector(".orca-df-outline-months");
@@ -1768,7 +2049,7 @@ function orcaOpenMonthOutline(ctx) {
       ? groups.filter(function (g) { return String(g.key).indexOf(selectedYear) === 0; })
       : groups;
     if (!list.length) {
-      monthsEl.innerHTML = '<div class="orca-df-outline-empty">这一年没有日记。</div>';
+      monthsEl.innerHTML = '<div class="orca-df-outline-empty">' + dfT("这一年没有日记。") + "</div>";
       return;
     }
     monthsEl.innerHTML = list.map(function (g) {
@@ -1838,25 +2119,30 @@ function orcaOpenArchiveDialog(ctx) {
     '<div class="orca-df-archive-head">' +
     "<span>归档柜</span>" +
     '<div class="orca-df-archive-head-tools">' +
+    '<input type="search" class="orca-df-list-search" data-df-arch-search placeholder="' + orcaEsc(dfT("搜索标题…")) + '" />' +
     '<span class="orca-df-archive-hint">仍保留在日记页</span>' +
     '<button type="button" class="orca-df-archive-close" data-df-arch="close" aria-label="关闭">×</button>' +
     "</div></div>" +
     '<div class="orca-df-archive-body"><div class="orca-df-archive-empty">加载中…</div></div>' +
+    '<div class="orca-df-archive-foot"><button type="button" class="orca-df-archive-act" data-df-arch="unarchive-all">全部取消归档</button></div>' +
     "</div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
 
   var body = host.querySelector(".orca-df-archive-body");
   var busy = false;
+  var archiveItems = [];
+  var archiveShown = DF_LIST_PAGE;
+  var archiveSearchEl = host.querySelector("[data-df-arch-search]");
 
   function renderRows(items) {
     if (!items.length) {
-      body.innerHTML = '<div class="orca-df-archive-empty">暂无归档</div>';
+      body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("暂无归档") + "</div>";
       return;
     }
     body.innerHTML = items.map(function (it) {
       var title = String(it.text || "").replace(/\r\n/g, "\n").split("\n").map(function (s) {
         return s.trim();
-      }).filter(Boolean)[0] || "(无标题)";
+      }).filter(Boolean)[0] || dfT("(无标题)");
       title = title.slice(0, 80);
       var bid = it.blockId || it.id;
       return (
@@ -1867,22 +2153,53 @@ function orcaOpenArchiveDialog(ctx) {
         ((it.tags && it.tags.length) ? (" · " + orcaEsc(it.tags.map(function (t) { return "#" + t; }).join(" "))) : "") +
         "</div></div>" +
         '<div class="orca-df-archive-actions">' +
-        '<button type="button" class="orca-df-archive-act" data-df-arch="open" data-block-id="' + orcaEsc(String(bid)) + '">打开</button>' +
-        '<button type="button" class="orca-df-archive-act" data-df-arch="unarchive" data-id="' + orcaEsc(String(bid)) + '">取消归档</button>' +
+        '<button type="button" class="orca-df-archive-act" data-df-arch="open" data-block-id="' + orcaEsc(String(bid)) + '">' + dfT("打开") + "</button>" +
+        '<button type="button" class="orca-df-archive-act" data-df-arch="unarchive" data-id="' + orcaEsc(String(bid)) + '">' + dfT("取消归档") + "</button>" +
         "</div></div>"
       );
     }).join("");
   }
 
+  function applyArchiveFilter() {
+    var q = archiveSearchEl && archiveSearchEl.value ? String(archiveSearchEl.value).trim().toLowerCase() : "";
+    var list = q
+      ? archiveItems.filter(function (it) {
+        if (!it) return false;
+        var blob = String(it.text || "") + " " + ((it.tags || []).join(" ")) + " " + String(it.created || "");
+        return blob.toLowerCase().indexOf(q) >= 0;
+      })
+      : archiveItems;
+    if (q && !list.length) {
+      body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("没有匹配的条目") + "</div>";
+      return;
+    }
+    var shown = list.slice(0, archiveShown);
+    renderRows(shown);
+    if (list.length > shown.length) {
+      var mt = dfLocaleIsEn()
+        ? ("Load more (" + shown.length + " / " + list.length + ")")
+        : ("加载更多（" + shown.length + " / " + list.length + "）");
+      body.insertAdjacentHTML("beforeend",
+        '<div class="orca-df-list-more"><button type="button" class="orca-df-tools-btn" data-df-arch="more">' + mt + "</button></div>");
+    }
+  }
+
   function refresh() {
     return OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
-      renderRows((feed && feed.items) || []);
+      archiveItems = (feed && feed.items) || [];
+      applyArchiveFilter();
       orcaRefreshArchiveFab(ctx);
     }).catch(function () {
-      body.innerHTML = '<div class="orca-df-archive-empty">加载失败</div>';
+      body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("加载失败") + "</div>";
     });
   }
 
+  if (archiveSearchEl) {
+    archiveSearchEl.addEventListener("input", function () {
+      archiveShown = DF_LIST_PAGE;
+      applyArchiveFilter();
+    });
+  }
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseArchiveDialog();
   });
@@ -1897,6 +2214,11 @@ function orcaOpenArchiveDialog(ctx) {
     if (act === "open") {
       var obid = Number(btn.getAttribute("data-block-id"));
       if (obid) orcaOpenInOrca(obid);
+      return;
+    }
+    if (act === "more") {
+      archiveShown += DF_LIST_PAGE;
+      applyArchiveFilter();
       return;
     }
     if (busy) return;
@@ -1915,6 +2237,35 @@ function orcaOpenArchiveDialog(ctx) {
           orcaShowMessage(String(err && err.message || "取消归档失败"));
         })
         .then(function () { busy = false; });
+      return;
+    }
+    if (act === "unarchive-all") {
+      if (!archiveItems.length) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("全部取消归档？共 ") + archiveItems.length + dfT(" 条"))) return;
+      busy = true;
+      btn.disabled = true;
+      var done = 0;
+      var ids = archiveItems.map(function (it) { return it.blockId || it.id; });
+      Promise.resolve().then(function loop(i) {
+        if (i >= ids.length) return null;
+        return OrcaBlocks.setEntryArchived(ids[i], false).then(function () {
+          done++;
+          btn.textContent = dfT("全部取消归档") + " " + done + "/" + ids.length;
+          return loop(i + 1);
+        });
+      }).then(function () {
+        orcaShowMessage("已取消归档");
+        return orcaRefreshFeed({ keepLimit: true });
+      }).then(function () {
+        if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+        return refresh();
+      }).catch(function (err) {
+        orcaShowMessage(String(err && err.message || "取消归档失败"));
+      }).then(function () {
+        busy = false;
+        btn.disabled = false;
+        btn.textContent = dfT("全部取消归档");
+      });
     }
   });
 
@@ -1936,26 +2287,21 @@ function orcaHandleDfAct(ctx, act, btn) {
     orcaManualRefreshFeed(ctx);
     return;
   }
-  if (act === "open-trash") {
-    orcaOpenTrashDialog(ctx);
-    return;
-  }
-  if (act === "open-archive") {
-    orcaOpenArchiveDialog(ctx);
-    return;
-  }
   if (act === "clear-tag") {
-    ctx.filters.tags = [];
-    ctx.filters.kw = "";
+    orcaSetTagFilter(ctx, "");
     if (typeof orcaToolsClearQuickFilters === "function") orcaToolsClearQuickFilters(ctx.filters);
+    ctx.filters.kw = "";
+    orcaPersistFilters();
     orcaRefreshFeed().then(function () { ctx.reApp(); });
     return;
   }
   if (act === "filter-tag") {
     var t = btn.getAttribute("data-tag");
-    ctx.filters.tags = t ? [t] : [];
-    ctx.filters.kw = "";
-    orcaRefreshFeed().then(function () { ctx.reApp(); });
+    var on = orcaSetTagFilter(ctx, t);
+    orcaRefreshFeed().then(function () {
+      ctx.reApp();
+      orcaShowMessage(on ? ("已按标签过滤 #" + t) : "已取消标签筛选");
+    });
     return;
   }
   if (act === "goto-ref" || act === "open-orca") {
@@ -1986,6 +2332,14 @@ function orcaMountFeed(container, panelId) {
   if (orcaCtx.mounts.indexOf(el) < 0) orcaCtx.mounts.push(el);
   return function () {
     orcaCtx.mounts = orcaCtx.mounts.filter(function (m) { return m !== el; });
+    if (el.__dfMoreClose) {
+      try { document.removeEventListener("click", el.__dfMoreClose, true); } catch (e0) { /* ignore */ }
+      el.__dfMoreClose = null;
+    }
+    if (el.__dfLazyObs) {
+      try { el.__dfLazyObs.disconnect(); } catch (e1) { /* ignore */ }
+      el.__dfLazyObs = null;
+    }
   };
 }
 
@@ -2048,7 +2402,6 @@ function OrcaPanelRenderer(props) {
   }, [panelId]);
 
   R.useEffect(function () {
-    orcaEditPanelId = panelId;
     orcaScheduleFeedSync();
   }, [panelId]);
 
@@ -2139,7 +2492,7 @@ function orcaOpenPanel() {
   try {
     var active = orca.state.activePanel;
     if (!active) {
-      orca.notify("warn", "当前没有可用的面板", { title: "日记流" });
+      orca.notify("warn", dfT("当前没有可用的面板"), { title: dfT("日记流") });
       return;
     }
     var existed = orcaFindPanelId(orca.state.panels);
@@ -2149,7 +2502,7 @@ function orcaOpenPanel() {
     } else {
       targetId = orca.nav.addTo(active, "right", { view: ORCA_PANEL_TYPE, viewArgs: {}, viewState: {} });
       if (!targetId) {
-        orca.notify("error", "无法创建日记流面板", { title: "日记流" });
+        orca.notify("error", dfT("无法创建日记流面板"), { title: dfT("日记流") });
         return;
       }
       dfGetData(DF_PANEL_W_KEY).then(function (v) {
@@ -2177,7 +2530,7 @@ function orcaRegisterHeadbar() {
     if (orca.state.headbarButtons && orca.state.headbarButtons[ORCA_BTN_ID] == null) {
       var Button = orca.components.Button;
       orca.headbar.registerHeadbarButton(ORCA_BTN_ID, function () {
-        return h(Button, { variant: "plain", onClick: orcaOpenPanel, title: "打开日记流" },
+        return h(Button, { variant: "plain", onClick: orcaOpenPanel, title: dfT("打开日记流") },
           h("span", { className: "orca-df-hb-icon", dangerouslySetInnerHTML: { __html: ORCA_ICON_SVG } }));
       });
     }
@@ -2192,7 +2545,7 @@ function orcaRegisterSidetool() {
       var Button = orca.components.Button;
       orca.editorSidetools.registerEditorSidetool(ORCA_SIDETOOL_ID, {
         render: function () {
-          return h(Button, { variant: "plain", className: "orca-block-editor-sidetools-btn", title: "打开日记流", onClick: orcaOpenPanel },
+          return h(Button, { variant: "plain", className: "orca-block-editor-sidetools-btn", title: dfT("打开日记流"), onClick: orcaOpenPanel },
             h("span", { className: "orca-df-hb-icon", dangerouslySetInnerHTML: { __html: ORCA_ICON_SVG } }));
         }
       });
@@ -2206,6 +2559,8 @@ async function load(name) {
   orcaPluginName = name;
   orcaInjectStyles();
   orcaWatchTheme();
+  orcaWatchLocale();
+  await dfRegisterSettings();
   orcaMomentsData = storage.defaultData();
   orcaCtx = orcaBuildCtx();
 
@@ -2221,6 +2576,11 @@ async function load(name) {
       console.warn("[orca-diaryflow] trash purge expired", eTrash);
     }
     try {
+      await orcaLoadFilters();
+    } catch (eFilters) {
+      console.warn("[orca-diaryflow] load filters failed", eFilters);
+    }
+    try {
       await orcaRefreshFeed();
     } catch (e) {
       console.warn("[orca-diaryflow] refresh feed failed", e);
@@ -2231,13 +2591,14 @@ async function load(name) {
     }
     orcaReady = true;
     orcaStartFeedSyncWatch();
+    orcaScheduleAutoMediaCleanup();
     var cbs = orcaReadyCbs;
     orcaReadyCbs = [];
     cbs.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
     if (orcaCtx) orcaCtx.reApp();
   })();
 
-  try { orca.commands.registerCommand(orcaPluginName + ".open", orcaOpenPanel, "打开日记流面板"); } catch (e) {}
+  try { orca.commands.registerCommand(orcaPluginName + ".open", orcaOpenPanel, dfT("打开日记流面板")); } catch (e) {}
   try {
     orca.panels.registerPanel(ORCA_PANEL_TYPE, OrcaPanelRenderer);
     orcaRegisteredPanel = true;
@@ -2252,6 +2613,10 @@ async function load(name) {
 
 async function unload() {
   orcaStopFeedSyncWatch();
+  if (orcaSettingsLocaleUnsub) {
+    try { orcaSettingsLocaleUnsub(); } catch (e) { /* ignore */ }
+    orcaSettingsLocaleUnsub = null;
+  }
   try { orca.commands.unregisterCommand(orcaPluginName + ".open"); } catch (e) {}
   try { orca.headbar.unregisterHeadbarButton(ORCA_BTN_ID); } catch (e) {}
   try {

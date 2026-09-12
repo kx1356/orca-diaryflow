@@ -1,8 +1,8 @@
 // 重启场景测试：预置 db 数据 + 磁盘文件 → load() → 封面应解析为 blob URL 并渲染
 import { JSDOM } from "jsdom";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
-const distPath = "C:/Users/i5156/Documents/orca/plugins/orca-diaryflow/dist/index.js";
+const distPath = process.argv[2] || fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
 globalThis.window = dom.window;

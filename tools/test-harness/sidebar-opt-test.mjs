@@ -1,8 +1,8 @@
 // 方案 D：侧栏默认加宽(42%) + 记住宽度恢复 + 空状态 hint
 import { JSDOM } from "jsdom";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
-const distPath = "C:/Users/i5156/Documents/orca/plugins/orca-diaryflow/dist/index.js";
+const distPath = process.argv[2] || fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
 globalThis.window = dom.window;

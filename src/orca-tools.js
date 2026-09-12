@@ -4,6 +4,8 @@
 
 var DF_LAYOUT_KEY = "layout-preset";
 var DF_LAYOUT_DEFAULT = "cozy";
+/** 图片管理对话框中新建的 blob 预览 URL；关闭对话框时统一回收，避免会话内累积 */
+var orcaImagesBlobUrls = [];
 
 function orcaToolsEsc(s) {
   return String(s == null ? "" : s)
@@ -35,18 +37,26 @@ function orcaToolsItemTitle(it) {
 
 function orcaToolsQuickFilterItems(items, filters) {
   filters = filters || {};
+  var from = String(filters.dateFrom || "").trim();
+  var to = String(filters.dateTo || "").trim();
   return (items || []).filter(function (it) {
     if (!it) return false;
     if (filters.pinnedOnly && !it.pinned) return false;
     if (filters.hasImage && !(it.images && it.images.length)) return false;
     if (filters.hasLocation && !(it.location && String(it.location).trim())) return false;
+    if (from || to) {
+      var day = orcaToolsItemDay(it);
+      if (!day) return false;
+      if (from && day < from) return false;
+      if (to && day > to) return false;
+    }
     return true;
   });
 }
 
 function orcaToolsHasQuickFilters(filters) {
   filters = filters || {};
-  return !!(filters.pinnedOnly || filters.hasImage || filters.hasLocation);
+  return !!(filters.pinnedOnly || filters.hasImage || filters.hasLocation || filters.dateFrom || filters.dateTo);
 }
 
 function orcaToolsClearQuickFilters(filters) {
@@ -54,6 +64,8 @@ function orcaToolsClearQuickFilters(filters) {
   filters.pinnedOnly = false;
   filters.hasImage = false;
   filters.hasLocation = false;
+  filters.dateFrom = "";
+  filters.dateTo = "";
 }
 
 function orcaToolsComputeStats(items) {
@@ -92,10 +104,7 @@ function orcaToolsComputeStats(items) {
     var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
     return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
   }
-  var cursor = 0;
-  if (hasDay(shiftDay(now, 0))) cursor = 0;
-  else if (hasDay(shiftDay(now, -1))) cursor = -1;
-  else cursor = null;
+  var cursor = hasDay(shiftDay(now, 0)) ? 0 : (hasDay(shiftDay(now, -1)) ? -1 : null);
   if (cursor != null) {
     while (hasDay(shiftDay(now, cursor - streak))) streak++;
   }
@@ -123,33 +132,117 @@ function orcaToolsComputeStats(items) {
   };
 }
 
+/** 导出文件/内容的基础名（按语言） */
+function orcaExportBase() {
+  return dfLocaleIsEn() ? "DiaryFlow" : "日记流";
+}
+
+function orcaExportMonthTitle(month) {
+  var ym = String(month || "").match(/^(\d{4})-(\d{2})$/);
+  if (!ym) return String(month || "");
+  if (dfLocaleIsEn()) return DF_I18N_MONTHS[Number(ym[2]) - 1] + " " + ym[1];
+  return ym[1] + "年" + Number(ym[2]) + "月";
+}
+
 function orcaToolsBuildMarkdown(items, cfg) {
   cfg = cfg || {};
-  var lines = ["# 日记流 · " + (cfg.nickname || ""), "", "共 " + items.length + " 条", ""];
+  var lines = ["# " + dfT("日记流") + " · " + (cfg.nickname || ""), "", dfT("共 ") + items.length + dfT(" 条"), ""];
   var lastMonth = "";
   items.forEach(function (it) {
     var day = orcaToolsItemDay(it);
     var month = day ? day.slice(0, 7) : "";
     if (month && month !== lastMonth) {
       lastMonth = month;
-      lines.push("", "## " + month.replace("-", "年") + "月", "");
+      lines.push("", "## " + orcaExportMonthTitle(month), "");
     }
-    lines.push("### " + (it.created || day || "") + (it.pinned ? " [置顶]" : ""));
-    if (it.location) lines.push("地点：" + it.location);
+    lines.push("### " + (it.created || day || "") + (it.pinned ? (" [" + dfT("置顶") + "]") : ""));
+    if (it.location) lines.push(dfT("地点：") + it.location);
     var tags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
-    if (tags.length) lines.push("标签：" + tags.map(function (t) { return "#" + t; }).join(" "));
+    if (tags.length) lines.push(dfT("标签：") + tags.map(function (t) { return "#" + t; }).join(" "));
     if (it.text) lines.push("", it.text, "");
     (it.images || []).forEach(function (src, i) {
-      lines.push("![图" + (i + 1) + "](" + src + ")");
+      lines.push("![" + dfT("图") + (i + 1) + "](" + src + ")");
     });
     if (it.comments && it.comments.length) {
       it.comments.forEach(function (c) {
-        lines.push("> " + (c.name || "我") + ": " + (c.text || ""));
+        lines.push("> " + (c.name || dfT("我")) + ": " + (c.text || ""));
       });
     }
     lines.push("");
   });
   return lines.join("\n");
+}
+
+/** Word(.doc) 导出：自实现 HTML，图片尽力转 dataURL（dfasset / file://） */
+async function orcaToolsImageToDataUrl(src) {
+  if (typeof src !== "string" || !src) return src;
+  if (/^data:/i.test(src)) return src;
+  try {
+    if (src.indexOf("dfasset:") === 0 && globalThis.__DF_ASSETS && typeof globalThis.__DF_ASSETS.toDataUrl === "function") {
+      return (await globalThis.__DF_ASSETS.toDataUrl(src)) || src;
+    }
+    if (/^file:/i.test(src)) {
+      var resp = await fetch(src);
+      var blob = await resp.blob();
+      return await new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(fr.result); };
+        fr.onerror = reject;
+        fr.readAsDataURL(blob);
+      });
+    }
+  } catch (e) { /* ignore, fallback src */ }
+  return src;
+}
+
+async function orcaToolsBuildWordHtml(items, cfg) {
+  cfg = cfg || {};
+  var out = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+    var meta = [];
+    if (it.location) meta.push(it.location);
+    var tags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
+    if (tags.length) meta.push(tags.map(function (t) { return "#" + t; }).join(" "));
+    var imgs = "";
+    var srcs = (it.images || []).filter(Boolean);
+    for (var j = 0; j < srcs.length; j++) {
+      var ds = await orcaToolsImageToDataUrl(srcs[j]);
+      imgs += '<div style="margin:6px 0"><img src="' + orcaToolsEsc(ds) + '" style="max-width:100%"></div>';
+    }
+    var cmts = (it.comments || []).map(function (c) {
+      return orcaToolsEsc((c && c.name) || dfT("我")) + "：" + orcaToolsEsc((c && c.text) || "");
+    }).join("<br>");
+    out.push(
+      '<div style="margin:0 0 18px">' +
+      '<div style="color:#666">' + orcaToolsEsc(it.created || "") + "</div>" +
+      (meta.length ? ('<div style="color:#888">' + orcaToolsEsc(meta.join(" · ")) + "</div>") : "") +
+      '<div style="white-space:pre-wrap">' + orcaToolsEsc(it.text || "") + "</div>" +
+      imgs +
+      (cmts ? ('<div style="background:#f2f2f2;padding:6px 8px;margin-top:6px">' + cmts + "</div>") : "") +
+      "</div>"
+    );
+  }
+  var title = cfg.nickname || dfT("日记流");
+  return "<html><head><meta charset=\"utf-8\"><title>" + orcaToolsEsc(title) + "</title></head><body><h1>" +
+    orcaToolsEsc(title) + "</h1>" + out.join("\n") + "</body></html>";
+}
+
+/** 打开打印窗口（另存为 PDF）；失败返回 false，调用方可回退下载 HTML */
+function orcaToolsPrintHtml(html) {
+  try {
+    var w = window.open("", "_blank");
+    if (!w) return false;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(function () {
+      try { w.focus(); w.print(); } catch (e) { /* ignore */ }
+    }, 300);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function orcaToolsDownloadBlob(filename, blob) {
@@ -302,19 +395,26 @@ function orcaOpenToolsHub(ctx) {
     '<button type="button" class="orca-df-tools-tile" data-df-tools="export"><b>导出</b><span>Markdown / 按月 zip / JSON 备份</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="recap"><b>回顾</b><span>去年今日、随机一条</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="layout"><b>布局</b><span>封面高度：紧凑 / 舒适 / 高封面</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="cleanup"><b>清理图片</b><span>移除未引用的插件图片</span></button>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var archHint = host.querySelector("[data-df-tools-arch-hint]");
   var trashHint = host.querySelector("[data-df-tools-trash-hint]");
   if (OrcaBlocks && typeof OrcaBlocks.listArchivedFeed === "function") {
     OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
       var n = (feed && feed.items && feed.items.length) || 0;
-      if (archHint) archHint.textContent = n ? ("共 " + n + " 条已归档") : "暂无归档";
+      if (archHint) archHint.textContent = n ? (dfT("共 ") + n + dfT(" 条已归档")) : dfT("暂无归档");
     }).catch(function () {});
   }
   if (OrcaBlocks && typeof OrcaBlocks.trashCount === "function") {
     OrcaBlocks.trashCount().then(function (n) {
-      if (trashHint) trashHint.textContent = n ? ("共 " + n + " 条 · 约保留 30 天") : "回收站为空";
+      if (trashHint) {
+        trashHint.textContent = n
+          ? (dfLocaleIsEn()
+            ? ("Total " + n + " · kept about " + dfTrashRetentionDays() + " days")
+            : ("共 " + n + " 条 · 约保留 " + dfTrashRetentionDays() + " 天"))
+          : dfT("回收站为空");
+      }
     }).catch(function () {});
   }
   host.addEventListener("mousedown", function (e) {
@@ -333,6 +433,7 @@ function orcaOpenToolsHub(ctx) {
     else if (act === "recap") orcaOpenRecapDialog(ctx);
     else if (act === "search") orcaOpenSearchDialog(ctx);
     else if (act === "layout") orcaOpenLayoutDialog(ctx);
+    else if (act === "cleanup") orcaOpenMediaCleanupDialog(ctx);
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
 }
@@ -346,7 +447,7 @@ function orcaOpenStatsDialog(ctx) {
     '<div class="orca-df-tools-head"><span>统计</span>' +
     '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
     '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var body = host.querySelector(".orca-df-tools-body");
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseToolsDialog();
@@ -358,7 +459,7 @@ function orcaOpenStatsDialog(ctx) {
   orcaToolsLoadItems({ fullText: false }).then(function (items) {
     var s = orcaToolsComputeStats(items);
     function cardsHtml(rows, labelFn) {
-      if (!rows || !rows.length) return '<div class="orca-df-tools-muted">暂无</div>';
+      if (!rows || !rows.length) return '<div class="orca-df-tools-muted">' + dfT("暂无") + "</div>";
       return '<div class="orca-df-stats-grid">' + rows.map(function (r) {
         return '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + r.count +
           '</div><div class="orca-df-stats-l">' + orcaToolsEsc(labelFn(r)) + "</div></div>";
@@ -366,31 +467,33 @@ function orcaOpenStatsDialog(ctx) {
     }
     body.innerHTML =
       '<div class="orca-df-stats-grid">' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.total + '</div><div class="orca-df-stats-l">全部</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.yearCount + '</div><div class="orca-df-stats-l">今年</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.monthCount + '</div><div class="orca-df-stats-l">本月</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.streak + '</div><div class="orca-df-stats-l">连续打卡（天）</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.activeDays + '</div><div class="orca-df-stats-l">有记录天数</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withImg + '</div><div class="orca-df-stats-l">含图</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withLoc + '</div><div class="orca-df-stats-l">含地点</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.pinned + '</div><div class="orca-df-stats-l">置顶</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.total + '</div><div class="orca-df-stats-l">' + dfT("全部") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.yearCount + '</div><div class="orca-df-stats-l">' + dfT("今年") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.monthCount + '</div><div class="orca-df-stats-l">' + dfT("本月") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.streak + '</div><div class="orca-df-stats-l">' + dfT("连续打卡（天）") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.activeDays + '</div><div class="orca-df-stats-l">' + dfT("有记录天数") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withImg + '</div><div class="orca-df-stats-l">' + dfT("含图") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withLoc + '</div><div class="orca-df-stats-l">' + dfT("含地点") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.pinned + '</div><div class="orca-df-stats-l">' + dfT("置顶") + "</div></div>" +
       "</div>" +
-      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">年份</div>' +
-      cardsHtml(s.yearRows, function (r) { return r.year + " 年"; }) +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">' + dfT("年份") + "</div>" +
+      cardsHtml(s.yearRows, function (r) { return r.year + (dfLocaleIsEn() ? "" : " 年"); }) +
       "</div>" +
-      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">近月</div>' +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">' + dfT("近月") + "</div>" +
       cardsHtml(s.monthRows, function (r) {
         var m = String(r.month || "").match(/^(\d{4})-(\d{2})$/);
-        return m ? (m[1] + "年" + Number(m[2]) + "月") : r.month;
+        if (!m) return r.month;
+        if (dfLocaleIsEn()) return DF_I18N_MONTHS[Number(m[2]) - 1] + " " + m[1];
+        return m[1] + "年" + Number(m[2]) + "月";
       }) +
       "</div>" +
-      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">标签分布</div>' +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">' + dfT("标签分布") + "</div>" +
       (s.tagRows.map(function (r) {
         return '<div class="orca-df-tools-row"><span>#' + orcaToolsEsc(r.tag) + '</span><b>' + r.count + '</b></div>';
-      }).join("") || '<div class="orca-df-tools-muted">暂无用户标签</div>') +
+      }).join("") || '<div class="orca-df-tools-muted">' + dfT("暂无用户标签") + "</div>") +
       "</div>";
   }).catch(function () {
-    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+    body.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>";
   });
 }
 
@@ -407,10 +510,12 @@ function orcaOpenExportDialog(ctx) {
     '<button type="button" class="orca-df-tools-btn" data-df-exp="md-all">导出全部 Markdown</button>' +
     '<button type="button" class="orca-df-tools-btn" data-df-exp="md-filter">导出当前筛选 Markdown</button>' +
     '<button type="button" class="orca-df-tools-btn" data-df-exp="zip-month">按月打包 zip</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="word">导出 Word（.doc）</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="pdf">打印 / 另存为 PDF</button>' +
     '<button type="button" class="orca-df-tools-btn" data-df-exp="json">导出 JSON 备份</button>' +
     '<div class="orca-df-tools-status" hidden></div>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var status = host.querySelector(".orca-df-tools-status");
   var busy = false;
   function setStatus(t) {
@@ -427,7 +532,7 @@ function orcaOpenExportDialog(ctx) {
     if (!btn || busy) return;
     var act = btn.getAttribute("data-df-exp");
     busy = true;
-    setStatus("准备中…");
+    setStatus(dfT("准备中…"));
     var filters = (ctx && ctx.filters) || {};
     var useFilter = act === "md-filter";
     orcaToolsLoadItems({
@@ -440,21 +545,21 @@ function orcaOpenExportDialog(ctx) {
       var cfg = (ctx && ctx.data && ctx.data().config) || {};
       if (act === "md-all" || act === "md-filter") {
         orcaToolsDownloadText(
-          "日记流_" + (act === "md-filter" ? "筛选_" : "") + Date.now() + ".md",
+          orcaExportBase() + "_" + (act === "md-filter" ? (dfLocaleIsEn() ? "filtered_" : "筛选_") : "") + Date.now() + ".md",
           orcaToolsBuildMarkdown(items, cfg),
           "text/markdown;charset=utf-8"
         );
-        setStatus("已下载 " + items.length + " 条 Markdown");
+        setStatus(dfT("已下载 ") + items.length + dfT(" 条 Markdown"));
         orcaShowMessage("已导出 Markdown（" + items.length + " 条）");
         return;
       }
       if (act === "json") {
         orcaToolsDownloadText(
-          "日记流_backup_" + Date.now() + ".json",
+          orcaExportBase() + "_backup_" + Date.now() + ".json",
           JSON.stringify({ exportedAt: new Date().toISOString(), config: cfg, items: items }, null, 2),
           "application/json;charset=utf-8"
         );
-        setStatus("已下载 JSON（" + items.length + " 条）");
+        setStatus(dfT("已下载 JSON（") + items.length + dfT(" 条）"));
         orcaShowMessage("已导出 JSON 备份");
         return;
       }
@@ -470,19 +575,40 @@ function orcaOpenExportDialog(ctx) {
           var m = String(k).match(/^(\d{4})-(\d{2})$/);
           if (m) mtime = new Date(Number(m[1]), Number(m[2]) - 1, 15, 12, 0, 0);
           return {
-            name: "日记流_" + k + ".md",
+            name: orcaExportBase() + "_" + k + ".md",
             data: orcaToolsBuildMarkdown(groups[k], cfg),
             mtime: mtime
           };
         });
-        if (!files.length) files = [{ name: "empty.md", data: "# 日记流\n\n暂无条目\n" }];
+        if (!files.length) files = [{ name: "empty.md", data: "# " + dfT("日记流") + "\n\n" + dfT("暂无条目") + "\n" }];
         var zip = orcaToolsZipStore(files);
-        orcaToolsDownloadBlob("日记流_按月_" + Date.now() + ".zip", new Blob([zip], { type: "application/zip" }));
-        setStatus("已打包 " + files.length + " 个月份文件");
+        orcaToolsDownloadBlob(orcaExportBase() + (dfLocaleIsEn() ? "_monthly_" : "_按月_") + Date.now() + ".zip", new Blob([zip], { type: "application/zip" }));
+        setStatus(dfT("已打包 ") + files.length + dfT(" 个月份文件"));
         orcaShowMessage("已导出按月 zip");
+        return;
+      }
+      if (act === "word") {
+        return orcaToolsBuildWordHtml(items, cfg).then(function (html) {
+          orcaToolsDownloadBlob(orcaExportBase() + "_" + Date.now() + ".doc",
+            new Blob([html], { type: "application/msword;charset=utf-8" }));
+          setStatus(dfT("已导出 Word（") + items.length + dfT(" 条）"));
+          orcaShowMessage("已导出 Word");
+        });
+      }
+      if (act === "pdf") {
+        return orcaToolsBuildWordHtml(items, cfg).then(function (html) {
+          if (orcaToolsPrintHtml(html)) {
+            setStatus(dfT("已打开打印（可另存为 PDF）"));
+          } else {
+            orcaToolsDownloadBlob(orcaExportBase() + "_" + Date.now() + ".html",
+              new Blob([html], { type: "text/html;charset=utf-8" }));
+            setStatus(dfT("已导出 HTML（可直接打印为 PDF）"));
+            orcaShowMessage("已导出 HTML，可打印为 PDF");
+          }
+        });
       }
     }).catch(function (err) {
-      setStatus("失败：" + String(err && err.message || err));
+      setStatus(dfT("失败：") + String(err && err.message || err));
       orcaShowMessage("导出失败");
     }).then(function () { busy = false; });
   });
@@ -502,12 +628,12 @@ function orcaOpenRecapDialog(ctx) {
     '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button>' +
     "</div></div>" +
     '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var body = host.querySelector(".orca-df-tools-body");
   var allItems = [];
   function renderList(list, emptyText) {
     if (!list.length) {
-      body.innerHTML = '<div class="orca-df-tools-muted">' + orcaToolsEsc(emptyText || "暂无") + "</div>";
+      body.innerHTML = '<div class="orca-df-tools-muted">' + orcaToolsEsc(emptyText || dfT("暂无")) + "</div>";
       return;
     }
     body.innerHTML = list.map(function (it) {
@@ -518,7 +644,7 @@ function orcaOpenRecapDialog(ctx) {
         '<div class="orca-df-tools-entry-t">' + orcaToolsEsc(orcaToolsItemTitle(it)) + "</div>" +
         '<div class="orca-df-tools-muted">' + orcaToolsEsc(it.created || orcaToolsItemDay(it) || "") +
         (it.location ? (" · " + orcaToolsEsc(it.location)) : "") + "</div></div>" +
-        '<button type="button" class="orca-df-tools-mini" data-df-recap="open" data-block-id="' + orcaToolsEsc(String(bid)) + '">打开</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-recap="open" data-block-id="' + orcaToolsEsc(String(bid)) + '">' + dfT("打开") + "</button>" +
         "</div>"
       );
     }).join("");
@@ -546,12 +672,12 @@ function orcaOpenRecapDialog(ctx) {
       return;
     }
     if (act === "last-year") {
-      renderList(lastYearToday(), "去年今日没有日记");
+      renderList(lastYearToday(), dfT("去年今日没有日记"));
       return;
     }
     if (act === "random") {
       if (!allItems.length) {
-        renderList([], "暂无日记");
+        renderList([], dfT("暂无日记"));
         return;
       }
       var pick = allItems[Math.floor(Math.random() * allItems.length)];
@@ -563,9 +689,9 @@ function orcaOpenRecapDialog(ctx) {
     allItems = items || [];
     var ly = lastYearToday();
     if (ly.length) renderList(ly, "");
-    else renderList([], "去年今日没有日记 — 可点「随机一条」");
+    else renderList([], dfT("去年今日没有日记 — 可点「随机一条」"));
   }).catch(function () {
-    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+    body.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>";
   });
 }
 
@@ -573,7 +699,9 @@ function orcaOpenSearchDialog(ctx) {
   orcaCloseToolsDialog();
   var host = document.createElement("div");
   host.className = "orca-df-tools-backdrop orca-df-scope";
-  var cur = (ctx && ctx.filters && ctx.filters.kw) || "";
+  var cf = (ctx && ctx.filters) || {};
+  var cur = cf.kw || "";
+  var curTag = (cf.tags || [])[0] || "";
   host.innerHTML =
     '<div class="orca-df-tools-pop" role="dialog" aria-label="搜索日记流">' +
     '<div class="orca-df-tools-head"><span>搜索</span>' +
@@ -581,14 +709,43 @@ function orcaOpenSearchDialog(ctx) {
     '<div class="orca-df-tools-body">' +
     '<label class="orca-df-tools-label">关键词（匹配日记流条目正文）</label>' +
     '<input class="orca-df-tools-input" type="search" data-df-search-input placeholder="例如：旅行 / 心情" value="' + orcaToolsEsc(cur) + '" />' +
+    '<label class="orca-df-tools-label">标签</label>' +
+    '<select class="orca-df-tools-input" data-df-search-tag><option value="">全部</option></select>' +
+    '<label class="orca-df-tools-label">快捷筛选</label>' +
+    '<div class="orca-df-search-quick">' +
+    '<label class="orca-df-search-check"><input type="checkbox" data-df-search-img' + (cf.hasImage ? " checked" : "") + '> 有图</label>' +
+    '<label class="orca-df-search-check"><input type="checkbox" data-df-search-loc' + (cf.hasLocation ? " checked" : "") + '> 有地点</label>' +
+    '<label class="orca-df-search-check"><input type="checkbox" data-df-search-pin' + (cf.pinnedOnly ? " checked" : "") + '> 仅置顶</label>' +
+    "</div>" +
+    '<label class="orca-df-tools-label">日期范围</label>' +
+    '<div class="orca-df-search-dates">' +
+    '<input class="orca-df-tools-input" type="date" data-df-search-from value="' + orcaToolsEsc(cf.dateFrom || "") + '" />' +
+    '<span class="orca-df-tools-muted">—</span>' +
+    '<input class="orca-df-tools-input" type="date" data-df-search-to value="' + orcaToolsEsc(cf.dateTo || "") + '" />' +
+    "</div>" +
     '<div class="orca-df-tools-actions">' +
     '<button type="button" class="orca-df-tools-btn primary" data-df-search="apply">在日记流中筛选</button>' +
-    '<button type="button" class="orca-df-tools-btn" data-df-search="clear">清除关键词</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-search="clear">清除筛选</button>' +
     "</div>" +
     '<p class="orca-df-tools-muted">也可使用虎鲸全局搜索；此处仅限带「日记流」标签的条目。</p>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var input = host.querySelector("[data-df-search-input]");
+  var tagSel = host.querySelector("[data-df-search-tag]");
+  var imgChk = host.querySelector("[data-df-search-img]");
+  var locChk = host.querySelector("[data-df-search-loc]");
+  var pinChk = host.querySelector("[data-df-search-pin]");
+  var fromEl = host.querySelector("[data-df-search-from]");
+  var toEl = host.querySelector("[data-df-search-to]");
+  if (OrcaBlocks && typeof OrcaBlocks.collectUserTags === "function") {
+    OrcaBlocks.collectUserTags().then(function (tags) {
+      if (!tagSel || !tagSel.isConnected) return;
+      tagSel.innerHTML = '<option value="">' + orcaToolsEsc(dfT("全部")) + "</option>" +
+        (tags || []).map(function (t) {
+          return '<option value="' + orcaToolsEsc(t) + '"' + (t === curTag ? " selected" : "") + ">#" + orcaToolsEsc(t) + "</option>";
+        }).join("");
+    }).catch(function () {});
+  }
   setTimeout(function () { try { input.focus(); input.select(); } catch (e) {} }, 30);
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseToolsDialog();
@@ -596,10 +753,21 @@ function orcaOpenSearchDialog(ctx) {
   function apply(kw) {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.kw = kw || "";
+    var tag = tagSel ? String(tagSel.value || "") : "";
+    ctx.filters.tags = tag ? [tag] : [];
+    ctx.filters.hasImage = !!(imgChk && imgChk.checked);
+    ctx.filters.hasLocation = !!(locChk && locChk.checked);
+    ctx.filters.pinnedOnly = !!(pinChk && pinChk.checked);
+    ctx.filters.dateFrom = fromEl ? String(fromEl.value || "") : "";
+    ctx.filters.dateTo = toEl ? String(toEl.value || "") : "";
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaCloseToolsDialog();
     orcaRefreshFeed().then(function () {
       if (ctx.reApp) ctx.reApp();
-      orcaShowMessage(kw ? ("已筛选：" + kw) : "已清除搜索");
+      orcaShowMessage(kw || tag || ctx.filters.hasImage || ctx.filters.hasLocation || ctx.filters.pinnedOnly ||
+        ctx.filters.dateFrom || ctx.filters.dateTo
+        ? ("已筛选" + (kw ? "：" + kw : ""))
+        : "已清除搜索");
     });
   }
   host.addEventListener("click", function (e) {
@@ -608,7 +776,16 @@ function orcaOpenSearchDialog(ctx) {
     if (!btn) return;
     var act = btn.getAttribute("data-df-search");
     if (act === "apply") apply(String(input.value || "").trim());
-    else if (act === "clear") apply("");
+    else if (act === "clear") {
+      if (input) input.value = "";
+      if (tagSel) tagSel.value = "";
+      if (imgChk) imgChk.checked = false;
+      if (locChk) locChk.checked = false;
+      if (pinChk) pinChk.checked = false;
+      if (fromEl) fromEl.value = "";
+      if (toEl) toEl.value = "";
+      apply("");
+    }
   });
   host.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && e.target === input) {
@@ -662,10 +839,10 @@ function orcaOpenLayoutDialog(ctx) {
     '<button type="button" class="orca-df-tools-btn" data-df-layout="tall">高封面 — 更强氛围</button>' +
     '<div class="orca-df-tools-status" data-df-layout-status></div>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var status = host.querySelector("[data-df-layout-status]");
   orcaToolsGetLayout().then(function (cur) {
-    status.textContent = "当前：" + orcaToolsLayoutLabel(cur);
+    status.textContent = dfT("当前：") + dfT(orcaToolsLayoutLabel(cur));
     host.querySelectorAll("[data-df-layout]").forEach(function (b) {
       b.classList.toggle("is-on", b.getAttribute("data-df-layout") === cur);
     });
@@ -680,19 +857,147 @@ function orcaOpenLayoutDialog(ctx) {
     var preset = btn.getAttribute("data-df-layout");
     orcaToolsSetLayout(preset).then(function (p) {
       orcaApplyLayoutToMounts(p);
-      status.textContent = "当前：" + orcaToolsLayoutLabel(p);
+      status.textContent = dfT("当前：") + dfT(orcaToolsLayoutLabel(p));
       host.querySelectorAll("[data-df-layout]").forEach(function (b) {
         b.classList.toggle("is-on", b.getAttribute("data-df-layout") === p);
       });
-      orcaShowMessage("布局已设为「" + orcaToolsLayoutLabel(p) + "」");
+      orcaShowMessage(dfT("布局已设为「") + dfT(orcaToolsLayoutLabel(p)) + dfT("」"));
       if (ctx && ctx.reApp) ctx.reApp();
     });
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
 }
 
+function orcaToolsCollectUsedMedia(items, cfg) {
+  var used = {};
+  function mark(s) {
+    if (typeof s !== "string" || !s) return;
+    var m = s.match(/^dfasset:\/\/media\/(.+)$/);
+    if (m && m[1]) used[decodeURIComponent(m[1])] = true;
+  }
+  if (cfg) ["avatar", "cover", "lockBg"].forEach(function (k) { mark(cfg[k]); });
+  (items || []).forEach(function (it) {
+    if (!it) return;
+    (it.images || []).forEach(mark);
+  });
+  return used;
+}
+
+/** 列出未被引用的插件图片（含归档条目与回收站快照引用保护） */
+async function orcaToolsListOrphanMedia() {
+  if (!globalThis.__DF_ASSETS || typeof globalThis.__DF_ASSETS.listMedia !== "function") return [];
+  if (!OrcaBlocks) return [];
+  var cfg = (orcaCtx && orcaCtx.data && orcaCtx.data() && orcaCtx.data().config) || {};
+  var feed = null;
+  try {
+    feed = await OrcaBlocks.listFeed({ skipHeal: true, includeArchived: true, preferLive: true });
+  } catch (e) {
+    return [];
+  }
+  if (!feed) return [];
+  var used = orcaToolsCollectUsedMedia(feed.items || [], cfg);
+  try {
+    var trefs = (OrcaBlocks.trashAllMediaRefs ? await OrcaBlocks.trashAllMediaRefs() : {}) || {};
+    Object.keys(trefs).forEach(function (k) { used[k] = true; });
+  } catch (e2) { /* ignore */ }
+  var names = await DF_ASSETS.listMedia();
+  return (names || []).filter(function (n) { return n && !used[n]; });
+}
+
+/** 删除给定插件图片文件，返回成功数 */
+async function orcaToolsCleanupOrphanMedia(names) {
+  var list = names || [];
+  var removed = 0;
+  for (var i = 0; i < list.length; i++) {
+    try {
+      await orca.invokeBackend("remove-plugin-file", orcaPluginName, "media/" + list[i]);
+      removed++;
+    } catch (e) { /* ignore */ }
+  }
+  return removed;
+}
+
+function orcaOpenMediaCleanupDialog(ctx) {
+  orcaCloseToolsDialog();
+  if (!globalThis.__DF_ASSETS || typeof globalThis.__DF_ASSETS.listMedia !== "function") {
+    orcaShowMessage("无法访问插件图片");
+    return;
+  }
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="清理图片">' +
+    '<div class="orca-df-tools-head"><span>清理图片</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">仅删除插件图片目录中未被封面/头像/日记条目引用的文件。</p>' +
+    '<div class="orca-df-media-list"><div class="orca-df-tools-muted">加载中…</div></div>' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-cleanup="run" disabled>清理</button>' +
+    "</div></div></div>";
+  dfMountDialog(host);
+  var listEl = host.querySelector(".orca-df-media-list");
+  var runBtn = host.querySelector('[data-df-cleanup="run"]');
+  var unused = [];
+  var busy = false;
+
+  function render() {
+    if (!unused.length) {
+      listEl.innerHTML = '<div class="orca-df-tools-muted">没有可清理的图片</div>';
+      runBtn.disabled = true;
+      return;
+    }
+    listEl.innerHTML = unused.slice(0, 100).map(function (n) {
+      return '<div class="orca-df-tools-row"><span>' + orcaToolsEsc(n) + "</span></div>";
+    }).join("") + (unused.length > 100 ? ('<div class="orca-df-tools-muted">+' + (unused.length - 100) + "</div>") : "");
+    runBtn.disabled = false;
+  }
+
+  function load() {
+    return orcaToolsListOrphanMedia().then(function (names) {
+      unused = names || [];
+      render();
+    }).catch(function () {
+      listEl.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>";
+    });
+  }
+
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-cleanup]");
+    if (!btn || busy) return;
+    if (btn.getAttribute("data-df-cleanup") !== "run") return;
+    if (!unused.length) return;
+    if (dfGetSetting("confirmDelete") &&
+      !window.confirm(dfT("清理未引用图片？共 ") + unused.length + dfT(" 个文件"))) return;
+    busy = true;
+    btn.disabled = true;
+    var names = unused.slice();
+    orcaToolsCleanupOrphanMedia(names).then(function (removed) {
+      orcaShowMessage(removed ? ("已清理 " + removed + " 个图片") : "没有可清理的图片");
+      unused = [];
+      busy = false;
+      btn.textContent = dfT("清理");
+      load();
+    }).catch(function () {
+      orcaShowMessage("清理失败");
+      busy = false;
+      btn.disabled = false;
+    });
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  load();
+}
+
 function orcaCloseImagesDialog() {
   orcaToolsCloseBackdrop(".orca-df-images-backdrop");
+  if (orcaImagesBlobUrls.length) {
+    orcaImagesBlobUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) { /* ignore */ } });
+    orcaImagesBlobUrls = [];
+  }
 }
 
 function orcaOpenImagesDialog(ctx, item) {
@@ -719,7 +1024,7 @@ function orcaOpenImagesDialog(ctx, item) {
     "</div>" +
     '<input type="file" accept="image/*" multiple hidden data-df-img-file />' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var listEl = host.querySelector(".orca-df-img-list");
   var bar = host.querySelector(".orca-df-img-progress-bar");
   var status = host.querySelector(".orca-df-img-status");
@@ -741,17 +1046,20 @@ function orcaOpenImagesDialog(ctx, item) {
     }
     listEl.innerHTML = rows.map(function (r, i) {
       var thumb = r.preview || r.src || "";
-      var st = r.status === "error" ? ("失败" + (r.error ? "：" + r.error : "")) :
-        r.status === "uploading" ? "上传中…" :
-          r.status === "pending" ? "等待上传" : "就绪";
+      var st = r.status === "error" ? (dfT("失败") + (r.error ? "：" + r.error : "")) :
+        r.status === "uploading" ? dfT("上传中…") :
+          r.status === "pending" ? dfT("等待上传") : dfT("就绪");
+      var upLabel = dfLocaleIsEn() ? "Up" : "上";
+      var downLabel = dfLocaleIsEn() ? "Down" : "下";
+      var rmLabel = dfLocaleIsEn() ? "Del" : "删";
       return (
         '<div class="orca-df-img-row" data-idx="' + i + '">' +
         '<img class="orca-df-img-thumb" src="' + orcaToolsEsc(thumb) + '" alt="" />' +
         '<div class="orca-df-img-meta"><div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div></div>" +
         '<div class="orca-df-img-acts">' +
-        '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>上</button>' +
-        '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>下</button>' +
-        '<button type="button" class="orca-df-tools-mini" data-df-img="rm" data-idx="' + i + '">删</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>' + upLabel + "</button>" +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>' + downLabel + "</button>" +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="rm" data-idx="' + i + '">' + rmLabel + "</button>" +
         "</div></div>"
       );
     }).join("");
@@ -773,7 +1081,7 @@ function orcaOpenImagesDialog(ctx, item) {
       row.error = "";
     } catch (e) {
       row.status = "error";
-      row.error = String(e && e.message || e || "失败");
+      row.error = String(e && e.message || e || (dfLocaleIsEn() ? "Failed" : "失败"));
     }
     render();
     return row;
@@ -789,9 +1097,9 @@ function orcaOpenImagesDialog(ctx, item) {
       setProgress(done, pending.length);
     }
     status.textContent = pending.length
-      ? ("上传完成：成功 " + rows.filter(function (r) { return r.status === "ready"; }).length +
-        " / 失败 " + rows.filter(function (r) { return r.status === "error"; }).length)
-      : "无需上传";
+      ? (dfT("上传完成：成功 ") + rows.filter(function (r) { return r.status === "ready"; }).length +
+        dfT(" / 失败 ") + rows.filter(function (r) { return r.status === "error"; }).length)
+      : dfT("无需上传");
   }
 
   host.addEventListener("mousedown", function (e) {
@@ -831,11 +1139,11 @@ function orcaOpenImagesDialog(ctx, item) {
     }
     if (act === "save") {
       busy = true;
-      status.textContent = "保存中…";
+      status.textContent = dfT("保存中…");
       uploadPending().then(function () {
         var failed = rows.filter(function (r) { return r.status === "error"; });
         if (failed.length) {
-          status.textContent = "仍有 " + failed.length + " 张失败，可重试后再保存";
+          status.textContent = dfT("仍有 ") + failed.length + dfT(" 张失败，可重试后再保存");
           busy = false;
           return null;
         }
@@ -850,7 +1158,7 @@ function orcaOpenImagesDialog(ctx, item) {
           if (ctx && ctx.reApp) ctx.reApp();
         });
       }).catch(function (err) {
-        status.textContent = "保存失败：" + String(err && err.message || err);
+        status.textContent = dfT("保存失败：") + String(err && err.message || err);
         orcaShowMessage("保存图片失败");
       }).then(function () { busy = false; });
     }
@@ -865,6 +1173,7 @@ function orcaOpenImagesDialog(ctx, item) {
     }
     files.slice(0, room).forEach(function (f) {
       var url = URL.createObjectURL(f);
+      orcaImagesBlobUrls.push(url);
       rows.push({ src: url, preview: url, status: "pending", error: "" });
     });
     render();
@@ -889,8 +1198,8 @@ function orcaEnhanceToolsUi(el, ctx) {
     toolsBtn.type = "button";
     toolsBtn.className = "mom-outline-fab orca-df-tools-fab";
     toolsBtn.setAttribute("data-df-act", "open-tools");
-    toolsBtn.title = "工具（归档/回收站/搜索/统计/导出…）";
-    toolsBtn.setAttribute("aria-label", "工具");
+    toolsBtn.title = dfT("工具（归档/回收站/搜索/统计/导出…）");
+    toolsBtn.setAttribute("aria-label", dfT("工具"));
     toolsBtn.innerHTML =
       '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>' +
       '<span class="orca-df-tools-fab-count" hidden>0</span>';
@@ -928,12 +1237,12 @@ function orcaEnhanceToolsUi(el, ctx) {
   var f = ctx.filters || {};
   var hasQ = orcaToolsHasQuickFilters(f);
   quick.innerHTML =
-    '<span class="orca-df-tagbar-label">筛选</span>' +
-    '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">有图</button>' +
-    '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">有地点</button>' +
-    '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">仅置顶</button>' +
-    (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">清除筛选</button>' : "") +
-    (f.kw ? '<span class="orca-df-quick-kw">搜索：' + orcaToolsEsc(f.kw) + "</span>" : "");
+    '<span class="orca-df-tagbar-label">' + dfT("筛选") + "</span>" +
+    '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">' + dfT("有图") + "</button>" +
+    '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">' + dfT("有地点") + "</button>" +
+    '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">' + dfT("仅置顶") + "</button>" +
+    (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">' + dfT("清除筛选") + "</button>" : "") +
+    (f.kw ? '<span class="orca-df-quick-kw">' + dfT("搜索：") + orcaToolsEsc(f.kw) + "</span>" : "");
 
   orcaToolsGetLayout().then(function (p) {
     if (!el.isConnected) return;
@@ -958,6 +1267,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-image") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.hasImage = !ctx.filters.hasImage;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
@@ -965,6 +1275,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-location") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.hasLocation = !ctx.filters.hasLocation;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
@@ -972,6 +1283,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-pinned") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.pinnedOnly = !ctx.filters.pinnedOnly;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
@@ -980,6 +1292,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     orcaToolsClearQuickFilters(ctx.filters);
     ctx.filters.kw = "";
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaRefreshFeed().then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
   }

@@ -1,8 +1,8 @@
 // DF_ASSETS 图片存储层完整链路测试
 import { JSDOM } from "jsdom";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
-const distPath = "C:/Users/i5156/AppData/Roaming/TRAE SOLO CN/ModularData/ai-agent/work-mode-projects/6a866bb5ecf6cdbfe97f12e7/orca-diaryflow/dist/index.js";
+const distPath = process.argv[2] || fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
 globalThis.window = dom.window;

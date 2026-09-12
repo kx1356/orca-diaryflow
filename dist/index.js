@@ -1,4 +1,4 @@
-// orca-diaryflow v0.3.16 — light compose + Orca blocks (plan C)
+// orca-diaryflow v0.3.19 — light compose + Orca blocks (plan C)
 // Orca Note adaptation: panel, plugin-file media, block store, tags/refs/search
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -1237,7 +1237,7 @@ var require_editor = __commonJS({
     }
     // 图片封面模式：单栏 + 全年 12 个月 7 天一周
     function calBuildPhoto(ctx, year) {
-      const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+      const monthNames = dfCalMonthsShort();
       const { dayCounts, dayFirstImg } = calGridStats(ctx, year);
       const startDate = calStartDate(year);
       const weeks = calWeeks(year, startDate);
@@ -1261,7 +1261,7 @@ var require_editor = __commonJS({
             if (date.getFullYear() === year && date.getMonth() === m2) {
               const key = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`;
               const count = dayCounts[key] || 0;
-              const tip = count > 0 ? `${m2 + 1}月${date.getDate()}日: ${count}条` : `${m2 + 1}月${date.getDate()}日`;
+              const tip = dfCalTip(m2, date.getDate(), count);
               const dateAttr = count > 0 ? ` data-date="${key}"` : "";
               const num = `<span class="mom-calendar-photo-num">${date.getDate()}</span>`;
               if (count > 0 && dayFirstImg[key]) {
@@ -1277,14 +1277,14 @@ var require_editor = __commonJS({
           }
           grid += `<div class="mom-calendar-photo-row">${rowCells}</div>`;
         });
-        return `<div class="mom-calendar-photo-month"><div class="mom-calendar-photo-month-title">${year}年${monthNames[m2]}</div><div class="mom-calendar-photo-grid">${grid}</div></div>`;
+        return `<div class="mom-calendar-photo-month"><div class="mom-calendar-photo-month-title">${dfCalMonthTitle(year, m2)}</div><div class="mom-calendar-photo-grid">${grid}</div></div>`;
       };
       return `<div class="mom-calendar-photo-twocol">${Array.from({ length: 12 }, (_, i) => renderMonth(i)).join("")}</div>`;
     }
     // 热力图模式：上半年 / 下半年两行周视图（窄屏友好，GitHub 式色阶）
     function calBuildHeat(ctx, year) {
       const { dayCounts } = calGridStats(ctx, year);
-      const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+      const monthNames = dfCalMonthsShort();
       const startDate = calStartDate(year);
       const weeks = calWeeks(year, startDate);
       const msW = new Array(12).fill(-1);
@@ -1317,7 +1317,7 @@ var require_editor = __commonJS({
           }
         }
         if (!isFinite(w0) || w1 < 0) {
-          return `<div class="mom-calendar-heat-half"><div class="mom-calendar-heat-caption">${caption}</div><div class="mom-calendar-heat-empty">暂无记录</div></div>`;
+          return `<div class="mom-calendar-heat-half"><div class="mom-calendar-heat-caption">${caption}</div><div class="mom-calendar-heat-empty">${dfT("暂无记录")}</div></div>`;
         }
         let columns = "";
         for (let w = w0; w <= w1; w++) {
@@ -1330,7 +1330,7 @@ var require_editor = __commonJS({
               const key = `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`;
               const count = dayCounts[key] || 0;
               const level = heatLevel(count);
-              const tip = count > 0 ? `${date.getMonth() + 1}月${date.getDate()}日: ${count}条` : `${date.getMonth() + 1}月${date.getDate()}日`;
+              const tip = dfCalTip(date.getMonth(), date.getDate(), count);
               const dateAttr = count > 0 ? ` data-date="${key}"` : "";
               cells += `<div class="mom-calendar-cell level-${level}"${dateAttr} title="${tip}"></div>`;
             } else {
@@ -1349,7 +1349,7 @@ var require_editor = __commonJS({
         }
         return `<div class="mom-calendar-heat-half"><div class="mom-calendar-heat-caption">${caption}</div><div class="mom-calendar-columns">${columns}</div><div class="mom-calendar-months">${labels.join("")}</div></div>`;
       };
-      return `<div class="mom-calendar-heat-wrap">${buildHalf(0, 5, "上半年")}${buildHalf(6, 11, "下半年")}</div>`;
+      return `<div class="mom-calendar-heat-wrap">${buildHalf(0, 5, dfT("上半年"))}${buildHalf(6, 11, dfT("下半年"))}</div>`;
     }
     function openCalendarModal(ctx) {
       ctx.calMode = ctx.calMode || "photo";
@@ -1366,11 +1366,11 @@ var require_editor = __commonJS({
       <div class="mom-calendar-content">
         <div class="mom-calendar-header">
           <div class="mom-calendar-title">
-            <span>日历</span>
+            <span>${dfT("日历")}</span>
             <select class="mom-calendar-year" data-cal-year></select>
             <span class="mom-calendar-modes">
-              <button class="mom-calendar-mode${ctx.calMode === "photo" ? " on" : ""}" data-cal-mode="photo">照片</button>
-              <button class="mom-calendar-mode${ctx.calMode === "heatmap" ? " on" : ""}" data-cal-mode="heatmap">热度</button>
+              <button class="mom-calendar-mode${ctx.calMode === "photo" ? " on" : ""}" data-cal-mode="photo">${dfT("照片")}</button>
+              <button class="mom-calendar-mode${ctx.calMode === "heatmap" ? " on" : ""}" data-cal-mode="heatmap">${dfT("热度")}</button>
             </span>
             <span class="mom-calendar-count" data-cal-count></span>
           </div>
@@ -1385,7 +1385,7 @@ var require_editor = __commonJS({
       const countEl = overlay.querySelector("[data-cal-count]");
       const modeBtns = overlay.querySelectorAll("[data-cal-mode]");
       const yearSel = overlay.querySelector("[data-cal-year]");
-      yearSel.innerHTML = sortedYears.map((y) => `<option value="${y}"${y === ctx.calYear ? " selected" : ""}>${y}年</option>`).join("");
+      yearSel.innerHTML = sortedYears.map((y) => `<option value="${y}"${y === ctx.calYear ? " selected" : ""}>${dfLocaleIsEn() ? y : y + "年"}</option>`).join("");
       const applyWidth = (mode) => {
         // 热度必须设明确 width：仅 maxWidth + auto 会收缩，界面看起来「没变化」
         if (mode === "heatmap") {
@@ -1400,7 +1400,7 @@ var require_editor = __commonJS({
       const scrollCurMonth = () => {
         if (ctx.calMode !== "photo") return;
         const now = /* @__PURE__ */ new Date();
-        const targetTitle = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+        const targetTitle = dfCalMonthTitle(now.getFullYear(), now.getMonth());
         setTimeout(() => {
           body.querySelectorAll(".mom-calendar-photo-month-title").forEach((t) => {
             if (t.textContent.trim() === targetTitle) { t.scrollIntoView({ behavior: "auto", block: "start" }); body.scrollTop -= 12; }
@@ -1411,7 +1411,7 @@ var require_editor = __commonJS({
         const year = Number(yearSel.value) || ctx.calYear;
         ctx.calYear = year;
         body.innerHTML = ctx.calMode === "heatmap" ? calBuildHeat(ctx, year) : calBuildPhoto(ctx, year);
-        countEl.textContent = items.filter((it) => new Date(toTs(it)).getFullYear() === year).length + " 条记录";
+        countEl.textContent = items.filter((it) => new Date(toTs(it)).getFullYear() === year).length + (dfLocaleIsEn() ? " entries" : " 条记录");
         modeBtns.forEach((b) => b.classList.toggle("on", b.dataset.calMode === ctx.calMode));
         applyWidth(ctx.calMode);
         scrollCurMonth();
@@ -1613,12 +1613,12 @@ var require_editor = __commonJS({
       return new Promise((resolve, reject) => {
         const bad = dfIsUnsupportedImage(file);
         if (bad) {
-          reject(new Error("\u6682\u4E0D\u652F\u6301 " + bad + "\uFF0C\u8BF7\u5148\u8F6C\u4E3A JPG/PNG/WebP"));
+          reject(new Error(dfT("\u6682\u4E0D\u652F\u6301 ") + bad + dfT("\uFF0C\u8BF7\u5148\u8F6C\u4E3A JPG/PNG/WebP")));
           return;
         }
         const type = String((file && file.type) || "").toLowerCase();
         if (type === "image/svg+xml" || /\.svg$/i.test(file && file.name || "")) {
-          reject(new Error("\u6682\u4E0D\u652F\u6301 SVG \u4F5C\u4E3A\u5934\u50CF/\u5C01\u9762\uFF0C\u8BF7\u7528 JPG/PNG"));
+          reject(new Error(dfT("\u6682\u4E0D\u652F\u6301 SVG \u4F5C\u4E3A\u5934\u50CF/\u5C01\u9762\uFF0C\u8BF7\u7528 JPG/PNG")));
           return;
         }
         const url = URL.createObjectURL(file);
@@ -1628,7 +1628,7 @@ var require_editor = __commonJS({
           let w = img.naturalWidth || img.width || 0;
           let h = img.naturalHeight || img.height || 0;
           if (!w || !h) {
-            reject(new Error("\u56FE\u7247\u5C3A\u5BF8\u65E0\u6548\uFF0C\u8BF7\u6362\u4E00\u5F20 JPG/PNG"));
+            reject(new Error(dfT("\u56FE\u7247\u5C3A\u5BF8\u65E0\u6548\uFF0C\u8BF7\u6362\u4E00\u5F20 JPG/PNG")));
             return;
           }
           const scale = Math.min(1, maxDim / Math.max(w, h, 1));
@@ -1648,7 +1648,7 @@ var require_editor = __commonJS({
             }
             ctx2d.drawImage(img, 0, 0, w, h);
           } catch (eDraw) {
-            reject(new Error("\u56FE\u7247\u8FC7\u5927\u6216\u65E0\u6CD5\u89E3\u7801\uFF0C\u8BF7\u538B\u7F29\u540E\u91CD\u8BD5"));
+            reject(new Error(dfT("\u56FE\u7247\u8FC7\u5927\u6216\u65E0\u6CD5\u89E3\u7801\uFF0C\u8BF7\u538B\u7F29\u540E\u91CD\u8BD5")));
             return;
           }
           // 统一出 JPEG（兼容性最好）；原图为 PNG 且不太大时保留 PNG
@@ -1656,7 +1656,7 @@ var require_editor = __commonJS({
           const outType = keepPng ? "image/png" : "image/jpeg";
           canvas.toBlob((blob) => {
             if (!blob) {
-              reject(new Error("\u56FE\u7247\u8F6C\u7801\u5931\u8D25\uFF0C\u8BF7\u6362 JPG/PNG \u91CD\u8BD5"));
+              reject(new Error(dfT("\u56FE\u7247\u8F6C\u7801\u5931\u8D25\uFF0C\u8BF7\u6362 JPG/PNG \u91CD\u8BD5")));
               return;
             }
             const ext = outType === "image/png" ? "png" : "jpg";
@@ -1666,7 +1666,7 @@ var require_editor = __commonJS({
         };
         img.onerror = () => {
           URL.revokeObjectURL(url);
-          reject(new Error("\u65E0\u6CD5\u8BFB\u53D6\u8BE5\u56FE\u7247\uFF08\u683C\u5F0F\u4E0D\u652F\u6301\u6216\u5DF2\u635F\u574F\uFF09\uFF0C\u8BF7\u7528 JPG/PNG/WebP"));
+          reject(new Error(dfT("\u65E0\u6CD5\u8BFB\u53D6\u8BE5\u56FE\u7247\uFF08\u683C\u5F0F\u4E0D\u652F\u6301\u6216\u5DF2\u635F\u574F\uFF09\uFF0C\u8BF7\u7528 JPG/PNG/WebP")));
         };
         img.src = url;
       });
@@ -2142,6 +2142,462 @@ var require_editor = __commonJS({
 
 
 
+// ===== i18n (zh -> en) =====
+// ============================================================
+// src/orca-i18n.js — 轻量国际化（中 → 英）
+// 策略：以中文原文为 key 的短语替换，避免逐条改写业务逻辑。
+// - dfT(s)：翻译单条文案（通知/消息/动态标签）
+// - dfMountDialog(host)：挂载纯静态对话框并整体翻译（不含用户内容）
+// - 用户内容（日记正文/标题/用户标签）绝不经过翻译
+// ============================================================
+
+var DF_I18N_EN = {
+  "日记流 · 使用说明": "Diary Flow · Getting Started",
+  "日记流": "Diary Flow",
+  "工具": "Tools",
+  "归档柜": "Archive",
+  "已归档条目": "Archived entries",
+  "回收站": "Trash",
+  "删除后约保留 30 天": "Kept about 30 days after deletion",
+  "搜索": "Search",
+  "在日记流内按关键词筛选": "Filter the feed by keyword",
+  "统计": "Stats",
+  "年/月计数、连续打卡、标签分布": "Year/month counts, streaks, tag distribution",
+  "导出": "Export",
+  "Markdown / 按月 zip / JSON 备份": "Markdown / monthly zip / JSON backup",
+  "回顾": "Recap",
+  "去年今日、随机一条": "On this day last year · random entry",
+  "布局": "Layout",
+  "封面高度：紧凑 / 舒适 / 高封面": "Cover height: compact / cozy / tall",
+  "关闭": "Close",
+  "返回": "Back",
+  "打开": "Open",
+  "取消": "Cancel",
+  "确定": "OK",
+  "清除": "Clear",
+  "添加": "Add",
+  "删除": "Delete",
+  "恢复": "Restore",
+  "彻底删除": "Delete permanently",
+  "清空回收站": "Empty trash",
+  "取消归档": "Unarchive",
+  "暂无归档": "No archived entries",
+  "回收站为空": "Trash is empty",
+  "加载中…": "Loading…",
+  "加载失败": "Failed to load",
+  "暂无": "None",
+  "全部": "All",
+  "今年": "This year",
+  "本月": "This month",
+  "连续打卡（天）": "Streak (days)",
+  "有记录天数": "Days logged",
+  "含图": "With images",
+  "含地点": "With location",
+  "置顶": "Pinned",
+  "取消置顶": "Unpin",
+  "年份": "Years",
+  "近月": "Recent months",
+  "标签分布": "Tag distribution",
+  "暂无用户标签": "No user tags",
+  "归档": "Archive",
+  "管理图片": "Manage images",
+  "在虎鲸中打开": "Open in Orca",
+  "更多": "More",
+  "更多操作": "More actions",
+  "收起": "Collapse",
+  "标签": "Tags",
+  "标签筛选": "Tag filter",
+  "暂无标签": "No tags",
+  "添加地点": "Add location",
+  "点击修改地点": "Click to edit location",
+  "修改时间": "Edit time",
+  "地点": "Location",
+  "地点：": "Location: ",
+  "标签：": "Tags: ",
+  "写入正文末行「地点：…」，并同步到虎鲸属性 df.location。":
+    "Written to the last line as “地点：…”, and synced to the Orca property df.location.",
+  "会同步到日记流展示；若改了日期，条目会移到虎鲸对应日记页。":
+    "Shown in the feed; changing the date moves the entry to the matching Orca journal.",
+  "例如：咖啡馆 / 公司": "e.g. Cafe / Office",
+  "新建标签，回车添加": "New tag, press Enter",
+  "写入虎鲸真实标签；可用 FAB / 顶栏筛选。#日记流 为入流标签，不可在此修改。":
+    "Written as real Orca tags; filter via FAB / top bar. #日记流 is the feed tag and cannot be changed here.",
+  "暂无标签，可在下方新建": "No tags yet — create one below",
+  "#日记流 为系统标签": "#日记流 is a system tag",
+  "标签已更新": "Tags updated",
+  "改标签失败: ": "Failed to update tags: ",
+  "时间无效": "Invalid time",
+  "时间已更新": "Time updated",
+  "改时间失败: ": "Failed to update time: ",
+  "地点已更新": "Location updated",
+  "地点已清除": "Location cleared",
+  "改地点失败: ": "Failed to update location: ",
+  "无效的日记块 ID": "Invalid diary block ID",
+  "无效 trashId": "Invalid trashId",
+  "无效 blockId": "Invalid blockId",
+  "块不存在": "Block not found",
+  "找不到对应虎鲸块": "Matching Orca block not found",
+  "找不到条目": "Entry not found",
+  "评论不能为空": "Comment cannot be empty",
+  "已新建，请在虎鲸中编辑": "Created — edit it in Orca",
+  "已创建条目，请到今日日记继续编辑": "Entry created — continue editing in today's journal",
+  "新建失败: ": "Create failed: ",
+  "日记流已同步": "Feed synced",
+  "同步失败": "Sync failed",
+  "同步日记流": "Sync feed",
+  "无法加载标签": "Failed to load tags",
+  "暂不支持 ": "Unsupported: ",
+  "，请先转为 JPG/PNG/WebP": "; please convert to JPG/PNG/WebP first",
+  "暂不支持 SVG 作为头像/封面，请用 JPG/PNG": "SVG is not supported for avatar/cover; please use JPG/PNG",
+  "图片尺寸无效，请换一张 JPG/PNG": "Invalid image dimensions; please use another JPG/PNG",
+  "图片过大或无法解码，请压缩后重试": "Image too large or undecodable; compress it and retry",
+  "图片转码失败，请换 JPG/PNG 重试": "Image conversion failed; try another JPG/PNG",
+  "无法读取该图片（格式不支持或已损坏），请用 JPG/PNG/WebP": "Cannot read this image (unsupported or corrupted); use JPG/PNG/WebP",
+  "已取消标签筛选": "Tag filter cleared",
+  "已按标签过滤 #": "Filtered by tag #",
+  "标签筛选 · #": "Tag filter · #",
+  "打开日记流": "Open Diary Flow",
+  "打开日记流面板": "Open Diary Flow panel",
+  "当前没有可用的面板": "No panel is currently available",
+  "无法创建日记流面板": "Could not create the Diary Flow panel",
+  "暂无月份分组": "No month groups",
+  "该月暂无日记": "No entries in that month",
+  "日历": "Calendar",
+  "照片": "Photos",
+  "热度": "Heatmap",
+  "上半年": "First half",
+  "下半年": "Second half",
+  "暂无记录": "No records",
+  "搜索标题…": "Search titles…",
+  "没有匹配的条目": "No matching entries",
+  "点年份快速定位": "Tap a year to jump",
+  "这一年没有日记。": "No entries this year.",
+  "月份大纲": "Month outline",
+  "仍保留在日记页": "Still kept on the journal page",
+  "保留约 30 天": "Kept about 30 days",
+  "已取消归档": "Unarchived",
+  "取消归档失败": "Failed to unarchive",
+  "已恢复：": "Restored: ",
+  "已恢复（原归档条目已回到时间线）：": "Restored (previously archived entry is back on the timeline): ",
+  "恢复失败：未能创建条目": "Restore failed: could not create entry",
+  "回收站条目不存在": "Trash item not found",
+  "快照文件损坏或缺失": "Snapshot file is missing or corrupted",
+  "彻底删除该条目？不可恢复。": "Permanently delete this entry? This cannot be undone.",
+  "确定清空回收站？共 ": "Empty the trash? All ",
+  "项将永久删除，不可恢复。": " items will be permanently deleted and cannot be recovered.",
+  "已移入回收站": "Moved to trash",
+  "将这条日记移入回收站？\n（可在回收站恢复，约保留 30 天）\n":
+    "Move this entry to trash?\n(Restorable from trash for about 30 days)\n",
+  "已归档": "Archived",
+  "归档失败": "Archive failed",
+  "归档这条日记？\n主时间线将隐藏，可在归档柜取消归档。\n":
+    "Archive this entry?\nIt will be hidden from the main timeline; you can unarchive it in the Archive.\n",
+  "删除失败": "Delete failed",
+  "清空失败": "Failed to empty",
+  "删除这条评论？": "Delete this comment?",
+  "已删除评论": "Comment deleted",
+  "删除评论失败": "Failed to delete comment",
+  "编辑": "Edit",
+  "编辑评论": "Edit comment",
+  "写评论…": "Write a comment…",
+  "评论已更新": "Comment updated",
+  "评论更新失败": "Failed to update comment",
+  "评论已写入日记": "Comment written to the diary",
+  "评论失败": "Comment failed",
+  "今天过期": "expires today",
+  "剩不到 1 天": "less than 1 day left",
+  "加载更多（": "Load more (",
+  "回收站不可用": "Trash is unavailable",
+  "归档柜不可用": "Archive is unavailable",
+  "回收站已清空": "Trash emptied",
+  "导出会拉取全文；按月 zip 为无压缩 Markdown 包。":
+    "Export fetches full text; the monthly zip is an uncompressed Markdown bundle.",
+  "导出全部 Markdown": "Export all as Markdown",
+  "导出当前筛选 Markdown": "Export current filter as Markdown",
+  "按月打包 zip": "Package by month (zip)",
+  "导出 JSON 备份": "Export JSON backup",
+  "导出 Word（.doc）": "Export Word (.doc)",
+  "已导出 Word（": "Exported Word (",
+  "图": "Image ",
+  "全部取消归档": "Unarchive all",
+  "全部取消归档？共 ": "Unarchive all? ",
+  "全部恢复": "Restore all",
+  "全部恢复？共 ": "Restore all? ",
+  "清理图片": "Clean up images",
+  "移除未引用的插件图片": "Remove unreferenced plugin images",
+  "仅删除插件图片目录中未被封面/头像/日记条目引用的文件。": "Only removes plugin image files not referenced by cover/avatar/diary entries.",
+  "没有可清理的图片": "No unused images",
+  "清理": "Clean up",
+  "清理中 ": "Cleaning ",
+  "清理未引用图片？共 ": "Clean up unused images? ",
+  " 个文件": " files",
+  " 个图片": " images",
+  " 个": "",
+  "无法访问插件图片": "Cannot access plugin images",
+  "已清理 ": "Cleaned ",
+  "清理完成，失败 ": "Done, failed ",
+  "准备中…": "Preparing…",
+  "导出失败": "Export failed",
+  "失败：": "Failed: ",
+  "已下载 ": "Downloaded ",
+  " 条 Markdown": " entries as Markdown",
+  "已导出 Markdown（": "Exported Markdown (",
+  " 条）": " entries)",
+  "已下载 JSON（": "Downloaded JSON (",
+  "已导出 JSON 备份": "Exported JSON backup",
+  "(无标题)": "(untitled)",
+  " 条": " entries",
+  "暂无条目": "No entries",
+  "已打包 ": "Packaged ",
+  " 个月份文件": " monthly files",
+  "已导出按月 zip": "Exported monthly zip",
+  "去年今日没有日记": "No diary on this day last year",
+  "去年今日没有日记 — 可点「随机一条」":
+    "No diary on this day last year — try “Random entry”",
+  "暂无日记": "No entries yet",
+  "随机一条": "Random entry",
+  "去年今日": "On this day last year",
+  "关键词（匹配日记流条目正文）": "Keyword (matches entry text)",
+  "例如：旅行 / 心情": "e.g. travel / mood",
+  "在日记流中筛选": "Filter the feed",
+  "清除关键词": "Clear keyword",
+  "也可使用虎鲸全局搜索；此处仅限带「日记流」标签的条目。":
+    "You can also use Orca global search; this only searches entries tagged “日记流”.",
+  "已筛选：": "Filtered: ",
+  "已筛选": "Filtered",
+  "已清除搜索": "Search cleared",
+  "快捷筛选": "Quick filters",
+  "打印 / 另存为 PDF": "Print / Save as PDF",
+  "已打开打印（可另存为 PDF）": "Opened print dialog (Save as PDF)",
+  "已导出 HTML（可直接打印为 PDF）": "Exported HTML (print it to PDF)",
+  "窄屏可选手「紧凑」缩小封面；宽屏可用「高封面」。":
+    "On narrow screens choose Compact to shrink the cover; Tall suits wide screens.",
+  "紧凑 — 矮封面、更密列表": "Compact — shorter cover, denser list",
+  "舒适 — 默认": "Cozy — default",
+  "高封面 — 更强氛围": "Tall — more atmosphere",
+  "当前：": "Current: ",
+  "紧凑": "Compact",
+  "舒适": "Cozy",
+  "高封面": "Tall",
+  "布局已设为「": "Layout set to “",
+  "」": "”",
+  "图片（最多 9 张）": "Images (up to 9)",
+  "可添加、排序；失败可重试后保存": "Add or reorder; retry failed ones before saving",
+  "添加图片": "Add images",
+  "重试失败": "Retry failed",
+  "保存到日记": "Save to diary",
+  "暂无图片": "No images",
+  "失败": "Failed",
+  "上传中…": "Uploading…",
+  "等待上传": "Waiting to upload",
+  "就绪": "Ready",
+  "上传完成：成功 ": "Upload finished: OK ",
+  " / 失败 ": " / failed ",
+  "无需上传": "Nothing to upload",
+  "保存中…": "Saving…",
+  "仍有 ": "Still ",
+  " 张失败，可重试后再保存": " failed — retry before saving",
+  "图片已保存": "Images saved",
+  "保存失败：": "Save failed: ",
+  "保存图片失败": "Failed to save images",
+  "最多 9 张图": "Up to 9 images",
+  "筛选": "Filters",
+  "有图": "Has images",
+  "有地点": "Has location",
+  "仅置顶": "Pinned only",
+  "清除筛选": "Clear filters",
+  "搜索：": "Search: ",
+  "工具（归档/回收站/搜索/统计/导出…）":
+    "Tools (archive / trash / search / stats / export …)",
+  "已插入使用说明（置顶）": "Inserted the guide (pinned)",
+  "已补全使用说明正文": "Repaired the guide content",
+  "日记流插件已加载（深融合虎鲸）": "Diary Flow plugin loaded (deep Orca integration)",
+  "日记流插件已卸载": "Diary Flow plugin unloaded",
+  "共 ": "Total ",
+  " 条已归档": " archived",
+  " 条 · 约保留 30 天": " · kept about 30 days",
+  "我": "Me",
+  "每页条目数": "Entries per page",
+  "时间线底部「加载更多」每次增加的条目数": "How many entries each “Load more” adds",
+  "回收站保留天数": "Trash retention (days)",
+  "删除的日记在回收站中保留的天数": "Days deleted entries stay in the trash",
+  "删除前确认": "Confirm before deleting",
+  "删除或归档日记前弹出确认框": "Show a confirmation before deleting or archiving",
+  "自动清理图片": "Auto-clean images",
+  "启动后自动移除未被引用的插件图片（回收站与归档条目引用会保留）":
+    "Automatically remove unreferenced plugin images on startup (trash and archived references are kept)",
+  "约保留 ": "Kept about ",
+  " 天": " days"
+};
+
+var DF_I18N_KEYS = null;
+
+function dfLocaleIsEn() {
+  try {
+    var loc = String((orca.state && orca.state.locale) || "zh").toLowerCase();
+    return loc.indexOf("en") === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 翻译单条文案（支持在长句中对已知短语做替换） */
+function dfT(s) {
+  if (s == null) return s;
+  if (!dfLocaleIsEn()) return String(s);
+  var str = String(s);
+  if (!str) return str;
+  if (!DF_I18N_KEYS) {
+    DF_I18N_KEYS = Object.keys(DF_I18N_EN).sort(function (a, b) { return b.length - a.length; });
+  }
+  for (var i = 0; i < DF_I18N_KEYS.length; i++) {
+    var k = DF_I18N_KEYS[i];
+    if (str.indexOf(k) >= 0) str = str.split(k).join(DF_I18N_EN[k]);
+  }
+  return str;
+}
+
+var DF_I18N_ATTRS = ["title", "aria-label", "placeholder"];
+
+/** 翻译 DOM 子树中的静态文案与常见属性（仅用于不含用户内容的对话框） */
+function dfLocalizeEl(root) {
+  if (!root || !dfLocaleIsEn()) return root;
+  try {
+    if (root.nodeType === 3) {
+      if (root.nodeValue && /[\u4e00-\u9fff]/.test(root.nodeValue)) {
+        root.nodeValue = dfT(root.nodeValue);
+      }
+      return root;
+    }
+    if (root.nodeType !== 1) return root;
+    for (var a = 0; a < DF_I18N_ATTRS.length; a++) {
+      var name = DF_I18N_ATTRS[a];
+      if (root.hasAttribute && root.hasAttribute(name)) {
+        var v = root.getAttribute(name);
+        if (v && /[\u4e00-\u9fff]/.test(v)) root.setAttribute(name, dfT(v));
+      }
+    }
+    var kids = root.childNodes || [];
+    for (var i = 0; i < kids.length; i++) dfLocalizeEl(kids[i]);
+  } catch (e) { /* ignore */ }
+  return root;
+}
+
+/** 挂载对话框：追加到 body，并在英文环境下整体翻译静态文案 */
+function dfMountDialog(host) {
+  document.body.appendChild(host);
+  if (dfLocaleIsEn()) dfLocalizeEl(host);
+  return host;
+}
+
+/** 英文月名 */
+var DF_I18N_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var DF_CAL_MONTHS_ZH = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+
+/** 封面日历：月份短名（按语言） */
+function dfCalMonthsShort() {
+  return dfLocaleIsEn() ? DF_I18N_MONTHS : DF_CAL_MONTHS_ZH;
+}
+
+/** 封面日历：月份标题，如 2026年1月 / Jan 2026 */
+function dfCalMonthTitle(year, monthIndex) {
+  if (dfLocaleIsEn()) return DF_I18N_MONTHS[monthIndex] + " " + year;
+  return year + "年" + (Number(monthIndex) + 1) + "月";
+}
+
+/** 封面日历：单元格提示，如 1月5日: 3条 / Jan 5: 3 */
+function dfCalTip(monthIndex, day, count) {
+  if (dfLocaleIsEn()) {
+    var base = DF_I18N_MONTHS[monthIndex] + " " + day;
+    return count > 0 ? (base + ": " + count) : base;
+  }
+  var zh = (Number(monthIndex) + 1) + "月" + day + "日";
+  return count > 0 ? (zh + ": " + count + "条") : zh;
+}
+
+
+// ===== Settings =====
+// ============================================================
+// src/orca-settings.js — 插件设置页（orca.plugins.setSettingsSchema）
+// 设置值同步读取 orca.state.plugins[name].settings；未设置时用默认值。
+// ============================================================
+
+var DF_SETTINGS_DEFAULTS = {
+  itemsPerPage: 25,
+  trashRetentionDays: 30,
+  confirmDelete: true,
+  autoCleanImages: false
+};
+
+function dfSettingsObject() {
+  try {
+    var plugins = orca.state && orca.state.plugins;
+    var p = plugins && plugins[orcaPluginName];
+    return (p && p.settings) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function dfGetSetting(key) {
+  var v;
+  try { v = dfSettingsObject()[key]; } catch (e) { v = undefined; }
+  if (v === undefined || v === null || v === "") return DF_SETTINGS_DEFAULTS[key];
+  return v;
+}
+
+function dfGetNumberSetting(key, minVal) {
+  var n = Number(dfGetSetting(key));
+  if (!isFinite(n) || n <= 0) n = Number(DF_SETTINGS_DEFAULTS[key]);
+  if (isFinite(minVal) && n < minVal) n = minVal;
+  return Math.floor(n);
+}
+
+/** 时间线每页条数（设置项 itemsPerPage） */
+function dfFeedPageSize() {
+  return dfGetNumberSetting("itemsPerPage", 1);
+}
+
+/** 回收站保留天数（设置项 trashRetentionDays） */
+function dfTrashRetentionDays() {
+  return dfGetNumberSetting("trashRetentionDays", 1);
+}
+
+async function dfRegisterSettings() {
+  if (!orca.plugins || typeof orca.plugins.setSettingsSchema !== "function") return;
+  try {
+    await orca.plugins.setSettingsSchema(orcaPluginName, {
+      itemsPerPage: {
+        label: dfT("每页条目数"),
+        description: dfT("时间线底部「加载更多」每次增加的条目数"),
+        type: "number",
+        defaultValue: DF_SETTINGS_DEFAULTS.itemsPerPage
+      },
+      trashRetentionDays: {
+        label: dfT("回收站保留天数"),
+        description: dfT("删除的日记在回收站中保留的天数"),
+        type: "number",
+        defaultValue: DF_SETTINGS_DEFAULTS.trashRetentionDays
+      },
+      confirmDelete: {
+        label: dfT("删除前确认"),
+        description: dfT("删除或归档日记前弹出确认框"),
+        type: "boolean",
+        defaultValue: DF_SETTINGS_DEFAULTS.confirmDelete
+      },
+      autoCleanImages: {
+        label: dfT("自动清理图片"),
+        description: dfT("启动后自动移除未被引用的插件图片（回收站与归档条目引用会保留）"),
+        type: "boolean",
+        defaultValue: DF_SETTINGS_DEFAULTS.autoCleanImages
+      }
+    });
+  } catch (e) {
+    console.warn("[orca-diaryflow] setSettingsSchema failed", e);
+  }
+}
+
+
 // ===== Orca blocks store =====
 // ============================================================
 // src/orca-blocks.js — 日记流深融合虎鲸：块存储 / 查询 / 迁移
@@ -2153,11 +2609,10 @@ var DF_TAG = "日记流";
 var DF_INDEX_KEY = "moments-index";
 var DF_BACKUP_KEY = "moments-records-backup";
 var DF_MIGRATED_KEY = "moments-migrated";
-var DF_TUTORIAL_KEY = "tutorial-inserted-v1"; // 兼容旧标记；现以 dismissed / blockId 为准
 var DF_TUTORIAL_DISMISSED_KEY = "tutorial-dismissed-v1";
 var DF_TUTORIAL_ID_KEY = "tutorial-block-id";
 /** 使用说明正文版本：改 DF_TUTORIAL_TEXT 时必须递增，已有说明块会按此同步 */
-var DF_TUTORIAL_CONTENT_VER = "0.3.15";
+var DF_TUTORIAL_CONTENT_VER = "0.3.18";
 var DF_TUTORIAL_CONTENT_VER_KEY = "tutorial-content-ver";
 var DF_REF_TAG = 2; // BlockRef type: tag / property tag
 var DF_LOC_PROP = "df.location";
@@ -2183,6 +2638,7 @@ var DF_TUTORIAL_TEXT = [
   "「⋯」展开：置顶、归档、改标签、管理图片、打开虎鲸、删除（进回收站）",
   "FAB：同步、工具、标签筛选、月份大纲；列表底部可「加载更多」",
   "—— 筛选与工具 ——",
+  "标签筛选：点 FAB 选标签；筛选中再点 FAB，或再点同一标签，即可取消",
   "工具：归档柜、回收站、搜索、统计、导出、回顾、布局",
   "快捷筛选：有图 / 有地点 / 仅置顶；布局可选紧凑 / 舒适 / 高封面（窄屏建议紧凑）",
   "—— 重要规则 ——",
@@ -2192,6 +2648,37 @@ var DF_TUTORIAL_TEXT = [
   "日记流以展示为主；正文编辑以虎鲸日记页为准，改完会自动同步",
   "条目日期跟随所属日记页；换日期请用卡片改时间（会移动到对应日记）"
 ].join("\n");
+
+var DF_TUTORIAL_TEXT_EN = [
+  "Diary Flow · Getting Started",
+  "This entry is pinned automatically by the Diary Flow plugin into today's journal; it won't reappear after you delete it manually.",
+  "—— Basics ——",
+  "Bottom-right “+”: create an entry in today's journal and jump to the Orca editor",
+  "Click the card text or “Edit”: edit the entry in Orca (the timeline never edits text inline)",
+  "Cover area: set cover, avatar and signature",
+  "Bottom “Location”: writes “地点：…” as the last line and syncs a property",
+  "Comments: written as Orca child blocks under the entry, visible on the journal page",
+  "“⋯”: pin, archive, edit tags, manage images, open in Orca, delete (to trash)",
+  "FAB: sync, tools, tag filter, month outline; “Load more” at the bottom of the list",
+  "—— Filters & tools ——",
+  "Tag filter: tap the FAB to pick a tag; tap the FAB again or the same tag to clear",
+  "Tools: Archive, Trash, Search, Stats, Export, Recap, Layout",
+  "Quick filters: has images / has location / pinned only; layout: compact / cozy / tall (compact suits narrow screens)",
+  "—— Important rules ——",
+  "Only journal blocks tagged “日记流” appear on the timeline",
+  "The month outline jumps by year, then by month to the matching group",
+  "Archiving hides an entry from the main timeline; the block stays on the journal page and can be unarchived in the Archive",
+  "Diary Flow is for browsing; edit text on the Orca journal page and it syncs automatically",
+  "An entry's date follows its journal page; use “Edit time” on the card to move it to another journal"
+].join("\n");
+
+function dfTutorialTitle() {
+  return dfLocaleIsEn() ? "Diary Flow · Getting Started" : DF_TUTORIAL_TITLE;
+}
+
+function dfTutorialText() {
+  return dfLocaleIsEn() ? DF_TUTORIAL_TEXT_EN : DF_TUTORIAL_TEXT;
+}
 
 function dfIsId(v) {
   return typeof v === "number" && isFinite(v) && v > 0;
@@ -2487,10 +2974,6 @@ function dfContentToMarkdown(content, block) {
     parts.push(dfFragToMarkdown(frag));
   }
   return parts.join("");
-}
-
-function dfContentHasInlineSpecial(content) {
-  return dfContentHasStructuralFrags(content) || dfContentHasRich(content);
 }
 
 function dfBlockLineMarkdown(block, tags) {
@@ -3292,6 +3775,47 @@ async function dfPromoteDiaryChild(block, parent) {
   return (await dfGetBlock(block.id)) || block;
 }
 
+/**
+ * feed 列表增量缓存：块及其直接子块、overlay 未变时复用上次构建结果，
+ * 跳过昂贵的异步收集（图片/评论/日记日）。任何子块未载入则放弃缓存以保证正确性。
+ */
+var DF_FEED_ITEM_CACHE = Object.create(null);
+
+function dfFeedListFp(block, overlay) {
+  if (!block || !dfIsId(block.id) || !orca.state.blocks) return "";
+  var parts = [
+    "id:" + block.id,
+    "p:" + String(block.parent || ""),
+    "t:" + String(block.text || ""),
+    "m:" + (block.modified instanceof Date ? block.modified.getTime() : Number(block.modified) || 0),
+    "pr:" + JSON.stringify(block.properties || []),
+    "rf:" + JSON.stringify(block.refs || []),
+    "ov:" + JSON.stringify({
+      p: overlay && overlay.pinned ? 1 : 0,
+      a: overlay && overlay.archived ? 1 : 0,
+      l: (overlay && overlay.location) || "",
+      c: (overlay && overlay.createdAt) || "",
+      i: (overlay && overlay.images) || [],
+      k: (overlay && overlay.comments) || []
+    })
+  ];
+  var kids = block.children || [];
+  for (var i = 0; i < kids.length; i++) {
+    var c = orca.state.blocks[kids[i]];
+    if (!c) return "";
+    parts.push("c" + kids[i] + ":" + String(c.text || "") + "|" +
+      (c.modified instanceof Date ? c.modified.getTime() : Number(c.modified) || 0) + "|" +
+      JSON.stringify(c.properties || []));
+  }
+  return parts.join("\u0001");
+}
+
+function dfPruneFeedCache(seen) {
+  Object.keys(DF_FEED_ITEM_CACHE).forEach(function (k) {
+    if (!seen[k]) delete DF_FEED_ITEM_CACHE[k];
+  });
+}
+
 async function dfBlockToFeedItem(block, overlay, opts) {
   opts = opts || {};
   if (typeof block === "string" || typeof block === "number") {
@@ -3308,6 +3832,18 @@ async function dfBlockToFeedItem(block, overlay, opts) {
   }
   overlay = overlay || {};
   var shallow = !!opts.shallow && !opts.fullText;
+
+  var cacheFp = opts.useCache ? dfFeedListFp(block, overlay) : "";
+  if (cacheFp) {
+    var cachedHit = DF_FEED_ITEM_CACHE[String(block.id)];
+    if (cachedHit && cachedHit.fp === cacheFp) {
+      var ci = cachedHit.item;
+      ci.archived = dfIsArchived(block, overlay);
+      ci.pinned = !!(overlay.pinned || dfProp(block, "df.pinned"));
+      ci.location = dfResolveLocation(block, overlay);
+      return ci;
+    }
+  }
 
   var created = block.created instanceof Date ? block.created : new Date(block.created || Date.now());
   // 日期以所属日记页为准；overlay.createdAt 仅在「与日记页同一天」时保留时分
@@ -3333,7 +3869,7 @@ async function dfBlockToFeedItem(block, overlay, opts) {
     .map(dfResolveOrcaAssetSrc)
     .filter(function (s) { return dfIsDisplayableImgSrc(s) || String(s).indexOf("dfasset:") === 0; })
     .slice(0, 99);
-  var images = fromBlock.length ? fromBlock : fromOverlay;
+  var images = (fromBlock.length ? fromBlock : fromOverlay).slice(0, 9);
   var refs = dfOutgoingRefs(block);
   var needsFullText = shallow && dfEntryHasDeepChildren(block);
   var comments = await dfCollectCommentsFromBlock(block);
@@ -3341,7 +3877,7 @@ async function dfBlockToFeedItem(block, overlay, opts) {
   if (!commentsFromBlocks && Array.isArray(overlay.comments) && overlay.comments.length) {
     comments = overlay.comments.slice();
   }
-  return {
+  var item = {
     id: String(block.id),
     blockId: block.id,
     text: text,
@@ -3350,7 +3886,6 @@ async function dfBlockToFeedItem(block, overlay, opts) {
     linkTitle: "",
     created: dfFmtCreated(created),
     createdAt: created.getTime(),
-    liked: !!(overlay.liked || dfProp(block, "df.liked")),
     comments: comments,
     commentsFromBlocks: commentsFromBlocks,
     needsCommentMigrate: !commentsFromBlocks && Array.isArray(overlay.comments) && overlay.comments.length > 0,
@@ -3361,6 +3896,10 @@ async function dfBlockToFeedItem(block, overlay, opts) {
     refs: refs,
     needsFullText: !!needsFullText
   };
+  if (cacheFp) {
+    DF_FEED_ITEM_CACHE[String(block.id)] = { fp: cacheFp, item: item };
+  }
+  return item;
 }
 
 function dfIsArchivedFlag(v) {
@@ -3600,6 +4139,7 @@ async function listFeed(opts) {
 
   var index = await dfLoadIndex();
   var items = [];
+  var seenCache = {};
   // 默认不 heal：读 feed / 标签栏不得改日记结构；显式 skipHeal:false 或 healFeed() 才写库
   var skipHeal = opts.skipHeal !== false;
   var preferLive = opts.preferLive === true;
@@ -3676,9 +4216,11 @@ async function listFeed(opts) {
     var item = await dfBlockToFeedItem(b, index.overlays[String(b.id)], {
       fullText: fullText,
       shallow: !fullText,
+      useCache: skipHeal && !fullText,
       _feedList: true
     });
     if (item) {
+      seenCache[String(item.id)] = true;
       var archived = !!item.archived;
       if (archivedOnly) {
         if (!archived) continue;
@@ -3707,17 +4249,13 @@ async function listFeed(opts) {
       await dfSaveIndexQueued(index);
     } catch (eHealSave) { /* ignore */ }
   }
+  // 仅完整 feed 才清理缓存，避免筛选/搜索调用误删未命中的缓存
+  if (!kw && !tagFilter.length && !archivedOnly) dfPruneFeedCache(seenCache);
   items.sort(function (a, b) {
     if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
     return (b.createdAt || 0) - (a.createdAt || 0);
   });
   return { items: items, index: index };
-}
-
-/** 显式修复：跑 heal-on-read（结构/图推送/地点对齐）。平时读路径勿调用。 */
-async function healFeed(opts) {
-  opts = Object.assign({}, opts || {}, { skipHeal: false });
-  return listFeed(opts);
 }
 
 function dfSleep(ms) {
@@ -3831,32 +4369,34 @@ async function createEntry(opts) {
     }
   }, date, { keepFocus: keepFocus });
 
-  if (lines.length > 1 && dfIsId(newId)) {
+  if (dfIsId(newId)) {
     try {
       await dfWithEditor(async function () {
         var root = orca.state.blocks[newId] || { id: newId };
-        // 清掉 insertTag 可能留下的空子块，再写入正文
+        // 清掉 insertTag 可能留下的空子块（单行条目同样需要清理，否则残留空行）
         var kids = (root.children || []);
         var emptyIds = [];
         for (var ki = 0; ki < kids.length; ki++) {
           var ch = orca.state.blocks[kids[ki]] || await dfGetBlock(kids[ki]);
-          if (!ch || dfIsMediaBlock(ch)) continue;
+          if (!ch || dfIsMediaBlock(ch) || dfIsCommentBlock(ch)) continue;
           var plain = dfPlainContentText(ch);
           if (!plain || !String(plain).trim()) emptyIds.push(ch.id);
         }
         if (emptyIds.length) {
           try { await dfEditorCommand("core.editor.deleteBlocks", null, emptyIds); } catch (e0) { /* ignore */ }
         }
-        root = orca.state.blocks[newId] || { id: newId };
-        for (var li = 1; li < lines.length; li++) {
-          await dfEditorCommand(
-            "core.editor.insertBlock",
-            null,
-            root,
-            "lastChild",
-            dfMarkdownLineToFragments(lines[li]),
-            { type: "text" }
-          );
+        if (lines.length > 1) {
+          root = orca.state.blocks[newId] || { id: newId };
+          for (var li = 1; li < lines.length; li++) {
+            await dfEditorCommand(
+              "core.editor.insertBlock",
+              null,
+              root,
+              "lastChild",
+              dfMarkdownLineToFragments(lines[li]),
+              { type: "text" }
+            );
+          }
         }
       }, date, { keepFocus: keepFocus });
     } catch (eBody) {
@@ -3876,12 +4416,11 @@ async function createEntry(opts) {
     }
   }
 
-  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.liked || opts.pinned || opts.isTutorial) {
+  if (opts.location || orcaImgs.length || (opts.images && opts.images.length) || opts.pinned || opts.isTutorial) {
     await setOverlay(newId, {
       location: opts.location || "",
       images: orcaImgs.length ? orcaImgs : (Array.isArray(opts.images) ? opts.images.slice(0, 9) : []),
       imagesPushedToOrca: orcaImgs.length > 0,
-      liked: !!opts.liked,
       pinned: !!opts.pinned,
       comments: [],
       commentsStorage: "orca-blocks",
@@ -3979,7 +4518,6 @@ async function updateEntry(blockId, payload) {
     patch.images = orcaImgs.length ? orcaImgs : (Array.isArray(payload.images) ? payload.images.filter(Boolean).slice(0, 9) : []);
     patch.imagesPushedToOrca = orcaImgs.length > 0 || !(payload.images && payload.images.length);
   }
-  if (payload.liked !== undefined) patch.liked = !!payload.liked;
   if (payload.pinned !== undefined) patch.pinned = !!payload.pinned;
   // 评论主存虎鲸子块；updateEntry 不再把 comments 写进 overlay
   if (payload.isTutorial !== undefined) patch.isTutorial = !!payload.isTutorial;
@@ -4152,6 +4690,48 @@ async function deleteComment(entryId, commentId) {
   try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
   try { delete orca.state.blocks[hit.blockId]; } catch (e1) { /* ignore */ }
   return true;
+}
+
+/** 编辑评论：重写虎鲸子块正文（覆盖旧 overlay 评论） */
+async function updateComment(entryId, commentId, newText) {
+  var id = dfBlockId(entryId);
+  if (!id) throw new Error("无效 blockId");
+  var want = String(commentId || "");
+  if (!want) throw new Error("无效评论 ID");
+  var text = String(newText == null ? "" : newText).trim();
+  if (!text) throw new Error("评论不能为空");
+  var block = await dfGetBlock(id);
+  var list = await dfCollectCommentsFromBlock(block || { id: id });
+  var hit = null;
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].id) === want || String(list[i].blockId) === want) {
+      hit = list[i];
+      break;
+    }
+  }
+  if (!hit || !dfIsId(hit.blockId)) {
+    // 兼容尚未迁移的 overlay 评论：只改 overlay
+    await dfMutateIndex(function (index) {
+      var key = String(id);
+      var ov = index.overlays[key] || {};
+      var arr = (Array.isArray(ov.comments) ? ov.comments : []).map(function (c) {
+        if (String(c && c.id) === want) return Object.assign({}, c, { text: text });
+        return c;
+      });
+      index.overlays[key] = Object.assign({}, ov, { comments: arr });
+    });
+    return { id: want, text: text, migrated: false };
+  }
+  var display = dfCommentDisplayText(hit.name, text);
+  await dfWithEditor(async function () {
+    await dfEditorCommand("core.editor.setBlocksContent", null, [{
+      id: hit.blockId,
+      content: dfMarkdownLineToFragments(display)
+    }], false);
+  });
+  try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
+  try { delete orca.state.blocks[hit.blockId]; } catch (e1) { /* ignore */ }
+  return { id: hit.id, blockId: hit.blockId, name: hit.name, text: text, time: hit.time };
 }
 
 /** 把 overlay 里的旧评论一次性迁到虎鲸子块 */
@@ -4520,7 +5100,8 @@ function dfLooksLikeTutorialBlock(block) {
   var md = "";
   try { md = dfContentToMarkdown(block.content || [], block) || ""; } catch (e) { /* ignore */ }
   var head = String(plain || md || "").trim();
-  return head.indexOf(DF_TUTORIAL_TITLE) === 0 || head === DF_TUTORIAL_TITLE;
+  return head.indexOf(DF_TUTORIAL_TITLE) === 0 || head === DF_TUTORIAL_TITLE ||
+    head.indexOf("Diary Flow · Getting Started") === 0;
 }
 
 async function dfTutorialBodyIsThin(block) {
@@ -4594,7 +5175,7 @@ async function ensureTutorialInserted() {
     // （说明块由插件维护；用户手动删除后走 dismissed，不再自动出现）
     if (thin || verStale) {
       await updateEntry(foundId, {
-        text: DF_TUTORIAL_TEXT,
+        text: dfTutorialText(),
         tags: ["教程"],
         pinned: true,
         isTutorial: true,
@@ -4617,7 +5198,6 @@ async function ensureTutorialInserted() {
       console.warn("[orca-diaryflow] move tutorial to journal top failed", eMove);
     }
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(foundId));
-    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
     return {
       skipped: false,
       repaired: !!thin,
@@ -4629,7 +5209,7 @@ async function ensureTutorialInserted() {
 
   var created = await createEntry({
     date: today,
-    text: DF_TUTORIAL_TEXT,
+    text: dfTutorialText(),
     tags: ["教程"],
     pinned: true,
     isTutorial: true,
@@ -4640,7 +5220,6 @@ async function ensureTutorialInserted() {
   if (newId) {
     await setOverlay(newId, { pinned: true, isTutorial: true });
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_ID_KEY, String(newId));
-    await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_KEY, "true");
     await orca.plugins.setData(orcaPluginName, DF_TUTORIAL_CONTENT_VER_KEY, DF_TUTORIAL_CONTENT_VER);
   }
   return { skipped: false, created: true, contentVer: DF_TUTORIAL_CONTENT_VER, blockId: newId };
@@ -4713,7 +5292,6 @@ async function migrateMomentsRecords(loadLegacyFn) {
           }
         }
         await setOverlay(bid, {
-          liked: !!it.liked,
           pinned: !!it.pinned,
           comments: [],
           location: it.location || "",
@@ -4741,11 +5319,9 @@ async function migrateMomentsRecords(loadLegacyFn) {
 var OrcaBlocks = {
   TAG: DF_TAG,
   INDEX_KEY: DF_INDEX_KEY,
-  TUTORIAL_KEY: DF_TUTORIAL_KEY,
   TUTORIAL_DISMISSED_KEY: DF_TUTORIAL_DISMISSED_KEY,
   TUTORIAL_ID_KEY: DF_TUTORIAL_ID_KEY,
   listFeed: listFeed,
-  healFeed: healFeed,
   createEntry: createEntry,
   updateEntry: updateEntry,
   updateEntryTime: updateEntryTime,
@@ -4757,25 +5333,19 @@ var OrcaBlocks = {
   setOverlay: setOverlay,
   addComment: addComment,
   deleteComment: deleteComment,
+  updateComment: updateComment,
   migrateEntryComments: migrateEntryComments,
-  collectCommentsFromBlock: dfCollectCommentsFromBlock,
   mutateIndex: dfMutateIndex,
   collectUserTags: collectUserTags,
   openEntry: openEntry,
   ensureTutorialInserted: ensureTutorialInserted,
   migrateMomentsRecords: migrateMomentsRecords,
-  loadIndex: dfLoadIndex,
-  saveIndex: dfSaveIndexQueued,
-  getBlock: dfGetBlock,
   blockToFeedItem: dfBlockToFeedItem,
-  tagsOf: dfTagsOf,
   stripInlineTagText: dfStripInlineTagText,
   markdownLineToFragments: dfMarkdownLineToFragments,
   contentToMarkdown: dfContentToMarkdown,
-  syncImagesToBlock: dfSyncImagesToBlock,
   srcToOrcaAsset: dfSrcToOrcaAsset,
-  resolveOrcaAssetSrc: dfResolveOrcaAssetSrc,
-  hasTag: dfHasTag
+  resolveOrcaAssetSrc: dfResolveOrcaAssetSrc
 };
 
 globalThis.__DF_ORCA_BLOCKS = OrcaBlocks;
@@ -4916,7 +5486,6 @@ async function dfSnapshotEntryForTrash(blockId) {
     location: location || "",
     comments: comments,
     overlay: {
-      liked: !!overlay.liked,
       pinned: !!overlay.pinned,
       archived: !!overlay.archived || dfIsArchived(block, overlay),
       createdAt: overlay.createdAt || null,
@@ -4945,7 +5514,7 @@ async function dfMoveEntryToTrash(blockId) {
 
 async function trashList() {
   var list = await dfTrashReadIndex();
-  var ttl = DF_TRASH_RETENTION_DAYS * 864e5;
+  var ttl = dfTrashRetentionDays() * 864e5;
   var now = Date.now();
   return list.map(function (e) {
     return Object.assign({}, e, {
@@ -4986,7 +5555,6 @@ async function restoreTrashItem(trashId) {
     tags: record.tags || [],
     images: record.images || [],
     location: record.location || "",
-    liked: !!(record.overlay && record.overlay.liked),
     pinned: !!(record.overlay && record.overlay.pinned),
     isTutorial: !!(record.overlay && record.overlay.isTutorial)
   });
@@ -5004,7 +5572,6 @@ async function restoreTrashItem(trashId) {
     comments: [],
     commentsStorage: "orca-blocks",
     location: record.location || "",
-    liked: !!(record.overlay && record.overlay.liked),
     pinned: !!(record.overlay && record.overlay.pinned),
     isTutorial: !!(record.overlay && record.overlay.isTutorial)
   };
@@ -5024,7 +5591,7 @@ async function restoreTrashItem(trashId) {
 
   await dfTrashRemoveFile(meta.fileName || dfTrashFileName(want));
   await dfTrashWriteIndex(list.filter(function (e) { return !(e && String(e.trashId) === want); }));
-  return { blockId: newId, title: record.title };
+  return { blockId: newId, title: record.title, wasArchived: !!(record.overlay && record.overlay.archived) };
 }
 
 async function purgeTrashItem(trashId) {
@@ -5049,7 +5616,7 @@ async function purgeAllTrash() {
 }
 
 async function purgeExpiredTrash() {
-  var ttl = DF_TRASH_RETENTION_DAYS * 864e5;
+  var ttl = dfTrashRetentionDays() * 864e5;
   var now = Date.now();
   var list = await dfTrashReadIndex();
   var keep = [];
@@ -5066,6 +5633,25 @@ async function purgeExpiredTrash() {
   return { removed: list.length - keep.length };
 }
 
+/** 收集所有回收站快照中引用的插件媒体文件名（自动清理时避免误删） */
+async function dfTrashAllMediaRefs() {
+  var refs = {};
+  var list = await dfTrashReadIndex();
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    if (!e) continue;
+    var rec = null;
+    try { rec = await dfTrashReadFile(e.fileName || dfTrashFileName(e.trashId)); } catch (err) { rec = null; }
+    var imgs = (rec && rec.images) || [];
+    for (var j = 0; j < imgs.length; j++) {
+      var s = imgs[j];
+      var m = typeof s === "string" && s.match(/^dfasset:\/\/media\/(.+)$/);
+      if (m && m[1]) refs[decodeURIComponent(m[1])] = true;
+    }
+  }
+  return refs;
+}
+
 // 挂到 OrcaBlocks（本文件在 orca-blocks.js 之后拼接）
 (function dfAttachTrashApi() {
   var api = {
@@ -5075,6 +5661,7 @@ async function purgeExpiredTrash() {
     purgeTrashItem: purgeTrashItem,
     purgeAllTrash: purgeAllTrash,
     purgeExpiredTrash: purgeExpiredTrash,
+    trashAllMediaRefs: dfTrashAllMediaRefs,
     TRASH_RETENTION_DAYS: DF_TRASH_RETENTION_DAYS,
     TRASH_INDEX_KEY: DF_TRASH_INDEX_KEY
   };
@@ -5094,6 +5681,8 @@ async function purgeExpiredTrash() {
 
 var DF_LAYOUT_KEY = "layout-preset";
 var DF_LAYOUT_DEFAULT = "cozy";
+/** 图片管理对话框中新建的 blob 预览 URL；关闭对话框时统一回收，避免会话内累积 */
+var orcaImagesBlobUrls = [];
 
 function orcaToolsEsc(s) {
   return String(s == null ? "" : s)
@@ -5125,18 +5714,26 @@ function orcaToolsItemTitle(it) {
 
 function orcaToolsQuickFilterItems(items, filters) {
   filters = filters || {};
+  var from = String(filters.dateFrom || "").trim();
+  var to = String(filters.dateTo || "").trim();
   return (items || []).filter(function (it) {
     if (!it) return false;
     if (filters.pinnedOnly && !it.pinned) return false;
     if (filters.hasImage && !(it.images && it.images.length)) return false;
     if (filters.hasLocation && !(it.location && String(it.location).trim())) return false;
+    if (from || to) {
+      var day = orcaToolsItemDay(it);
+      if (!day) return false;
+      if (from && day < from) return false;
+      if (to && day > to) return false;
+    }
     return true;
   });
 }
 
 function orcaToolsHasQuickFilters(filters) {
   filters = filters || {};
-  return !!(filters.pinnedOnly || filters.hasImage || filters.hasLocation);
+  return !!(filters.pinnedOnly || filters.hasImage || filters.hasLocation || filters.dateFrom || filters.dateTo);
 }
 
 function orcaToolsClearQuickFilters(filters) {
@@ -5144,6 +5741,8 @@ function orcaToolsClearQuickFilters(filters) {
   filters.pinnedOnly = false;
   filters.hasImage = false;
   filters.hasLocation = false;
+  filters.dateFrom = "";
+  filters.dateTo = "";
 }
 
 function orcaToolsComputeStats(items) {
@@ -5182,10 +5781,7 @@ function orcaToolsComputeStats(items) {
     var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
     return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
   }
-  var cursor = 0;
-  if (hasDay(shiftDay(now, 0))) cursor = 0;
-  else if (hasDay(shiftDay(now, -1))) cursor = -1;
-  else cursor = null;
+  var cursor = hasDay(shiftDay(now, 0)) ? 0 : (hasDay(shiftDay(now, -1)) ? -1 : null);
   if (cursor != null) {
     while (hasDay(shiftDay(now, cursor - streak))) streak++;
   }
@@ -5213,33 +5809,117 @@ function orcaToolsComputeStats(items) {
   };
 }
 
+/** 导出文件/内容的基础名（按语言） */
+function orcaExportBase() {
+  return dfLocaleIsEn() ? "DiaryFlow" : "日记流";
+}
+
+function orcaExportMonthTitle(month) {
+  var ym = String(month || "").match(/^(\d{4})-(\d{2})$/);
+  if (!ym) return String(month || "");
+  if (dfLocaleIsEn()) return DF_I18N_MONTHS[Number(ym[2]) - 1] + " " + ym[1];
+  return ym[1] + "年" + Number(ym[2]) + "月";
+}
+
 function orcaToolsBuildMarkdown(items, cfg) {
   cfg = cfg || {};
-  var lines = ["# 日记流 · " + (cfg.nickname || ""), "", "共 " + items.length + " 条", ""];
+  var lines = ["# " + dfT("日记流") + " · " + (cfg.nickname || ""), "", dfT("共 ") + items.length + dfT(" 条"), ""];
   var lastMonth = "";
   items.forEach(function (it) {
     var day = orcaToolsItemDay(it);
     var month = day ? day.slice(0, 7) : "";
     if (month && month !== lastMonth) {
       lastMonth = month;
-      lines.push("", "## " + month.replace("-", "年") + "月", "");
+      lines.push("", "## " + orcaExportMonthTitle(month), "");
     }
-    lines.push("### " + (it.created || day || "") + (it.pinned ? " [置顶]" : ""));
-    if (it.location) lines.push("地点：" + it.location);
+    lines.push("### " + (it.created || day || "") + (it.pinned ? (" [" + dfT("置顶") + "]") : ""));
+    if (it.location) lines.push(dfT("地点：") + it.location);
     var tags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
-    if (tags.length) lines.push("标签：" + tags.map(function (t) { return "#" + t; }).join(" "));
+    if (tags.length) lines.push(dfT("标签：") + tags.map(function (t) { return "#" + t; }).join(" "));
     if (it.text) lines.push("", it.text, "");
     (it.images || []).forEach(function (src, i) {
-      lines.push("![图" + (i + 1) + "](" + src + ")");
+      lines.push("![" + dfT("图") + (i + 1) + "](" + src + ")");
     });
     if (it.comments && it.comments.length) {
       it.comments.forEach(function (c) {
-        lines.push("> " + (c.name || "我") + ": " + (c.text || ""));
+        lines.push("> " + (c.name || dfT("我")) + ": " + (c.text || ""));
       });
     }
     lines.push("");
   });
   return lines.join("\n");
+}
+
+/** Word(.doc) 导出：自实现 HTML，图片尽力转 dataURL（dfasset / file://） */
+async function orcaToolsImageToDataUrl(src) {
+  if (typeof src !== "string" || !src) return src;
+  if (/^data:/i.test(src)) return src;
+  try {
+    if (src.indexOf("dfasset:") === 0 && globalThis.__DF_ASSETS && typeof globalThis.__DF_ASSETS.toDataUrl === "function") {
+      return (await globalThis.__DF_ASSETS.toDataUrl(src)) || src;
+    }
+    if (/^file:/i.test(src)) {
+      var resp = await fetch(src);
+      var blob = await resp.blob();
+      return await new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(fr.result); };
+        fr.onerror = reject;
+        fr.readAsDataURL(blob);
+      });
+    }
+  } catch (e) { /* ignore, fallback src */ }
+  return src;
+}
+
+async function orcaToolsBuildWordHtml(items, cfg) {
+  cfg = cfg || {};
+  var out = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+    var meta = [];
+    if (it.location) meta.push(it.location);
+    var tags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
+    if (tags.length) meta.push(tags.map(function (t) { return "#" + t; }).join(" "));
+    var imgs = "";
+    var srcs = (it.images || []).filter(Boolean);
+    for (var j = 0; j < srcs.length; j++) {
+      var ds = await orcaToolsImageToDataUrl(srcs[j]);
+      imgs += '<div style="margin:6px 0"><img src="' + orcaToolsEsc(ds) + '" style="max-width:100%"></div>';
+    }
+    var cmts = (it.comments || []).map(function (c) {
+      return orcaToolsEsc((c && c.name) || dfT("我")) + "：" + orcaToolsEsc((c && c.text) || "");
+    }).join("<br>");
+    out.push(
+      '<div style="margin:0 0 18px">' +
+      '<div style="color:#666">' + orcaToolsEsc(it.created || "") + "</div>" +
+      (meta.length ? ('<div style="color:#888">' + orcaToolsEsc(meta.join(" · ")) + "</div>") : "") +
+      '<div style="white-space:pre-wrap">' + orcaToolsEsc(it.text || "") + "</div>" +
+      imgs +
+      (cmts ? ('<div style="background:#f2f2f2;padding:6px 8px;margin-top:6px">' + cmts + "</div>") : "") +
+      "</div>"
+    );
+  }
+  var title = cfg.nickname || dfT("日记流");
+  return "<html><head><meta charset=\"utf-8\"><title>" + orcaToolsEsc(title) + "</title></head><body><h1>" +
+    orcaToolsEsc(title) + "</h1>" + out.join("\n") + "</body></html>";
+}
+
+/** 打开打印窗口（另存为 PDF）；失败返回 false，调用方可回退下载 HTML */
+function orcaToolsPrintHtml(html) {
+  try {
+    var w = window.open("", "_blank");
+    if (!w) return false;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(function () {
+      try { w.focus(); w.print(); } catch (e) { /* ignore */ }
+    }, 300);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function orcaToolsDownloadBlob(filename, blob) {
@@ -5392,19 +6072,26 @@ function orcaOpenToolsHub(ctx) {
     '<button type="button" class="orca-df-tools-tile" data-df-tools="export"><b>导出</b><span>Markdown / 按月 zip / JSON 备份</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="recap"><b>回顾</b><span>去年今日、随机一条</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="layout"><b>布局</b><span>封面高度：紧凑 / 舒适 / 高封面</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="cleanup"><b>清理图片</b><span>移除未引用的插件图片</span></button>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var archHint = host.querySelector("[data-df-tools-arch-hint]");
   var trashHint = host.querySelector("[data-df-tools-trash-hint]");
   if (OrcaBlocks && typeof OrcaBlocks.listArchivedFeed === "function") {
     OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
       var n = (feed && feed.items && feed.items.length) || 0;
-      if (archHint) archHint.textContent = n ? ("共 " + n + " 条已归档") : "暂无归档";
+      if (archHint) archHint.textContent = n ? (dfT("共 ") + n + dfT(" 条已归档")) : dfT("暂无归档");
     }).catch(function () {});
   }
   if (OrcaBlocks && typeof OrcaBlocks.trashCount === "function") {
     OrcaBlocks.trashCount().then(function (n) {
-      if (trashHint) trashHint.textContent = n ? ("共 " + n + " 条 · 约保留 30 天") : "回收站为空";
+      if (trashHint) {
+        trashHint.textContent = n
+          ? (dfLocaleIsEn()
+            ? ("Total " + n + " · kept about " + dfTrashRetentionDays() + " days")
+            : ("共 " + n + " 条 · 约保留 " + dfTrashRetentionDays() + " 天"))
+          : dfT("回收站为空");
+      }
     }).catch(function () {});
   }
   host.addEventListener("mousedown", function (e) {
@@ -5423,6 +6110,7 @@ function orcaOpenToolsHub(ctx) {
     else if (act === "recap") orcaOpenRecapDialog(ctx);
     else if (act === "search") orcaOpenSearchDialog(ctx);
     else if (act === "layout") orcaOpenLayoutDialog(ctx);
+    else if (act === "cleanup") orcaOpenMediaCleanupDialog(ctx);
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
 }
@@ -5436,7 +6124,7 @@ function orcaOpenStatsDialog(ctx) {
     '<div class="orca-df-tools-head"><span>统计</span>' +
     '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
     '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var body = host.querySelector(".orca-df-tools-body");
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseToolsDialog();
@@ -5448,7 +6136,7 @@ function orcaOpenStatsDialog(ctx) {
   orcaToolsLoadItems({ fullText: false }).then(function (items) {
     var s = orcaToolsComputeStats(items);
     function cardsHtml(rows, labelFn) {
-      if (!rows || !rows.length) return '<div class="orca-df-tools-muted">暂无</div>';
+      if (!rows || !rows.length) return '<div class="orca-df-tools-muted">' + dfT("暂无") + "</div>";
       return '<div class="orca-df-stats-grid">' + rows.map(function (r) {
         return '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + r.count +
           '</div><div class="orca-df-stats-l">' + orcaToolsEsc(labelFn(r)) + "</div></div>";
@@ -5456,31 +6144,33 @@ function orcaOpenStatsDialog(ctx) {
     }
     body.innerHTML =
       '<div class="orca-df-stats-grid">' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.total + '</div><div class="orca-df-stats-l">全部</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.yearCount + '</div><div class="orca-df-stats-l">今年</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.monthCount + '</div><div class="orca-df-stats-l">本月</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.streak + '</div><div class="orca-df-stats-l">连续打卡（天）</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.activeDays + '</div><div class="orca-df-stats-l">有记录天数</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withImg + '</div><div class="orca-df-stats-l">含图</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withLoc + '</div><div class="orca-df-stats-l">含地点</div></div>' +
-      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.pinned + '</div><div class="orca-df-stats-l">置顶</div></div>' +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.total + '</div><div class="orca-df-stats-l">' + dfT("全部") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.yearCount + '</div><div class="orca-df-stats-l">' + dfT("今年") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.monthCount + '</div><div class="orca-df-stats-l">' + dfT("本月") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.streak + '</div><div class="orca-df-stats-l">' + dfT("连续打卡（天）") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.activeDays + '</div><div class="orca-df-stats-l">' + dfT("有记录天数") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withImg + '</div><div class="orca-df-stats-l">' + dfT("含图") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.withLoc + '</div><div class="orca-df-stats-l">' + dfT("含地点") + "</div></div>" +
+      '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + s.pinned + '</div><div class="orca-df-stats-l">' + dfT("置顶") + "</div></div>" +
       "</div>" +
-      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">年份</div>' +
-      cardsHtml(s.yearRows, function (r) { return r.year + " 年"; }) +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">' + dfT("年份") + "</div>" +
+      cardsHtml(s.yearRows, function (r) { return r.year + (dfLocaleIsEn() ? "" : " 年"); }) +
       "</div>" +
-      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">近月</div>' +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">' + dfT("近月") + "</div>" +
       cardsHtml(s.monthRows, function (r) {
         var m = String(r.month || "").match(/^(\d{4})-(\d{2})$/);
-        return m ? (m[1] + "年" + Number(m[2]) + "月") : r.month;
+        if (!m) return r.month;
+        if (dfLocaleIsEn()) return DF_I18N_MONTHS[Number(m[2]) - 1] + " " + m[1];
+        return m[1] + "年" + Number(m[2]) + "月";
       }) +
       "</div>" +
-      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">标签分布</div>' +
+      '<div class="orca-df-tools-sec"><div class="orca-df-tools-sec-t">' + dfT("标签分布") + "</div>" +
       (s.tagRows.map(function (r) {
         return '<div class="orca-df-tools-row"><span>#' + orcaToolsEsc(r.tag) + '</span><b>' + r.count + '</b></div>';
-      }).join("") || '<div class="orca-df-tools-muted">暂无用户标签</div>') +
+      }).join("") || '<div class="orca-df-tools-muted">' + dfT("暂无用户标签") + "</div>") +
       "</div>";
   }).catch(function () {
-    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+    body.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>";
   });
 }
 
@@ -5497,10 +6187,12 @@ function orcaOpenExportDialog(ctx) {
     '<button type="button" class="orca-df-tools-btn" data-df-exp="md-all">导出全部 Markdown</button>' +
     '<button type="button" class="orca-df-tools-btn" data-df-exp="md-filter">导出当前筛选 Markdown</button>' +
     '<button type="button" class="orca-df-tools-btn" data-df-exp="zip-month">按月打包 zip</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="word">导出 Word（.doc）</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-exp="pdf">打印 / 另存为 PDF</button>' +
     '<button type="button" class="orca-df-tools-btn" data-df-exp="json">导出 JSON 备份</button>' +
     '<div class="orca-df-tools-status" hidden></div>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var status = host.querySelector(".orca-df-tools-status");
   var busy = false;
   function setStatus(t) {
@@ -5517,7 +6209,7 @@ function orcaOpenExportDialog(ctx) {
     if (!btn || busy) return;
     var act = btn.getAttribute("data-df-exp");
     busy = true;
-    setStatus("准备中…");
+    setStatus(dfT("准备中…"));
     var filters = (ctx && ctx.filters) || {};
     var useFilter = act === "md-filter";
     orcaToolsLoadItems({
@@ -5530,21 +6222,21 @@ function orcaOpenExportDialog(ctx) {
       var cfg = (ctx && ctx.data && ctx.data().config) || {};
       if (act === "md-all" || act === "md-filter") {
         orcaToolsDownloadText(
-          "日记流_" + (act === "md-filter" ? "筛选_" : "") + Date.now() + ".md",
+          orcaExportBase() + "_" + (act === "md-filter" ? (dfLocaleIsEn() ? "filtered_" : "筛选_") : "") + Date.now() + ".md",
           orcaToolsBuildMarkdown(items, cfg),
           "text/markdown;charset=utf-8"
         );
-        setStatus("已下载 " + items.length + " 条 Markdown");
+        setStatus(dfT("已下载 ") + items.length + dfT(" 条 Markdown"));
         orcaShowMessage("已导出 Markdown（" + items.length + " 条）");
         return;
       }
       if (act === "json") {
         orcaToolsDownloadText(
-          "日记流_backup_" + Date.now() + ".json",
+          orcaExportBase() + "_backup_" + Date.now() + ".json",
           JSON.stringify({ exportedAt: new Date().toISOString(), config: cfg, items: items }, null, 2),
           "application/json;charset=utf-8"
         );
-        setStatus("已下载 JSON（" + items.length + " 条）");
+        setStatus(dfT("已下载 JSON（") + items.length + dfT(" 条）"));
         orcaShowMessage("已导出 JSON 备份");
         return;
       }
@@ -5560,19 +6252,40 @@ function orcaOpenExportDialog(ctx) {
           var m = String(k).match(/^(\d{4})-(\d{2})$/);
           if (m) mtime = new Date(Number(m[1]), Number(m[2]) - 1, 15, 12, 0, 0);
           return {
-            name: "日记流_" + k + ".md",
+            name: orcaExportBase() + "_" + k + ".md",
             data: orcaToolsBuildMarkdown(groups[k], cfg),
             mtime: mtime
           };
         });
-        if (!files.length) files = [{ name: "empty.md", data: "# 日记流\n\n暂无条目\n" }];
+        if (!files.length) files = [{ name: "empty.md", data: "# " + dfT("日记流") + "\n\n" + dfT("暂无条目") + "\n" }];
         var zip = orcaToolsZipStore(files);
-        orcaToolsDownloadBlob("日记流_按月_" + Date.now() + ".zip", new Blob([zip], { type: "application/zip" }));
-        setStatus("已打包 " + files.length + " 个月份文件");
+        orcaToolsDownloadBlob(orcaExportBase() + (dfLocaleIsEn() ? "_monthly_" : "_按月_") + Date.now() + ".zip", new Blob([zip], { type: "application/zip" }));
+        setStatus(dfT("已打包 ") + files.length + dfT(" 个月份文件"));
         orcaShowMessage("已导出按月 zip");
+        return;
+      }
+      if (act === "word") {
+        return orcaToolsBuildWordHtml(items, cfg).then(function (html) {
+          orcaToolsDownloadBlob(orcaExportBase() + "_" + Date.now() + ".doc",
+            new Blob([html], { type: "application/msword;charset=utf-8" }));
+          setStatus(dfT("已导出 Word（") + items.length + dfT(" 条）"));
+          orcaShowMessage("已导出 Word");
+        });
+      }
+      if (act === "pdf") {
+        return orcaToolsBuildWordHtml(items, cfg).then(function (html) {
+          if (orcaToolsPrintHtml(html)) {
+            setStatus(dfT("已打开打印（可另存为 PDF）"));
+          } else {
+            orcaToolsDownloadBlob(orcaExportBase() + "_" + Date.now() + ".html",
+              new Blob([html], { type: "text/html;charset=utf-8" }));
+            setStatus(dfT("已导出 HTML（可直接打印为 PDF）"));
+            orcaShowMessage("已导出 HTML，可打印为 PDF");
+          }
+        });
       }
     }).catch(function (err) {
-      setStatus("失败：" + String(err && err.message || err));
+      setStatus(dfT("失败：") + String(err && err.message || err));
       orcaShowMessage("导出失败");
     }).then(function () { busy = false; });
   });
@@ -5592,12 +6305,12 @@ function orcaOpenRecapDialog(ctx) {
     '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button>' +
     "</div></div>" +
     '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div></div>';
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var body = host.querySelector(".orca-df-tools-body");
   var allItems = [];
   function renderList(list, emptyText) {
     if (!list.length) {
-      body.innerHTML = '<div class="orca-df-tools-muted">' + orcaToolsEsc(emptyText || "暂无") + "</div>";
+      body.innerHTML = '<div class="orca-df-tools-muted">' + orcaToolsEsc(emptyText || dfT("暂无")) + "</div>";
       return;
     }
     body.innerHTML = list.map(function (it) {
@@ -5608,7 +6321,7 @@ function orcaOpenRecapDialog(ctx) {
         '<div class="orca-df-tools-entry-t">' + orcaToolsEsc(orcaToolsItemTitle(it)) + "</div>" +
         '<div class="orca-df-tools-muted">' + orcaToolsEsc(it.created || orcaToolsItemDay(it) || "") +
         (it.location ? (" · " + orcaToolsEsc(it.location)) : "") + "</div></div>" +
-        '<button type="button" class="orca-df-tools-mini" data-df-recap="open" data-block-id="' + orcaToolsEsc(String(bid)) + '">打开</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-recap="open" data-block-id="' + orcaToolsEsc(String(bid)) + '">' + dfT("打开") + "</button>" +
         "</div>"
       );
     }).join("");
@@ -5636,12 +6349,12 @@ function orcaOpenRecapDialog(ctx) {
       return;
     }
     if (act === "last-year") {
-      renderList(lastYearToday(), "去年今日没有日记");
+      renderList(lastYearToday(), dfT("去年今日没有日记"));
       return;
     }
     if (act === "random") {
       if (!allItems.length) {
-        renderList([], "暂无日记");
+        renderList([], dfT("暂无日记"));
         return;
       }
       var pick = allItems[Math.floor(Math.random() * allItems.length)];
@@ -5653,9 +6366,9 @@ function orcaOpenRecapDialog(ctx) {
     allItems = items || [];
     var ly = lastYearToday();
     if (ly.length) renderList(ly, "");
-    else renderList([], "去年今日没有日记 — 可点「随机一条」");
+    else renderList([], dfT("去年今日没有日记 — 可点「随机一条」"));
   }).catch(function () {
-    body.innerHTML = '<div class="orca-df-tools-muted">加载失败</div>';
+    body.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>";
   });
 }
 
@@ -5663,7 +6376,9 @@ function orcaOpenSearchDialog(ctx) {
   orcaCloseToolsDialog();
   var host = document.createElement("div");
   host.className = "orca-df-tools-backdrop orca-df-scope";
-  var cur = (ctx && ctx.filters && ctx.filters.kw) || "";
+  var cf = (ctx && ctx.filters) || {};
+  var cur = cf.kw || "";
+  var curTag = (cf.tags || [])[0] || "";
   host.innerHTML =
     '<div class="orca-df-tools-pop" role="dialog" aria-label="搜索日记流">' +
     '<div class="orca-df-tools-head"><span>搜索</span>' +
@@ -5671,14 +6386,43 @@ function orcaOpenSearchDialog(ctx) {
     '<div class="orca-df-tools-body">' +
     '<label class="orca-df-tools-label">关键词（匹配日记流条目正文）</label>' +
     '<input class="orca-df-tools-input" type="search" data-df-search-input placeholder="例如：旅行 / 心情" value="' + orcaToolsEsc(cur) + '" />' +
+    '<label class="orca-df-tools-label">标签</label>' +
+    '<select class="orca-df-tools-input" data-df-search-tag><option value="">全部</option></select>' +
+    '<label class="orca-df-tools-label">快捷筛选</label>' +
+    '<div class="orca-df-search-quick">' +
+    '<label class="orca-df-search-check"><input type="checkbox" data-df-search-img' + (cf.hasImage ? " checked" : "") + '> 有图</label>' +
+    '<label class="orca-df-search-check"><input type="checkbox" data-df-search-loc' + (cf.hasLocation ? " checked" : "") + '> 有地点</label>' +
+    '<label class="orca-df-search-check"><input type="checkbox" data-df-search-pin' + (cf.pinnedOnly ? " checked" : "") + '> 仅置顶</label>' +
+    "</div>" +
+    '<label class="orca-df-tools-label">日期范围</label>' +
+    '<div class="orca-df-search-dates">' +
+    '<input class="orca-df-tools-input" type="date" data-df-search-from value="' + orcaToolsEsc(cf.dateFrom || "") + '" />' +
+    '<span class="orca-df-tools-muted">—</span>' +
+    '<input class="orca-df-tools-input" type="date" data-df-search-to value="' + orcaToolsEsc(cf.dateTo || "") + '" />' +
+    "</div>" +
     '<div class="orca-df-tools-actions">' +
     '<button type="button" class="orca-df-tools-btn primary" data-df-search="apply">在日记流中筛选</button>' +
-    '<button type="button" class="orca-df-tools-btn" data-df-search="clear">清除关键词</button>' +
+    '<button type="button" class="orca-df-tools-btn" data-df-search="clear">清除筛选</button>' +
     "</div>" +
     '<p class="orca-df-tools-muted">也可使用虎鲸全局搜索；此处仅限带「日记流」标签的条目。</p>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var input = host.querySelector("[data-df-search-input]");
+  var tagSel = host.querySelector("[data-df-search-tag]");
+  var imgChk = host.querySelector("[data-df-search-img]");
+  var locChk = host.querySelector("[data-df-search-loc]");
+  var pinChk = host.querySelector("[data-df-search-pin]");
+  var fromEl = host.querySelector("[data-df-search-from]");
+  var toEl = host.querySelector("[data-df-search-to]");
+  if (OrcaBlocks && typeof OrcaBlocks.collectUserTags === "function") {
+    OrcaBlocks.collectUserTags().then(function (tags) {
+      if (!tagSel || !tagSel.isConnected) return;
+      tagSel.innerHTML = '<option value="">' + orcaToolsEsc(dfT("全部")) + "</option>" +
+        (tags || []).map(function (t) {
+          return '<option value="' + orcaToolsEsc(t) + '"' + (t === curTag ? " selected" : "") + ">#" + orcaToolsEsc(t) + "</option>";
+        }).join("");
+    }).catch(function () {});
+  }
   setTimeout(function () { try { input.focus(); input.select(); } catch (e) {} }, 30);
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseToolsDialog();
@@ -5686,10 +6430,21 @@ function orcaOpenSearchDialog(ctx) {
   function apply(kw) {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.kw = kw || "";
+    var tag = tagSel ? String(tagSel.value || "") : "";
+    ctx.filters.tags = tag ? [tag] : [];
+    ctx.filters.hasImage = !!(imgChk && imgChk.checked);
+    ctx.filters.hasLocation = !!(locChk && locChk.checked);
+    ctx.filters.pinnedOnly = !!(pinChk && pinChk.checked);
+    ctx.filters.dateFrom = fromEl ? String(fromEl.value || "") : "";
+    ctx.filters.dateTo = toEl ? String(toEl.value || "") : "";
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaCloseToolsDialog();
     orcaRefreshFeed().then(function () {
       if (ctx.reApp) ctx.reApp();
-      orcaShowMessage(kw ? ("已筛选：" + kw) : "已清除搜索");
+      orcaShowMessage(kw || tag || ctx.filters.hasImage || ctx.filters.hasLocation || ctx.filters.pinnedOnly ||
+        ctx.filters.dateFrom || ctx.filters.dateTo
+        ? ("已筛选" + (kw ? "：" + kw : ""))
+        : "已清除搜索");
     });
   }
   host.addEventListener("click", function (e) {
@@ -5698,7 +6453,16 @@ function orcaOpenSearchDialog(ctx) {
     if (!btn) return;
     var act = btn.getAttribute("data-df-search");
     if (act === "apply") apply(String(input.value || "").trim());
-    else if (act === "clear") apply("");
+    else if (act === "clear") {
+      if (input) input.value = "";
+      if (tagSel) tagSel.value = "";
+      if (imgChk) imgChk.checked = false;
+      if (locChk) locChk.checked = false;
+      if (pinChk) pinChk.checked = false;
+      if (fromEl) fromEl.value = "";
+      if (toEl) toEl.value = "";
+      apply("");
+    }
   });
   host.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && e.target === input) {
@@ -5752,10 +6516,10 @@ function orcaOpenLayoutDialog(ctx) {
     '<button type="button" class="orca-df-tools-btn" data-df-layout="tall">高封面 — 更强氛围</button>' +
     '<div class="orca-df-tools-status" data-df-layout-status></div>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var status = host.querySelector("[data-df-layout-status]");
   orcaToolsGetLayout().then(function (cur) {
-    status.textContent = "当前：" + orcaToolsLayoutLabel(cur);
+    status.textContent = dfT("当前：") + dfT(orcaToolsLayoutLabel(cur));
     host.querySelectorAll("[data-df-layout]").forEach(function (b) {
       b.classList.toggle("is-on", b.getAttribute("data-df-layout") === cur);
     });
@@ -5770,19 +6534,147 @@ function orcaOpenLayoutDialog(ctx) {
     var preset = btn.getAttribute("data-df-layout");
     orcaToolsSetLayout(preset).then(function (p) {
       orcaApplyLayoutToMounts(p);
-      status.textContent = "当前：" + orcaToolsLayoutLabel(p);
+      status.textContent = dfT("当前：") + dfT(orcaToolsLayoutLabel(p));
       host.querySelectorAll("[data-df-layout]").forEach(function (b) {
         b.classList.toggle("is-on", b.getAttribute("data-df-layout") === p);
       });
-      orcaShowMessage("布局已设为「" + orcaToolsLayoutLabel(p) + "」");
+      orcaShowMessage(dfT("布局已设为「") + dfT(orcaToolsLayoutLabel(p)) + dfT("」"));
       if (ctx && ctx.reApp) ctx.reApp();
     });
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
 }
 
+function orcaToolsCollectUsedMedia(items, cfg) {
+  var used = {};
+  function mark(s) {
+    if (typeof s !== "string" || !s) return;
+    var m = s.match(/^dfasset:\/\/media\/(.+)$/);
+    if (m && m[1]) used[decodeURIComponent(m[1])] = true;
+  }
+  if (cfg) ["avatar", "cover", "lockBg"].forEach(function (k) { mark(cfg[k]); });
+  (items || []).forEach(function (it) {
+    if (!it) return;
+    (it.images || []).forEach(mark);
+  });
+  return used;
+}
+
+/** 列出未被引用的插件图片（含归档条目与回收站快照引用保护） */
+async function orcaToolsListOrphanMedia() {
+  if (!globalThis.__DF_ASSETS || typeof globalThis.__DF_ASSETS.listMedia !== "function") return [];
+  if (!OrcaBlocks) return [];
+  var cfg = (orcaCtx && orcaCtx.data && orcaCtx.data() && orcaCtx.data().config) || {};
+  var feed = null;
+  try {
+    feed = await OrcaBlocks.listFeed({ skipHeal: true, includeArchived: true, preferLive: true });
+  } catch (e) {
+    return [];
+  }
+  if (!feed) return [];
+  var used = orcaToolsCollectUsedMedia(feed.items || [], cfg);
+  try {
+    var trefs = (OrcaBlocks.trashAllMediaRefs ? await OrcaBlocks.trashAllMediaRefs() : {}) || {};
+    Object.keys(trefs).forEach(function (k) { used[k] = true; });
+  } catch (e2) { /* ignore */ }
+  var names = await DF_ASSETS.listMedia();
+  return (names || []).filter(function (n) { return n && !used[n]; });
+}
+
+/** 删除给定插件图片文件，返回成功数 */
+async function orcaToolsCleanupOrphanMedia(names) {
+  var list = names || [];
+  var removed = 0;
+  for (var i = 0; i < list.length; i++) {
+    try {
+      await orca.invokeBackend("remove-plugin-file", orcaPluginName, "media/" + list[i]);
+      removed++;
+    } catch (e) { /* ignore */ }
+  }
+  return removed;
+}
+
+function orcaOpenMediaCleanupDialog(ctx) {
+  orcaCloseToolsDialog();
+  if (!globalThis.__DF_ASSETS || typeof globalThis.__DF_ASSETS.listMedia !== "function") {
+    orcaShowMessage("无法访问插件图片");
+    return;
+  }
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="清理图片">' +
+    '<div class="orca-df-tools-head"><span>清理图片</span>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button></div>' +
+    '<div class="orca-df-tools-body">' +
+    '<p class="orca-df-tools-muted">仅删除插件图片目录中未被封面/头像/日记条目引用的文件。</p>' +
+    '<div class="orca-df-media-list"><div class="orca-df-tools-muted">加载中…</div></div>' +
+    '<div class="orca-df-tools-actions">' +
+    '<button type="button" class="orca-df-tools-btn primary" data-df-cleanup="run" disabled>清理</button>' +
+    "</div></div></div>";
+  dfMountDialog(host);
+  var listEl = host.querySelector(".orca-df-media-list");
+  var runBtn = host.querySelector('[data-df-cleanup="run"]');
+  var unused = [];
+  var busy = false;
+
+  function render() {
+    if (!unused.length) {
+      listEl.innerHTML = '<div class="orca-df-tools-muted">没有可清理的图片</div>';
+      runBtn.disabled = true;
+      return;
+    }
+    listEl.innerHTML = unused.slice(0, 100).map(function (n) {
+      return '<div class="orca-df-tools-row"><span>' + orcaToolsEsc(n) + "</span></div>";
+    }).join("") + (unused.length > 100 ? ('<div class="orca-df-tools-muted">+' + (unused.length - 100) + "</div>") : "");
+    runBtn.disabled = false;
+  }
+
+  function load() {
+    return orcaToolsListOrphanMedia().then(function (names) {
+      unused = names || [];
+      render();
+    }).catch(function () {
+      listEl.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>";
+    });
+  }
+
+  host.addEventListener("mousedown", function (e) {
+    if (e.target === host) orcaCloseToolsDialog();
+  });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-df-cleanup]");
+    if (!btn || busy) return;
+    if (btn.getAttribute("data-df-cleanup") !== "run") return;
+    if (!unused.length) return;
+    if (dfGetSetting("confirmDelete") &&
+      !window.confirm(dfT("清理未引用图片？共 ") + unused.length + dfT(" 个文件"))) return;
+    busy = true;
+    btn.disabled = true;
+    var names = unused.slice();
+    orcaToolsCleanupOrphanMedia(names).then(function (removed) {
+      orcaShowMessage(removed ? ("已清理 " + removed + " 个图片") : "没有可清理的图片");
+      unused = [];
+      busy = false;
+      btn.textContent = dfT("清理");
+      load();
+    }).catch(function () {
+      orcaShowMessage("清理失败");
+      busy = false;
+      btn.disabled = false;
+    });
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  load();
+}
+
 function orcaCloseImagesDialog() {
   orcaToolsCloseBackdrop(".orca-df-images-backdrop");
+  if (orcaImagesBlobUrls.length) {
+    orcaImagesBlobUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) { /* ignore */ } });
+    orcaImagesBlobUrls = [];
+  }
 }
 
 function orcaOpenImagesDialog(ctx, item) {
@@ -5809,7 +6701,7 @@ function orcaOpenImagesDialog(ctx, item) {
     "</div>" +
     '<input type="file" accept="image/*" multiple hidden data-df-img-file />' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
   var listEl = host.querySelector(".orca-df-img-list");
   var bar = host.querySelector(".orca-df-img-progress-bar");
   var status = host.querySelector(".orca-df-img-status");
@@ -5831,17 +6723,20 @@ function orcaOpenImagesDialog(ctx, item) {
     }
     listEl.innerHTML = rows.map(function (r, i) {
       var thumb = r.preview || r.src || "";
-      var st = r.status === "error" ? ("失败" + (r.error ? "：" + r.error : "")) :
-        r.status === "uploading" ? "上传中…" :
-          r.status === "pending" ? "等待上传" : "就绪";
+      var st = r.status === "error" ? (dfT("失败") + (r.error ? "：" + r.error : "")) :
+        r.status === "uploading" ? dfT("上传中…") :
+          r.status === "pending" ? dfT("等待上传") : dfT("就绪");
+      var upLabel = dfLocaleIsEn() ? "Up" : "上";
+      var downLabel = dfLocaleIsEn() ? "Down" : "下";
+      var rmLabel = dfLocaleIsEn() ? "Del" : "删";
       return (
         '<div class="orca-df-img-row" data-idx="' + i + '">' +
         '<img class="orca-df-img-thumb" src="' + orcaToolsEsc(thumb) + '" alt="" />' +
         '<div class="orca-df-img-meta"><div class="orca-df-tools-muted">' + orcaToolsEsc(st) + "</div></div>" +
         '<div class="orca-df-img-acts">' +
-        '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>上</button>' +
-        '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>下</button>' +
-        '<button type="button" class="orca-df-tools-mini" data-df-img="rm" data-idx="' + i + '">删</button>' +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="up" data-idx="' + i + '" ' + (i === 0 ? "disabled" : "") + '>' + upLabel + "</button>" +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="down" data-idx="' + i + '" ' + (i >= rows.length - 1 ? "disabled" : "") + '>' + downLabel + "</button>" +
+        '<button type="button" class="orca-df-tools-mini" data-df-img="rm" data-idx="' + i + '">' + rmLabel + "</button>" +
         "</div></div>"
       );
     }).join("");
@@ -5863,7 +6758,7 @@ function orcaOpenImagesDialog(ctx, item) {
       row.error = "";
     } catch (e) {
       row.status = "error";
-      row.error = String(e && e.message || e || "失败");
+      row.error = String(e && e.message || e || (dfLocaleIsEn() ? "Failed" : "失败"));
     }
     render();
     return row;
@@ -5879,9 +6774,9 @@ function orcaOpenImagesDialog(ctx, item) {
       setProgress(done, pending.length);
     }
     status.textContent = pending.length
-      ? ("上传完成：成功 " + rows.filter(function (r) { return r.status === "ready"; }).length +
-        " / 失败 " + rows.filter(function (r) { return r.status === "error"; }).length)
-      : "无需上传";
+      ? (dfT("上传完成：成功 ") + rows.filter(function (r) { return r.status === "ready"; }).length +
+        dfT(" / 失败 ") + rows.filter(function (r) { return r.status === "error"; }).length)
+      : dfT("无需上传");
   }
 
   host.addEventListener("mousedown", function (e) {
@@ -5921,11 +6816,11 @@ function orcaOpenImagesDialog(ctx, item) {
     }
     if (act === "save") {
       busy = true;
-      status.textContent = "保存中…";
+      status.textContent = dfT("保存中…");
       uploadPending().then(function () {
         var failed = rows.filter(function (r) { return r.status === "error"; });
         if (failed.length) {
-          status.textContent = "仍有 " + failed.length + " 张失败，可重试后再保存";
+          status.textContent = dfT("仍有 ") + failed.length + dfT(" 张失败，可重试后再保存");
           busy = false;
           return null;
         }
@@ -5940,7 +6835,7 @@ function orcaOpenImagesDialog(ctx, item) {
           if (ctx && ctx.reApp) ctx.reApp();
         });
       }).catch(function (err) {
-        status.textContent = "保存失败：" + String(err && err.message || err);
+        status.textContent = dfT("保存失败：") + String(err && err.message || err);
         orcaShowMessage("保存图片失败");
       }).then(function () { busy = false; });
     }
@@ -5955,6 +6850,7 @@ function orcaOpenImagesDialog(ctx, item) {
     }
     files.slice(0, room).forEach(function (f) {
       var url = URL.createObjectURL(f);
+      orcaImagesBlobUrls.push(url);
       rows.push({ src: url, preview: url, status: "pending", error: "" });
     });
     render();
@@ -5979,8 +6875,8 @@ function orcaEnhanceToolsUi(el, ctx) {
     toolsBtn.type = "button";
     toolsBtn.className = "mom-outline-fab orca-df-tools-fab";
     toolsBtn.setAttribute("data-df-act", "open-tools");
-    toolsBtn.title = "工具（归档/回收站/搜索/统计/导出…）";
-    toolsBtn.setAttribute("aria-label", "工具");
+    toolsBtn.title = dfT("工具（归档/回收站/搜索/统计/导出…）");
+    toolsBtn.setAttribute("aria-label", dfT("工具"));
     toolsBtn.innerHTML =
       '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>' +
       '<span class="orca-df-tools-fab-count" hidden>0</span>';
@@ -6018,12 +6914,12 @@ function orcaEnhanceToolsUi(el, ctx) {
   var f = ctx.filters || {};
   var hasQ = orcaToolsHasQuickFilters(f);
   quick.innerHTML =
-    '<span class="orca-df-tagbar-label">筛选</span>' +
-    '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">有图</button>' +
-    '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">有地点</button>' +
-    '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">仅置顶</button>' +
-    (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">清除筛选</button>' : "") +
-    (f.kw ? '<span class="orca-df-quick-kw">搜索：' + orcaToolsEsc(f.kw) + "</span>" : "");
+    '<span class="orca-df-tagbar-label">' + dfT("筛选") + "</span>" +
+    '<button type="button" class="orca-df-tagchip' + (f.hasImage ? " is-on" : "") + '" data-df-act="quick-image">' + dfT("有图") + "</button>" +
+    '<button type="button" class="orca-df-tagchip' + (f.hasLocation ? " is-on" : "") + '" data-df-act="quick-location">' + dfT("有地点") + "</button>" +
+    '<button type="button" class="orca-df-tagchip' + (f.pinnedOnly ? " is-on" : "") + '" data-df-act="quick-pinned">' + dfT("仅置顶") + "</button>" +
+    (hasQ || (f.kw) ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-quick">' + dfT("清除筛选") + "</button>" : "") +
+    (f.kw ? '<span class="orca-df-quick-kw">' + dfT("搜索：") + orcaToolsEsc(f.kw) + "</span>" : "");
 
   orcaToolsGetLayout().then(function (p) {
     if (!el.isConnected) return;
@@ -6048,6 +6944,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-image") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.hasImage = !ctx.filters.hasImage;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
@@ -6055,6 +6952,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-location") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.hasLocation = !ctx.filters.hasLocation;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
@@ -6062,6 +6960,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
   if (act === "quick-pinned") {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     ctx.filters.pinnedOnly = !ctx.filters.pinnedOnly;
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
     DF_ASSETS.hydrate(orcaMomentsData).then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
@@ -6070,6 +6969,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
     if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
     orcaToolsClearQuickFilters(ctx.filters);
     ctx.filters.kw = "";
+    if (typeof orcaPersistFilters === "function") orcaPersistFilters();
     orcaRefreshFeed().then(function () { if (ctx.reApp) ctx.reApp(); });
     return true;
   }
@@ -6089,7 +6989,7 @@ function orcaHandleToolsAct(ctx, act, btn) {
 
 
 // ===== Orca Note entry =====
-var ORCA_CSS = "/* src/style.css */\n.mom-root {\n  position: relative;\n  height: 100%;\n  min-height: 0;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n  background: var(--b3-theme-background, #fff);\n  font-family: inherit;\n  color: var(--b3-theme-on-background, #222);\n}\n.mom-scroll {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-cover {\n  position: relative;\n  height: clamp(170px, 26vh, 300px);\n  flex-shrink: 0;\n  overflow: hidden;\n}\n.mom-cover-bg {\n  height: 100%;\n  position: relative;\n  overflow: hidden;\n}\n.mom-cover-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cover-default {\n  position: absolute;\n  inset: 0;\n  background:\n    linear-gradient(\n      150deg,\n      var(--b3-theme-primary, #4e6ef2) 0%,\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 45%, #0c0c20) 100%);\n}\n.mom-cover-shade {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  background:\n    linear-gradient(\n      180deg,\n      rgba(0, 0, 0, .06),\n      rgba(0, 0, 0, .4));\n}\n.mom-cover-stats {\n  position: absolute;\n  bottom: 24px;\n  right: 16px;\n  z-index: 10;\n  font-size: 13px;\n  color: #fff;\n  padding: 5px 12px;\n  border-radius: 999px;\n  background: rgba(0, 0, 0, .28);\n  backdrop-filter: blur(6px);\n  -webkit-backdrop-filter: blur(6px);\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .3);\n  white-space: nowrap;\n}\n.mom-cover-settings {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  width: 30px;\n  height: 30px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .28);\n  color: #fff;\n  cursor: pointer;\n  transition: background .18s ease, transform .15s ease;\n}\n.mom-cover-settings:hover {\n  background: rgba(255, 255, 255, .5);\n  transform: scale(1.05);\n}\n.mom-avatar-ph {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background:\n    linear-gradient(\n      135deg,\n      var(--b3-theme-primary, #4e6ef2),\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 52%, #0c0c20));\n  color: #fff;\n  font-weight: 600;\n}\n.mom-filter-row {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-actions {\n  display: flex;\n  gap: 8px;\n}\n.mom-actions .mom-btn-primary {\n  margin-left: auto;\n}\n.mom-chip {\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 999px;\n  padding: 3px 10px;\n  font-size: 12px;\n  cursor: pointer;\n}\n.mom-chip.active {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 6px;\n  padding: 5px 12px;\n  font-size: 13px;\n  cursor: pointer;\n}\n.mom-btn:hover {\n  background: var(--b3-theme-background-light, #f2f2f2);\n}\n.mom-btn-primary {\n  background: var(--b3-theme-primary, #4e6ef2);\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n}\n.mom-btn-primary:hover {\n  opacity: .9;\n}\n.mom-btn-small {\n  padding: 3px 9px;\n  font-size: 12px;\n}\n.mom-btn-danger {\n  border-color: #e05050;\n  color: #e05050;\n}\n.mom-btn-danger:hover {\n  background: #fdecec;\n}\n.mom-signature {\n  background-color: var(--moments-signature-bg, #f7f7f7);\n  padding: 14px 16px 10px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  flex-wrap: wrap;\n  flex-shrink: 0;\n}\n.mom-signature-tools {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.mom-cover-tool {\n  display: inline-flex !important;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  height: 30px;\n  padding: 0 12px;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .78);\n  color: #333;\n  font-size: 12px;\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);\n  transition:\n    background .18s ease,\n    transform .15s ease,\n    box-shadow .18s ease;\n  box-sizing: border-box;\n}\n.mom-cover-tool:hover {\n  background: #fff;\n  transform: translateY(-1px);\n}\n.mom-cover-tool-danger:hover {\n  background: #ff6b6b;\n  color: #fff;\n}\n.mom-signature-text {\n  font-size: 13px;\n  color: var(--moments-signature-text, #888);\n  line-height: 1.5;\n  margin-left: auto;\n  max-width: 40%;\n  word-break: break-word;\n}\n.mom-pin-strip {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 10px 16px;\n  margin: 8px auto 0;\n  width: 73%;\n  box-sizing: border-box;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-strip-label {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  flex-shrink: 0;\n}\n.mom-pin-strip-thumbs {\n  display: flex;\n  gap: 12px;\n  overflow: hidden;\n  flex: 1;\n}\n.mom-pin-group {\n  display: grid;\n  gap: 2px;\n  padding: 0;\n  border: none;\n  background: none;\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-group:hover {\n  opacity: .9;\n}\n.mom-pin-thumb {\n  position: relative;\n  overflow: hidden;\n  border-radius: 4px;\n}\n.mom-pin-thumb img {\n  width: 44px;\n  height: 44px;\n  object-fit: cover;\n  display: block;\n}\n.mom-pin-thumb-video,\n.mom-cal-thumb-video {\n  background: #000;\n}\n.mom-pin-thumb-single img {\n  width: 88px;\n  height: 88px;\n}\n.mom-pin-thumb-text {\n  width: 88px;\n  height: 88px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: color-mix(in srgb, var(--b3-theme-surface, #fff) 40%, transparent);\n}\n.mom-pin-text {\n  font-size: 12px;\n  color: var(--b3-theme-on-background, #333);\n  padding: 4px;\n  word-break: break-word;\n  line-height: 1.4;\n}\n.mom-pin-text-center {\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-pin-text-flow {\n  display: -webkit-box;\n  -webkit-line-clamp: 3;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n.mom-pin-thumb-more {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0, 0, 0, .45);\n  color: #fff;\n  font-size: 16px;\n  font-weight: 600;\n}\n.mom-list {\n  flex: 0 0 auto;\n  overflow: visible;\n  padding: 14px 0 90px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 12px;\n}\n.mom-filter-bar {\n  width: 73%;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-empty {\n  text-align: center;\n  color: #999;\n  margin: 72px auto 0;\n  font-size: 14px;\n  max-width: 240px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 6px;\n}\n.mom-empty-ico {\n  font-size: 40px;\n  line-height: 1;\n  margin-bottom: 6px;\n  opacity: .9;\n}\n.mom-empty-title {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  margin: 0;\n}\n.mom-empty-sub {\n  font-size: 13px;\n  color: #999;\n  margin: 0;\n}\n.mom-empty-btn {\n  margin-top: 14px;\n}\n.mom-empty-result {\n  margin-top: 72px;\n}\n.mom-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 8px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  width: 73%;\n  box-sizing: border-box;\n}\n.mom-item:hover {\n  border-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 55%, transparent);\n}\n.mom-pin-badge {\n  position: absolute;\n  top: 8px;\n  left: 8px;\n  z-index: 3;\n  display: flex;\n  align-items: center;\n  color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-item-avatar {\n  width: 48px;\n  height: 48px;\n  border-radius: 6px;\n  object-fit: cover;\n  flex-shrink: 0;\n  margin-right: 12px;\n  background-color: var(--moments-border, #ddd);\n}\n.mom-item-avatar.mom-avatar-ph {\n  font-size: 20px;\n}\n.mom-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.mom-item-name {\n  font-size: 16px;\n  color: var(--b3-theme-on-background, #333);\n  font-weight: 600;\n  line-height: 1.4;\n  margin-bottom: 4px;\n}\n.mom-item-text {\n  font-size: 14px;\n  color: var(--b3-theme-on-background, #333);\n  line-height: 1.8;\n  margin-bottom: 6px;\n  word-break: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n}\n.mom-no-text {\n  color: #bbb;\n  font-size: 13px;\n}\n.mom-long-toggle {\n  font-size: 12px;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background: none;\n  border: none;\n  cursor: pointer;\n  padding: 0;\n  margin-top: 2px;\n}\n.mom-card-imgs {\n  display: grid;\n  gap: 4px;\n  margin-top: 10px;\n}\n.mom-grid-1 {\n  grid-template-columns: 1fr;\n  max-width: 320px;\n}\n.mom-grid-2 {\n  grid-template-columns: 1fr 1fr;\n}\n.mom-grid-3 {\n  grid-template-columns: 1fr 1fr 1fr;\n}\n.mom-img-cell {\n  position: relative;\n  overflow: hidden;\n  border-radius: 6px;\n  aspect-ratio: 1;\n  background: #f0f0f0;\n}\n.mom-img-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  cursor: zoom-in;\n  display: block;\n}\n.mom-card-link {\n  margin-top: 10px;\n}\n.mom-card-link a {\n  color: var(--b3-theme-primary, #4e6ef2);\n  text-decoration: none;\n  font-size: 13px;\n}\n.mom-card-link a:hover {\n  text-decoration: underline;\n}\n.mom-bottom-space {\n  height: 90px;\n  flex-shrink: 0;\n}\n.mom-fab-stack {\n  position: absolute;\n  z-index: 40;\n  right: 16px;\n  bottom: 48px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  margin: 0;\n  padding-right: 0;\n  flex: none;\n  pointer-events: none;\n}\n.mom-outline-fab {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 44px;\n  height: 44px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  cursor: pointer;\n  color: var(--b3-theme-on-background, #333);\n  background: var(--b3-theme-surface, #fff);\n  border: 1px solid var(--b3-border-color, #ddd);\n  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);\n  transition: transform .15s ease, box-shadow .15s ease;\n  flex: none;\n  pointer-events: auto;\n}\n.mom-outline-fab:hover {\n  transform: translateY(-1px);\n  box-shadow: 0 6px 18px rgba(0, 0, 0, .24);\n}\n.mom-fab-stack.is-mobile {\n  position: absolute;\n  right: 16px;\n  bottom: 80px;\n  left: auto;\n  margin: 0;\n}\n.mom-outline-fab.is-mobile {\n  transform: none;\n}\n.mom-lightbox {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .85);\n  z-index: 1002;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: zoom-out;\n}\n.mom-lightbox-img {\n  max-width: 92%;\n  max-height: 88vh;\n  border-radius: 6px;\n  object-fit: contain;\n}\n.mom-lightbox-close {\n  position: absolute;\n  top: 16px;\n  right: 16px;\n  z-index: 2;\n  width: 36px;\n  height: 36px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 22px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-lightbox-close:hover {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav {\n  position: absolute;\n  top: 50%;\n  transform: translateY(-50%);\n  z-index: 2;\n  width: 44px;\n  height: 44px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 28px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.mom-lightbox-nav:hover:not(:disabled) {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav:disabled {\n  opacity: .25;\n  cursor: default;\n}\n.mom-lightbox-prev {\n  left: 12px;\n}\n.mom-lightbox-next {\n  right: 12px;\n}\n.mom-lightbox-dots {\n  position: absolute;\n  bottom: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  gap: 8px;\n  z-index: 2;\n}\n.mom-lightbox-dot {\n  width: 8px;\n  height: 8px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .35);\n  cursor: pointer;\n}\n.mom-lightbox-dot.active {\n  background: #fff;\n  transform: scale(1.15);\n}\n.mom-lightbox-counter {\n  position: absolute;\n  top: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  color: rgba(255, 255, 255, .85);\n  font-size: 13px;\n  z-index: 2;\n  pointer-events: none;\n}\n.mom-confirm-msg {\n  margin: 0;\n  font-size: 14px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background);\n  white-space: pre-wrap;\n}\n.north-luna-moments-item-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 10px;\n}\n.north-luna-moments-item-header .mom-avatar {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  object-fit: cover;\n  flex-shrink: 0;\n}\n.north-luna-moments-item-header .mom-avatar-ph {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  font-size: 16px;\n}\n.north-luna-moments-item-name {\n  font-size: 15px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  line-height: 1.3;\n}\n.mom-lightbox[hidden] {\n  display: none;\n}\n.mom-lightbox img {\n  max-width: 92%;\n  max-height: 92%;\n  border-radius: 6px;\n}\n.mom-overlay {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .4);\n  z-index: 2147483000;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-sizing: border-box;\n  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));\n}\n.mom-modal {\n  background: var(--b3-theme-background, #fff);\n  border-radius: 12px;\n  width: min(560px, 92vw);\n  max-height: 86vh;\n  display: flex;\n  flex-direction: column;\n  box-shadow: 0 10px 40px rgba(0, 0, 0, .3);\n}\n.mom-modal-sm {\n  width: min(340px, 90vw);\n}\n.mom-overlay.mom-settings .mom-modal {\n  width: min(320px, 92vw);\n  font-size: 16px;\n}\n.mom-overlay.mom-settings .mom-field {\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-modal-head {\n  font-size: 17px;\n}\n.mom-overlay.mom-settings .mom-modal-head .mom-modal-x {\n  font-size: 18px;\n}\n.mom-overlay.mom-settings .mom-inp {\n  width: 240px;\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-hint {\n  font-size: 13px;\n}\n.mom-overlay.mom-settings label.mom-btn:has(> input[type=\"file\"]) {\n  width: 240px;\n}\n/* ===== 日历弹窗（复刻 siyuan-moments）===== */\n.mom-overlay.mom-calendar {\n  background: rgba(0, 0, 0, .5);\n}\n.mom-calendar-modal {\n  display: contents;\n}\n.mom-calendar-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483000;\n  touch-action: none;\n}\n.mom-calendar-content {\n  position: relative;\n  background: var(--b3-theme-background);\n  border-radius: 12px;\n  width: auto;\n  max-width: 1200px;\n  min-width: 0;\n  max-height: 60vh;\n  overflow: hidden;\n  z-index: 2147483001;\n  box-shadow: 0 4px 24px rgba(0, 0, 0, .3);\n  display: flex;\n  flex-direction: column;\n  transition: box-shadow .2s ease, transform .2s ease;\n  touch-action: pan-y;\n  overscroll-behavior: contain;\n}\n.mom-calendar-content.dragging {\n  transition: none;\n  cursor: grabbing;\n}\n.mom-calendar-header {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid color-mix(in srgb, var(--b3-border-color) 35%, transparent);\n  flex-shrink: 0;\n  cursor: move;\n  user-select: none;\n}\n.mom-calendar-title {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: 1;\n  min-width: 0;\n  white-space: nowrap;\n  overflow: hidden;\n}\n.mom-calendar-title > span:first-child {\n  font-size: 15px;\n  font-weight: 600;\n}\n.mom-calendar-year {\n  font-size: 13px;\n  color: var(--b3-theme-primary);\n  background: transparent;\n  border: none;\n  outline: none;\n  cursor: pointer;\n  padding: 2px 4px;\n  font-family: inherit;\n  -webkit-appearance: none;\n  -moz-appearance: none;\n  appearance: none;\n  flex-shrink: 0;\n}\n.mom-calendar-modes {\n  display: inline-flex;\n  gap: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-mode {\n  border: 1px solid var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface);\n  font-size: 12px;\n  padding: 2px 9px;\n  border-radius: 999px;\n  cursor: pointer;\n  line-height: 1.4;\n}\n.mom-calendar-mode.on {\n  background: var(--b3-theme-primary);\n  border-color: var(--b3-theme-primary);\n  color: #fff;\n}\n.mom-calendar-count {\n  font-size: 12px;\n  color: var(--b3-theme-primary);\n  margin-left: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-close {\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  font-size: 20px;\n  color: var(--b3-theme-on-surface);\n  border-radius: 4px;\n  flex-shrink: 0;\n}\n.mom-calendar-close:hover {\n  background-color: var(--b3-list-hover);\n}\n.mom-calendar-body {\n  padding: 16px;\n  overflow: auto;\n}\n.mom-calendar-grid {\n  width: 100%;\n  display: block;\n}\n.mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n}\n.mom-calendar-column {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.mom-calendar-cell {\n  width: 100%;\n  min-width: 10px;\n  aspect-ratio: 1;\n  border-radius: 3px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  transition: all .15s;\n  cursor: pointer;\n}\n.mom-calendar-cell:hover {\n  transform: scale(1.2);\n  box-shadow: 0 0 0 1px var(--b3-theme-primary);\n}\n.mom-calendar-cell.level-empty {\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  opacity: .5;\n}\n.mom-calendar-cell.level-empty:hover {\n  transform: none;\n  box-shadow: none;\n}\n.mom-calendar-cell.level-1 { background-color: var(--b3-theme-primary-lightest); }\n.mom-calendar-cell.level-2 { background-color: var(--b3-theme-primary-lighter); }\n.mom-calendar-cell.level-3 { background-color: var(--b3-theme-primary-light); }\n.mom-calendar-cell.level-4 { background-color: var(--b3-theme-primary); }\n.mom-calendar-months {\n  position: relative;\n  margin-top: 8px;\n  height: 18px;\n  min-width: max-content;\n}\n.mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.mom-calendar-photo-twocol {\n  display: flex;\n  flex-direction: column;\n  gap: 18px;\n}\n.mom-calendar-photo-month-title {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  margin: 4px 0 8px 4px;\n}\n.mom-calendar-photo-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-calendar-photo-row {\n  display: grid;\n  grid-template-columns: repeat(7, minmax(32px, 44px));\n  gap: 6px;\n}\n.mom-calendar-photo-cell {\n  position: relative;\n  aspect-ratio: 1;\n  width: 100%;\n  min-width: 32px;\n  max-width: 44px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 5%, transparent);\n  border-radius: 6px;\n  border: 1px solid color-mix(in srgb, var(--b3-border-color) 20%, transparent);\n  cursor: default;\n  overflow: hidden;\n  transition: transform .15s ease, box-shadow .15s ease;\n}\n.mom-calendar-photo-cell.has-photo {\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);\n}\n.mom-calendar-photo-cell.has-photo:hover,\n.mom-calendar-photo-cell.has-record:hover {\n  transform: scale(1.05);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .15);\n  z-index: 1;\n}\n.mom-calendar-photo-cell.empty {\n  background-color: transparent;\n  border: 0;\n}\n.mom-calendar-photo-cell.has-record {\n  cursor: pointer;\n}\n.mom-calendar-photo-dot {\n  position: absolute;\n  right: 5px;\n  bottom: 5px;\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  background: var(--b3-theme-primary);\n  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b3-theme-background) 60%, transparent);\n  z-index: 2;\n}\n.mom-calendar-photo-num {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  font-size: 11px;\n  color: var(--b3-theme-on-surface);\n  opacity: .85;\n  background: color-mix(in srgb, var(--b3-theme-background) 65%, transparent);\n  padding: 1px 5px;\n  border-radius: 3px;\n  line-height: 1.3;\n  z-index: 1;\n}\n.mom-calendar-photo-cell.has-photo .mom-calendar-photo-num {\n  color: #fff;\n  background: rgba(0, 0, 0, .45);\n  opacity: 1;\n}\n.mom-calendar-photo-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  z-index: 0;\n  background: var(--b3-theme-surface);\n}\n.mom-modal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid var(--b3-border-color, #eee);\n  font-weight: 600;\n}\n.mom-modal-x {\n  border: none;\n  background: none;\n  font-size: 16px;\n  cursor: pointer;\n  color: #888;\n}\n.mom-modal-body {\n  padding: 14px 16px;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.mom-modal-foot {\n  display: flex;\n  justify-content: flex-end;\n  gap: 8px;\n  padding: 10px 16px;\n  border-top: 1px solid var(--b3-border-color, #eee);\n}\n.mom-editor-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-inp {\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 6px;\n  padding: 6px 9px;\n  font-size: 13px;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-inp-inline {\n  width: 100px;\n}\n.mom-textarea {\n  min-height: 120px;\n  width: 100%;\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 8px;\n  padding: 10px;\n  font-size: 14px;\n  font-family: inherit;\n  resize: vertical;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-img-previews {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-img-prev {\n  position: relative;\n  width: 64px;\n  height: 64px;\n}\n.mom-img-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  border-radius: 6px;\n}\n.mom-img-prev-x {\n  position: absolute;\n  top: -6px;\n  right: -6px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  border: none;\n  background: #333;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-picked {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-picked-chip {\n  cursor: pointer;\n}\n.mom-pick-panel {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  font-size: 13px;\n}\n.mom-field-col {\n  align-items: flex-start;\n}\n.mom-field .mom-inp {\n  width: 100%;\n}\n.mom-hint {\n  font-size: 11px;\n  color: #999;\n}\n.mom-divider {\n  height: 1px;\n  background: var(--b3-border-color, #eee);\n}\n.mom-btn-row {\n  display: flex;\n  gap: 8px;\n  flex-wrap: wrap;\n}\n.mom-view-switch {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-cal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.mom-cal-nav {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.mom-cal-year {\n  font-size: 14px;\n  font-weight: 600;\n  min-width: 64px;\n  text-align: center;\n}\n.mom-cal-modes {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal-months {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.mom-cal-month {\n  background: var(--b3-theme-background, #fff);\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 10px;\n  padding: 10px;\n}\n.mom-cal-month-t {\n  margin: 0 0 8px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-cal-grid {\n  display: grid;\n  grid-template-columns: repeat(7, 1fr);\n  gap: 4px;\n}\n.mom-cal-dow {\n  text-align: center;\n  font-size: 11px;\n  color: #aaa;\n  padding: 2px 0;\n}\n.mom-cal-blank {\n  aspect-ratio: 1;\n}\n.mom-cal-cell {\n  position: relative;\n  aspect-ratio: 1;\n  border-radius: 6px;\n  border: 1px solid transparent;\n  background: var(--b3-theme-background-light, #f4f4f4);\n  overflow: hidden;\n  cursor: pointer;\n  padding: 0;\n}\n.mom-cal-cell.has {\n  border-color: var(--b3-border-color, #ddd);\n}\n.mom-cal-cell:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell.is-today {\n  box-shadow: inset 0 0 0 2px var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cal-daynum {\n  position: absolute;\n  left: 3px;\n  top: 3px;\n  font-size: 10px;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);\n}\n.mom-cal-heatline {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 11px;\n  font-weight: 600;\n}\n.mom-cal-ph-cnt {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n@keyframes mom-flash {\n  0% {\n    box-shadow: 0 0 0 3px var(--b3-theme-primary, #4e6ef2);\n  }\n  100% {\n    box-shadow: 0 0 0 0 rgba(78, 110, 242, 0);\n  }\n}\n.mom-lock {\n  position: relative;\n  min-height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n}\n.mom-lock-bg {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n.mom-lock-bg--glass {\n  background:\n    linear-gradient(\n      180deg,\n      #fafafa,\n      #f0f0f0);\n}\n.mom-lock-panel {\n  position: relative;\n  z-index: 1;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  width: 100%;\n  height: 100%;\n  padding: 28px 26px;\n  background: transparent;\n}\n.mom-lock-top {\n  text-align: center;\n  color: #000;\n  width: 100%;\n  padding-bottom: 18px;\n  margin-bottom: 18px;\n  border-bottom: 1px solid #f0f0f0;\n}\n.mom-lock-date {\n  font-size: 12px;\n  letter-spacing: 2px;\n  color: #999;\n  text-transform: uppercase;\n}\n.mom-lock-time {\n  font-size: 44px;\n  font-weight: 200;\n  letter-spacing: 2px;\n  margin-top: 6px;\n  font-variant-numeric: tabular-nums;\n  color: #111;\n}\n.mom-lock-bottom {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  width: 100%;\n  gap: 10px;\n}\n.mom-lock-avatar {\n  width: 60px;\n  height: 60px;\n  border-radius: 50%;\n  font-size: 26px;\n}\n.mom-lock-name {\n  color: #111;\n  font-size: 14px;\n  font-weight: 600;\n}\n.mom-lock-input {\n  width: 50%;\n  border: 1px solid #e5e5e5;\n  border-radius: 10px;\n  padding: 10px 12px;\n  background: #f7f7f7;\n  color: #000;\n  font-size: 14px;\n  outline: none;\n  transition: border-color .18s ease, background .18s ease;\n}\n.mom-lock-input:focus {\n  border-color: #bbb;\n  background: #fff;\n}\n.mom-lock-input::placeholder {\n  color: #b0b0b0;\n}\n.mom-lock .mom-btn-primary {\n  width: 100%;\n  justify-content: center;\n  padding: 10px 12px;\n  border-radius: 10px;\n}\n.mom-lock-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin: 0;\n}\n.mom-lock-hint {\n  color: #aaa;\n  font-size: 12px;\n  margin-top: 2px;\n}\n.mom-lock.shake {\n  animation: mom-shake .4s ease;\n}\n@keyframes mom-shake {\n  0%, 100% {\n    transform: translateX(0);\n  }\n  25% {\n    transform: translateX(-6px);\n  }\n  75% {\n    transform: translateX(6px);\n  }\n}\n.mom-switch {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  cursor: pointer;\n  font-size: 13px;\n}\n.mom-switch input {\n  display: none;\n}\n.mom-switch i {\n  width: 40px;\n  height: 22px;\n  border-radius: 999px;\n  background: #ccc;\n  position: relative;\n  transition: background .2s;\n}\n.mom-switch i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  background: #fff;\n  transition: transform .2s;\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);\n}\n.mom-switch input:checked + i {\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-switch input:checked + i::after {\n  transform: translateX(18px);\n}\n.mom-switch-lab {\n  cursor: pointer;\n}\n.mom-md-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-link-card {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-inline-code {\n  background: var(--b3-theme-background-light, #f2f2f2);\n  border-radius: 4px;\n  padding: 1px 5px;\n  font-size: 13px;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.mom-mark {\n  background: #ffe08a;\n  color: inherit;\n  padding: 0 2px;\n  border-radius: 3px;\n}\n.mom-card-text em {\n  font-style: italic;\n}\n.mom-publish-page {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background-color: var(--b3-theme-background, #fff);\n  z-index: 30;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-page[hidden] {\n  display: none;\n}\n.mom-publish {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  min-height: 0;\n}\n.mom-publish-nav {\n  position: relative;\n  flex: 0 0 auto;\n  height: 44px;\n  background-color: var(--b3-theme-background, #fff);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 16px;\n  border-bottom: 0.5px solid var(--moments-nav-border, #eee);\n}\n.mom-publish-back {\n  width: 24px;\n  height: 24px;\n  border: none;\n  background: transparent;\n  position: relative;\n  cursor: pointer;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n}\n.mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n}\n.mom-publish-submit {\n  font-size: 15px;\n  font-weight: 500;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 10%, transparent);\n  padding: 6px 16px;\n  border-radius: 4px;\n  border: none;\n  cursor: pointer;\n}\n.mom-publish-content {\n  padding: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-publish-card {\n  background: var(--b3-theme-background-light, #f7f7f7);\n  border: 1px solid color-mix(in srgb, var(--b3-border-color, #ddd) 45%, transparent);\n  border-radius: 12px;\n  padding: 14px;\n  box-sizing: border-box;\n}\n.mom-publish-card--editor {\n  flex: 0 0 auto;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-card--editor:focus-within {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-publish-textarea {\n  width: 100%;\n  min-height: 90px;\n  max-height: 40vh;\n  border: none;\n  outline: none;\n  font-size: 16px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background, #333);\n  resize: vertical;\n  overflow-y: auto;\n  font-family: inherit;\n  background: transparent;\n}\n.mom-publish-textarea::placeholder {\n  color: #aaa;\n}\n.mom-publish-imgcard {\n  display: flex;\n  align-items: flex-start;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-publish-grid-add,\n.mom-publish-grid-prev {\n  width: 56px;\n  height: 56px;\n  border: 1px dashed #ccc;\n  border-radius: 8px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  box-sizing: border-box;\n  background: transparent;\n  font-size: 22px;\n  color: #999;\n  flex: none;\n}\n.mom-publish-grid-prev {\n  border-style: solid;\n  border-color: #eee;\n}\n.mom-publish-grid-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-publish-grid-prev-video {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.mom-publish-prev-media {\n  position: absolute;\n  inset: 0;\n}\n.mom-publish-prev-play {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  font-size: 18px;\n  pointer-events: none;\n  text-shadow: 0 1px 3px rgba(0, 0, 0, .6);\n}\n.mom-publish-grid-x {\n  position: absolute;\n  top: 3px;\n  right: 3px;\n  width: 18px;\n  height: 18px;\n  background-color: #FA5151;\n  border-radius: 50%;\n  border: none;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 10;\n  padding: 0;\n}\n.mom-publish-inp {\n  flex: none;\n  width: 100%;\n  height: 30px;\n  border: 0.5px solid color-mix(in srgb, var(--b3-border-color, #ddd) 70%, transparent);\n  border-radius: 8px;\n  padding: 0 8px;\n  font-size: 13px;\n  color: var(--b3-theme-on-background, #333);\n  background: color-mix(in srgb, var(--b3-theme-background, #fff) 55%, transparent);\n  outline: none;\n  font-family: inherit;\n  box-sizing: border-box;\n}\n.mom-publish-info {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n.mom-publish-info .mom-publish-inp[type=date] {\n  flex: 1;\n  min-width: 0;\n}\n.mom-publish-info .mom-publish-inp[data-location] {\n  flex: 2;\n  min-width: 0;\n}\n.mom-picker-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));\n  gap: 6px;\n  max-height: 60vh;\n  overflow-y: auto;\n  padding: 2px;\n}\n.mom-picker-item {\n  width: 100%;\n  aspect-ratio: 1;\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 6px;\n  background-size: cover;\n  background-position: center;\n  background-color: var(--b3-theme-background-light, #f4f4f4);\n  cursor: pointer;\n  padding: 0;\n  box-sizing: border-box;\n}\n.mom-picker-item:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-list {\n  --moments-text: var(--b3-theme-on-background);\n  --moments-text-secondary: var(--b3-theme-on-surface);\n  --moments-border: var(--b3-border-color);\n  --moments-card-border: var(--b3-border-color);\n  --moments-name-color: var(--b3-theme-on-background);\n  --moments-close-color: var(--b3-theme-on-surface-light);\n  --moments-link-card-bg: var(--b3-theme-surface);\n  --moments-interaction-bg: var(--b3-theme-surface);\n  --moments-action-popup-bg: var(--b3-theme-surface);\n  --moments-action-popup-text: var(--b3-theme-on-background);\n  --moments-action-popup-border: var(--b3-border-color);\n  --moments-action-popup-active-bg: var(--b3-list-hover);\n}\n.north-luna-moments-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 14px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface) 45%, transparent);\n  width: calc(100% - 6%);\n  margin: 0 auto;\n  box-sizing: border-box;\n  border: 1px solid color-mix(in srgb, var(--b3-theme-on-background) 6%, transparent);\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .05);\n  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;\n}\n.north-luna-moments-item:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .07), 0 12px 28px rgba(0, 0, 0, .10);\n  border-color: color-mix(in srgb, var(--b3-theme-on-background) 10%, transparent);\n}\n.north-luna-moments-item.popup-open {\n  z-index: 8;\n}\n.north-luna-moments-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-item-text {\n  font-size: 18px;\n  color: var(--moments-text);\n  line-height: 1.75;\n  margin-bottom: 6px;\n  word-wrap: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n  -webkit-user-select: text;\n  overflow: hidden;\n}\n.north-luna-moments-no-text {\n  color: var(--moments-close-color);\n  font-size: 13px;\n}\n.north-luna-moments-item-text.moments-folded {\n  max-height: calc(var(--moments-fold-line-h, 32px) * var(--moments-fold-lines, 6));\n  -webkit-mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  -webkit-mask-size: 100% 100%;\n  mask-size: 100% 100%;\n  -webkit-mask-repeat: no-repeat;\n  mask-repeat: no-repeat;\n}\n.north-luna-moments-item.moments-expanded .north-luna-moments-item-text.moments-folded {\n  max-height: none;\n  -webkit-mask-image: none;\n  mask-image: none;\n}\n.north-luna-moments-expand {\n  display: none;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 2px;\n  margin-top: 4px;\n  margin-bottom: 10px;\n  color: var(--b3-theme-on-surface-light);\n  font-size: 13px;\n  cursor: pointer;\n  user-select: none;\n  -webkit-user-select: none;\n  transition: color 0.2s;\n}\n.north-luna-moments-expand:hover {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-item.moments-has-fold .north-luna-moments-expand {\n  display: flex;\n}\n.north-luna-moments-expand .moments-expand-icon {\n  width: 14px;\n  height: 14px;\n}\n.north-luna-moments-item-text code,\n.north-luna-moments-item-text .mom-inline-code {\n  color: var(--b3-theme-primary);\n  background-color: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent);\n  padding: 2px 4px;\n  border-radius: 7px;\n  font-size: 0.9em;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.north-luna-moments-item-text mark {\n  background-color: #ffe08a;\n  padding: 0 2px;\n  border-radius: 2px;\n}\n.north-luna-moments-item-text strong {\n  font-weight: 600;\n}\n.north-luna-moments-media {\n  margin-bottom: 8px;\n}\n.north-luna-moments-video {\n  width: 100%;\n  max-height: 420px;\n  border-radius: 8px;\n  background: #000;\n  display: block;\n}\n.north-luna-moments-grid-cel {\n  position: relative;\n  display: block;\n  cursor: pointer;\n  overflow: hidden;\n  border-radius: 8px;\n}\n.north-luna-moments-grid-video-el {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-video-el {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: 100%;\n}\n.north-luna-moments-grid-play {\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 42px;\n  height: 42px;\n  border-radius: 50%;\n  background: rgba(0, 0, 0, .55);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  pointer-events: none;\n}\n.north-luna-moments-grid-play svg {\n  width: 22px;\n  height: 22px;\n}\n.mom-lightbox video {\n  max-width: 92vw;\n  max-height: 80vh;\n  border-radius: 8px;\n  background: #000;\n}\n.north-luna-moments-image-grid {\n  display: grid;\n  gap: 4px;\n}\n.north-luna-moments-image-grid.single {\n  grid-template-columns: 1fr;\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.double {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.triple {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.four {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-img {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  cursor: zoom-in;\n  background: var(--b3-theme-surface);\n  transition: transform 0.3s ease;\n  border-radius: 8px;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-img {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: auto;\n  max-width: 100%;\n  border-radius: 6px;\n}\n.north-luna-moments-link-card {\n  display: flex;\n  align-items: center;\n  background-color: var(--moments-link-card-bg);\n  padding: 8px;\n  border-radius: 4px;\n  margin-bottom: 8px;\n  max-width: 220px;\n}\n.north-luna-moments-link-thumb {\n  width: 40px;\n  height: 40px;\n  border-radius: 4px;\n  object-fit: cover;\n  margin-right: 8px;\n  flex-shrink: 0;\n  background-color: #e0e0e0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.north-luna-moments-link-info {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-link-title {\n  font-size: 13px;\n  color: var(--moments-text);\n  line-height: 1.4;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n}\n.north-luna-moments-link-url {\n  font-size: 11px;\n  color: var(--moments-close-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.north-luna-moments-item-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-top: 10px;\n  gap: 8px;\n  flex-wrap: nowrap;\n}\n.north-luna-moments-meta-tags {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 0;\n  flex: 1;\n  min-width: 0;\n  overflow: hidden;\n}\n.north-luna-moments-meta-item {\n  display: inline-flex;\n  align-items: center;\n  gap: 2px;\n  font-size: 12px;\n  color: var(--moments-text-secondary);\n  white-space: nowrap;\n  flex-shrink: 0;\n  line-height: 1.5;\n}\n.north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  content: \"\\b7\";\n  margin: 0 7px;\n  color: var(--moments-text-secondary);\n  opacity: 0.4;\n  font-weight: bold;\n}\n.north-luna-moments-item-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 12px;\n  position: relative;\n  margin-top: 6px;\n}\n.north-luna-moments-liked-indicator {\n  display: inline-flex;\n  align-items: center;\n  flex-shrink: 0;\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-liked-indicator svg {\n  display: block;\n}\n@keyframes moments-like-pop {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.3);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n.north-luna-moments-pin-badge {\n  position: absolute;\n  top: 12px;\n  right: 12px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--b3-theme-primary);\n  opacity: 0.6;\n  pointer-events: none;\n}\n.north-luna-moments-more-btn {\n  width: 28px;\n  height: 24px;\n  background-color: transparent;\n  border: none;\n  border-radius: 6px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  opacity: 0;\n  transition: opacity 0.2s ease, background-color 0.2s ease;\n}\n.north-luna-moments-item:hover .north-luna-moments-more-btn {\n  opacity: 1;\n}\n.north-luna-moments-more-btn:hover {\n  background-color: var(--moments-interaction-bg);\n}\n.north-luna-moments-more-btn::before {\n  content: \"\\22ef\";\n  font-size: 14px;\n  line-height: 1;\n  color: var(--moments-close-color);\n  letter-spacing: 1px;\n}\n.north-luna-moments-action-popup {\n  position: absolute;\n  right: 40px;\n  top: 50%;\n  transform: translateY(-50%);\n  background-color: var(--moments-action-popup-bg);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 8px;\n  padding: 4px;\n  display: none;\n  flex-direction: column;\n  gap: 2px;\n  z-index: 10;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);\n}\n.north-luna-moments-action-popup[data-mid] {\n  display: none;\n}\n.north-luna-moments-item.popup-open .north-luna-moments-action-popup {\n  display: flex;\n}\n.north-luna-moments-action-popup-row {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 2px;\n}\n.north-luna-moments-action-popup-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  padding: 6px 10px;\n  font-size: 13px;\n  color: var(--moments-action-popup-text);\n  white-space: nowrap;\n  cursor: pointer;\n  border-radius: 6px;\n}\n.north-luna-moments-action-popup-btn:hover {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn:active {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn.like-btn.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-popup-btn.like-btn.liked svg {\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-comment-panel {\n  margin-top: 8px;\n  padding: 8px 0 0;\n  animation: moments-likes-fade-in 0.2s ease;\n}\n.north-luna-moments-comment-panel:has(.north-luna-moments-comment-item) {\n  border-top: 1px solid rgba(128, 128, 128, 0.08);\n}\n.north-luna-moments-comment-item {\n  padding: 4px 0;\n  font-size: 13px;\n  line-height: 1.5;\n}\n.north-luna-moments-comment-display {\n  display: block;\n}\n.north-luna-moments-comment-text {\n  color: var(--b3-theme-on-surface);\n  word-break: break-all;\n  user-select: text;\n}\n.north-luna-moments-comment-text strong {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n}\n.north-luna-moments-comment-actions {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-top: 4px;\n}\n.north-luna-moments-comment-actions-right {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-comment-time {\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.north-luna-moments-comment-del {\n  display: inline-flex;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  opacity: 0;\n  padding: 2px;\n  transition: opacity 0.15s;\n}\n.north-luna-moments-comment-item:hover .north-luna-moments-comment-del {\n  opacity: 1;\n}\n.north-luna-moments-comment-del:hover {\n  color: var(--b3-theme-on-surface);\n}\n.north-luna-moments-comment-input-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-top: 8px;\n  padding-top: 6px;\n}\n.north-luna-moments-comment-input {\n  flex: 1;\n  border: none;\n  outline: none;\n  background: var(--b3-theme-surface);\n  border-radius: 7px;\n  padding: 6px 12px;\n  font-size: 13px;\n  color: var(--b3-theme-on-surface);\n  line-height: 1.4;\n}\n.north-luna-moments-comment-input::placeholder {\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send {\n  flex-shrink: 0;\n  border: none;\n  background: var(--b3-theme-primary);\n  color: #fff;\n  border-radius: 7px;\n  padding: 6px 18px;\n  min-width: 56px;\n  font-size: 13px;\n  font-weight: 600;\n  line-height: 1.3;\n  cursor: pointer;\n  transition: opacity 0.15s;\n  text-align: center;\n  white-space: nowrap;\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send:hover {\n  opacity: 0.85;\n}\n@keyframes moments-likes-fade-in {\n  from {\n    opacity: 0;\n    transform: translateY(-4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n.north-luna-moments-item.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n.mom-list .north-luna-moments-date-group {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 10px;\n  margin: 4px 0 10px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.mom-list .north-luna-moments-date-group::before,\n.mom-list .north-luna-moments-date-group::after {\n  content: \"\";\n  flex: 1;\n  height: 1px;\n  max-width: 90px;\n  background:\n    linear-gradient(\n      to right,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group::after {\n  background:\n    linear-gradient(\n      to left,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group-text {\n  font-size: 20px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  letter-spacing: 0.4px;\n  white-space: nowrap;\n}\n.north-luna-moments-outline-popover {\n  width: 140px;\n  max-height: 320px;\n  overflow-y: auto;\n  background: var(--b3-theme-surface);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 10px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);\n  z-index: 100;\n  padding: 6px 0;\n}\n.north-luna-moments-outline-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 6px 14px 8px;\n  border-bottom: 0.5px solid var(--b3-border-color);\n  margin-bottom: 4px;\n}\n.north-luna-moments-outline-item {\n  font-size: 14px;\n  color: var(--b3-theme-on-background);\n  padding: 8px 14px;\n  cursor: pointer;\n  transition: background 0.12s ease, color 0.12s ease;\n}\n.north-luna-moments-outline-item:hover {\n  background: var(--b3-list-hover);\n}\n.north-luna-moments-outline-item.active {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n  background: var(--b3-theme-primary-lightest);\n}\n\n/* 方案3：去掉\"⋯\"按钮，动态下方悬停淡入一行操作图标 */\n.north-luna-moments-more-btn,\n.north-luna-moments-action-popup {\n  display: none !important;\n}\n.north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-action-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 31px;\n  height: 31px;\n  border: none;\n  border-radius: 7px;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  transition: background-color .15s ease, color .15s ease;\n}\n.north-luna-moments-action-btn svg {\n  width: 16px !important;\n  height: 16px !important;\n}\n.north-luna-moments-action-btn:hover,\n.north-luna-moments-action-btn:focus-visible {\n  background-color: var(--b3-theme-background-light);\n  color: var(--b3-theme-on-background);\n}\n.north-luna-moments-action-btn:focus-visible {\n  outline: 2px solid var(--b3-theme-primary, #4e6ef2);\n  outline-offset: 1px;\n}\n.north-luna-moments-action-btn.like-action.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-btn.active {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del {\n  color: #e05050;\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del:hover {\n  color: #e05050;\n  background-color: #fdecec;\n}\n/* ===== 移动端：卡片尽量充满屏幕 ===== */\n@media (max-width: 480px) {\n  .north-luna-moments-item {\n    width: calc(100% - 6%);\n    margin: 0 auto;\n    padding: 12px;\n  }\n}\n\n/* ===== Orca Note + Apple HIG (appended by build.mjs) ===== */\n.orca-df-host {\n  flex: 1 1 auto;\n  align-self: stretch;\n  width: 100%;\n  min-width: 0;\n  height: 100%;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.orca-df-scope .mom-root { height: 100%; width: 100%; min-width: 0; }\n/* ---- Apple / iOS-macOS tokens → legacy --b3-* ---- */\n.orca-df-scope {\n  --df-font: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"SF Pro Display\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  --df-font-mono: \"SF Mono\", ui-monospace, Menlo, Consolas, monospace;\n  --df-radius-sm: 6px;\n  --df-radius-md: 10px;\n  --df-radius-lg: 14px;\n  --df-radius-xl: 20px;\n  --df-radius-pill: 980px;\n  --df-stroke: 0.5px;\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.06);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.04);\n  --df-brand: #007AFF;\n  --df-brand-hover: #0066D6;\n  --df-brand-pressed: #0055B3;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(0,122,255,.12);\n  --df-brand-tint-2: rgba(0,122,255,.20);\n  --df-fill-tertiary: rgba(120,120,128,.12);\n  --b3-theme-background: #F2F2F7;\n  --b3-theme-background-light: rgba(255,255,255,0.72);\n  --b3-theme-on-background: #000000;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #5AC8FA;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(60,60,67,0.18);\n  --b3-theme-surface: #FFFFFF;\n  --b3-theme-surface-lighter: #F2F2F7;\n  --b3-theme-on-surface: #000000;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.12);\n  --b3-font-family-code: var(--df-font-mono);\n  --moments-card-border: rgba(60,60,67,0.12);\n  --moments-nav-border: rgba(60,60,67,0.18);\n  color: var(--b3-theme-on-background);\n  font-family: var(--df-font);\n  font-size: 15px;\n  line-height: 1.47;\n  letter-spacing: -0.01em;\n  -webkit-font-smoothing: antialiased;\n}\n.orca-df-scope.orca-df-dark {\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.28);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.55);\n  --df-brand: #0A84FF;\n  --df-brand-hover: #409CFF;\n  --df-brand-pressed: #0066CC;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(10,132,255,.22);\n  --df-brand-tint-2: rgba(10,132,255,.32);\n  --df-fill-tertiary: rgba(120,120,128,.24);\n  --b3-theme-background: #000000;\n  --b3-theme-background-light: rgba(44,44,46,0.78);\n  --b3-theme-on-background: #FFFFFF;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #64D2FF;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(84,84,88,0.65);\n  --b3-theme-surface: #1C1C1E;\n  --b3-theme-surface-lighter: #2C2C2E;\n  --b3-theme-on-surface: #FFFFFF;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.24);\n  --moments-card-border: rgba(84,84,88,0.45);\n  --moments-nav-border: rgba(84,84,88,0.65);\n}\n.orca-df-hb-icon { display: inline-flex; align-items: center; justify-content: center; }\n.orca-df-hb-icon svg { display: block; }\n/* ---- Surfaces / cards ---- */\n.orca-df-scope .mom-root {\n  background: var(--b3-theme-background);\n  font-family: var(--df-font);\n}\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  width: 100%;\n  max-width: none;\n  margin-left: 0;\n  margin-right: 0;\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n  transition: transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s ease, background .18s ease;\n}\n.orca-df-scope .mom-item:hover,\n.orca-df-scope .north-luna-moments-item:hover {\n  box-shadow: var(--df-shadow-8);\n}\n.orca-df-scope .mom-list {\n  align-items: stretch;\n  padding-left: 16px;\n  padding-right: 16px;\n  gap: 12px;\n}\n.orca-df-scope .mom-filter-bar { width: 100%; }\n.orca-df-scope .mom-pin-strip {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  margin: 0;\n  padding: 10px 16px 0;\n  box-sizing: border-box;\n  background: transparent;\n  border: none;\n  border-radius: 0;\n  cursor: default;\n}\n.orca-df-scope .mom-pin-strip-label {\n  writing-mode: horizontal-tb;\n  white-space: nowrap;\n  font-size: 13px;\n  font-weight: 400;\n  line-height: 1;\n  color: var(--orca-color-text-3, #8e8e93);\n  margin-right: 2px;\n}\n.orca-df-scope .mom-pin-strip-thumbs {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: visible;\n}\n.orca-df-scope .mom-pin-group-text {\n  display: inline-flex !important;\n  align-items: center;\n  gap: 6px;\n  max-width: min(100%, 320px);\n  height: 32px;\n  padding: 0 12px 0 10px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n  color: var(--orca-color-text-1, #1c1c1e);\n  grid-template-columns: none !important;\n}\n.orca-df-scope .mom-pin-group-text:hover {\n  opacity: 1;\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 12%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-ico {\n  display: inline-flex;\n  flex-shrink: 0;\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-scope .mom-pin-title {\n  min-width: 0;\n  font-size: 13px;\n  font-weight: 500;\n  line-height: 1.2;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.orca-df-scope .mom-pin-group-media {\n  display: grid;\n  gap: 2px;\n  padding: 3px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb img {\n  width: 28px;\n  height: 28px;\n  border-radius: 4px;\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb-single img {\n  width: 40px;\n  height: 40px;\n}\n.orca-df-scope .mom-pin-thumb-more {\n  font-size: 11px;\n}\n.orca-df-scope .mom-avatar,\n.orca-df-scope .mom-avatar-ph {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n/* ---- Controls ---- */\n.orca-df-scope button,\n.orca-df-scope input,\n.orca-df-scope textarea,\n.orca-df-scope select {\n  font-family: inherit;\n}\n.orca-df-scope .mom-publish-submit,\n.orca-df-scope .mom-empty-btn,\n.orca-df-scope .mom-btn-primary {\n  height: 34px;\n  min-width: 72px;\n  padding: 0 16px;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-brand);\n  color: var(--df-brand-fg);\n  font-size: 15px;\n  font-weight: 600;\n  letter-spacing: -0.01em;\n  line-height: 1;\n  box-shadow: none;\n  transition: opacity .15s ease, transform .15s ease, background .15s ease;\n}\n.orca-df-scope .mom-publish-submit:hover,\n.orca-df-scope .mom-empty-btn:hover,\n.orca-df-scope .mom-btn-primary:hover {\n  background: var(--df-brand-hover);\n  opacity: 0.96;\n}\n.orca-df-scope .mom-publish-submit:active,\n.orca-df-scope .mom-empty-btn:active,\n.orca-df-scope .mom-btn-primary:active {\n  background: var(--df-brand-pressed);\n  opacity: 0.88;\n}\n.orca-df-scope .mom-publish-inp,\n.orca-df-scope .mom-publish-textarea {\n  border: none;\n  border-radius: var(--df-radius-md);\n  background: var(--df-fill-tertiary);\n  transition: background .15s ease, box-shadow .15s ease;\n}\n.orca-df-scope .mom-publish-inp:hover,\n.orca-df-scope .mom-publish-textarea:hover {\n  background: color-mix(in srgb, var(--df-fill-tertiary) 85%, var(--df-brand) 15%);\n}\n.orca-df-scope .mom-publish-inp:focus,\n.orca-df-scope .mom-publish-textarea:focus,\n.orca-df-scope .mom-publish-card--editor:focus-within {\n  outline: none;\n  box-shadow: 0 0 0 3px var(--df-brand-tint);\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-publish-card {\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n}\n.orca-df-scope .mom-publish-nav {\n  height: 52px;\n  border-bottom: var(--df-stroke) solid var(--moments-nav-border);\n  background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);\n  backdrop-filter: saturate(180%) blur(20px);\n  -webkit-backdrop-filter: saturate(180%) blur(20px);\n}\n.orca-df-scope .mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n.orca-df-scope .mom-publish-grid-add,\n.orca-df-scope .mom-publish-grid-prev {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab,\n.orca-df-scope .mom-fab-stack .mom-tag-fab,\n.orca-df-scope .mom-fab,\n.orca-df-scope button.mom-outline-fab,\n.orca-df-scope button.mom-tag-fab {\n  width: 44px;\n  height: 44px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: color-mix(in srgb, var(--b3-theme-surface) 82%, transparent);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  box-shadow: var(--df-shadow-8);\n  color: var(--df-brand);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab:hover,\n.orca-df-scope .mom-fab-stack .mom-tag-fab:hover,\n.orca-df-scope .mom-fab:hover {\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-tag-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-scope .mom-cover-default {\n  background:\n    linear-gradient(160deg, #5AC8FA 0%, #007AFF 48%, #5856D6 100%);\n}\n.orca-df-scope.orca-df-dark .mom-cover-default {\n  background:\n    linear-gradient(160deg, #64D2FF 0%, #0A84FF 45%, #5E5CE6 100%);\n}\n.orca-df-scope .mom-cover-actions .mom-cover-settings,\n.orca-df-scope .mom-cover-actions button {\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: rgba(255,255,255,.28);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  color: #fff;\n}\n/* ---- Tags / chips ---- */\n.north-luna-moments-tags { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; }\n.north-luna-moments-tag {\n  font-size: 13px;\n  line-height: 1.4;\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n  padding: 4px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  cursor: pointer;\n  user-select: none;\n  transition: background .15s ease, opacity .15s ease;\n}\n.north-luna-moments-tag:hover { background: var(--df-brand-tint-2); }\n.mom-publish-info { flex-wrap: wrap; }\n.mom-publish-info .mom-publish-info-tags { flex: 1 1 100%; min-width: 0; margin-top: 4px; }\n/* ---- Empty ---- */\n.mom-empty { padding: 64px 28px 52px; text-align: center; }\n.mom-empty-ico { font-size: 48px; line-height: 1; margin-bottom: 14px; opacity: 0.9; }\n.mom-empty-title { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 8px; color: var(--b3-theme-on-surface); }\n.mom-empty-sub { font-size: 15px; line-height: 1.5; margin: 0 0 6px; color: var(--b3-theme-on-surface-light); }\n.mom-empty-hint { font-size: 13px; line-height: 1.5; margin: 0 0 20px; color: var(--b3-theme-on-surface-light); opacity: 0.95; }\n.mom-empty-btn { margin-top: 4px; }\n/* ---- Tag bar / refs ---- */\n.orca-df-tagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-tagbar-label { font-size: 13px; color: var(--b3-theme-on-surface-light); margin-right: 2px; }\n.orca-df-tagchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 12px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagchip.is-on, .orca-df-tagchip:hover {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }\n.orca-df-refchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 3px 10px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) dashed var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n}\n.orca-df-refchip:hover { color: var(--df-brand); border-color: var(--df-brand); background: var(--df-brand-tint); }\n.orca-df-open-orca {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: transparent;\n  color: var(--df-brand);\n  font-weight: 600;\n  cursor: pointer;\n}\n.orca-df-open-orca:hover { background: var(--df-brand-tint); }\n.orca-df-loc-btn.is-on { color: var(--df-brand); }\n.orca-df-tag-btn.is-on { color: var(--df-brand); }\n.orca-df-actions-wrap,\n.orca-df-scope .north-luna-moments-item-actions {\n  position: relative;\n}\n.orca-df-scope .north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  justify-content: flex-start;\n  flex-wrap: nowrap;\n}\n.orca-df-scope .north-luna-moments-action-btn {\n  width: 34px;\n  height: 34px;\n  border-radius: var(--df-radius-pill);\n}\n.orca-df-more-inline {\n  display: none;\n  align-items: center;\n  gap: 2px;\n  margin-left: 2px;\n  padding-left: 4px;\n  border-left: var(--df-stroke) solid color-mix(in srgb, var(--b3-border-color) 80%, transparent);\n  animation: orca-df-more-in .16s ease;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-inline,\n.mom-action-bar.is-more-open .orca-df-more-inline {\n  display: inline-flex;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-btn,\n.mom-action-bar.is-more-open .orca-df-more-btn {\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n}\n.orca-df-more-inline .orca-df-more-del {\n  color: #FF3B30;\n}\n.orca-df-more-inline .orca-df-more-del:hover {\n  background: rgba(255,59,48,.1);\n}\n@keyframes orca-df-more-in {\n  from { opacity: 0; transform: translateX(-4px); }\n  to { opacity: 1; transform: translateX(0); }\n}\n.orca-df-tags-list {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n  max-height: 220px;\n  overflow-y: auto;\n  margin-bottom: 12px;\n}\n.orca-df-tags-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 0;\n}\n.orca-df-tagpick {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 4px 12px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) solid var(--b3-border-color);\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagpick.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n  border-color: var(--df-brand);\n}\n.orca-df-tags-add {\n  display: flex;\n  gap: 8px;\n  align-items: center;\n  margin-bottom: 8px;\n}\n.orca-df-tags-add .mom-inp { flex: 1 1 auto; min-width: 0; }\n.orca-df-loc-meta {\n  cursor: pointer;\n  color: var(--b3-theme-on-surface-light);\n}\n.orca-df-loc-meta:hover { color: var(--df-brand); }\n.orca-df-loc-pin { font-size: 12px; }\n.mom-publish-orca {\n  flex: none;\n  height: 34px;\n  padding: 0 14px;\n  margin-right: 0;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-fill-tertiary);\n  color: var(--df-brand);\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n}\n.mom-publish-orca:hover {\n  background: var(--df-brand-tint);\n}\n.mom-publish-nav-right { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; z-index: 2; }\n.mom-publish-nav .mom-publish-back { position: relative; z-index: 2; border-radius: var(--df-radius-pill); color: var(--df-brand); }\n.mom-publish-nav .mom-publish-title { pointer-events: none; z-index: 0; }\n/* ---- Cover actions ---- */\n.mom-cover-actions {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.mom-cover-actions .mom-cover-settings {\n  position: static;\n  top: auto;\n  right: auto;\n}\n.mom-cover-signature {\n  position: absolute;\n  left: 16px;\n  right: 120px;\n  bottom: 22px;\n  z-index: 11;\n  margin: 0;\n  font-size: 15px;\n  line-height: 1.45;\n  font-weight: 500;\n  letter-spacing: 0.06em;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 12px rgba(0,0,0,.35);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-more {\n  position: relative;\n  display: block;\n  overflow: hidden;\n  border-radius: inherit;\n  cursor: pointer;\n}\n.north-luna-moments-grid-more .north-luna-moments-grid-img,\n.north-luna-moments-grid-more .north-luna-moments-grid-video-el {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.north-luna-moments-grid-more-badge {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0,0,0,.46);\n  color: #fff;\n  font-size: 22px;\n  font-weight: 600;\n  letter-spacing: 0.02em;\n  pointer-events: none;\n  text-shadow: 0 1px 2px rgba(0,0,0,.35);\n}\n.north-luna-moments-item-text .orca-df-md-ul,\n.north-luna-moments-item-text .orca-df-md-ol {\n  margin: 4px 0 6px;\n  padding-left: 1.4em;\n  list-style-position: outside;\n}\n.north-luna-moments-item-text .orca-df-md-ul {\n  list-style-type: disc !important;\n}\n.north-luna-moments-item-text .orca-df-md-ol {\n  list-style-type: decimal !important;\n}\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul { list-style-type: circle !important; }\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul .orca-df-md-ul { list-style-type: square !important; }\n.north-luna-moments-item-text .orca-df-md-li {\n  margin: 2px 0;\n  line-height: 1.55;\n  display: list-item !important;\n}\n.north-luna-moments-item-text .orca-df-md-p {\n  margin: 0 0 4px;\n  line-height: 1.55;\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n.north-luna-moments-item-text .orca-df-md-gap { height: 8px; }\n.north-luna-moments-item-text .orca-df-md-h {\n  font-weight: 650;\n  margin: 6px 0 4px;\n  line-height: 1.4;\n}\n.north-luna-moments-item-text .orca-df-md-h1 { font-size: 1.2em; }\n.north-luna-moments-item-text .orca-df-md-h2 { font-size: 1.1em; }\n.north-luna-moments-item-text .orca-df-md-h3 { font-size: 1.05em; }\n.north-luna-moments-item-text .orca-df-md-quote {\n  margin: 4px 0;\n  padding: 2px 0 2px 10px;\n  border-left: 3px solid var(--b3-border-color);\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-item-text .orca-df-md-code {\n  margin: 6px 0;\n  padding: 8px 10px;\n  border-radius: 8px;\n  background: var(--df-fill-tertiary);\n  overflow: auto;\n  font-size: 13px;\n  line-height: 1.45;\n}\n/* ---- Popover ---- */\n.orca-df-tag-popover {\n  position: fixed;\n  z-index: 2147483001;\n  min-width: 180px;\n  max-width: min(280px, calc(100vw - 24px));\n  max-height: min(360px, 50vh);\n  overflow: auto;\n  padding: 6px;\n  border-radius: var(--df-radius-lg);\n  background: color-mix(in srgb, var(--b3-theme-surface) 86%, transparent);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  box-shadow: var(--df-shadow-16);\n  backdrop-filter: saturate(180%) blur(24px);\n  -webkit-backdrop-filter: saturate(180%) blur(24px);\n  box-sizing: border-box;\n}\n.orca-df-tag-popover-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 10px 6px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n}\n.orca-df-tag-popover-item {\n  display: block;\n  width: 100%;\n  text-align: left;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-background);\n  font-size: 15px;\n  line-height: 1.35;\n  padding: 10px 12px;\n  border-radius: var(--df-radius-md);\n  cursor: pointer;\n}\n.orca-df-tag-popover-item:hover,\n.orca-df-tag-popover-item.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-tag-popover-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 12px 10px;\n}\n/* ---- Motion ---- */\n@media (prefers-reduced-motion: no-preference) {\n  .orca-df-scope .mom-item,\n  .orca-df-scope .north-luna-moments-item,\n  .orca-df-scope .mom-publish-submit,\n  .orca-df-scope .orca-df-tagchip,\n  .orca-df-scope .mom-outline-fab,\n  .orca-df-scope .mom-tag-fab {\n    transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s cubic-bezier(.22,.61,.36,1), opacity .15s ease;\n  }\n  .orca-df-scope .mom-outline-fab:active,\n  .orca-df-scope .mom-tag-fab:active,\n  .orca-df-scope .mom-publish-submit:active {\n    transform: scale(0.96);\n  }\n}\n/* ---- 正文观感仍对齐虎鲸字号变量 ---- */\n.orca-df-scope {\n  --moments-text: var(--orca-color-text-1, var(--b3-theme-on-background, #000));\n  --df-body-font: var(--orca-fontfamily-ui, var(--orca-font-family, var(--df-font)));\n  --df-body-size: var(--orca-fontsize, 15px);\n  --df-body-leading: var(--orca-block-line-height, var(--orca-lineheight-md, 1.47));\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-publish-textarea,\n.orca-df-scope .mom-publish-card--editor .mom-publish-textarea {\n  font-family: var(--df-body-font);\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n  color: var(--moments-text);\n  letter-spacing: -0.01em;\n  font-weight: 400;\n}\n.orca-df-scope .north-luna-moments-no-text {\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n}\n.orca-df-scope .mom-inline-code,\n.orca-df-scope .north-luna-moments-item-text code {\n  font-family: var(--orca-fontfamily-code, var(--df-font-mono));\n  font-size: 0.92em;\n  line-height: inherit;\n  background: var(--df-fill-tertiary);\n  border-radius: 4px;\n  padding: 0.1em 0.35em;\n}\n.orca-df-scope .north-luna-moments-item-text a,\n.orca-df-scope .north-luna-moments-item-text .mom-md-link {\n  color: var(--orca-color-primary-5, var(--df-brand));\n}\n/* ---- 卡片正文层级：正文 > 列表 > meta 日期 ---- */\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  padding: 12px 14px 10px;\n}\n.orca-df-scope .north-luna-moments-item-header {\n  margin-bottom: 6px;\n  gap: 8px;\n}\n.orca-df-scope .north-luna-moments-item-header .mom-avatar,\n.orca-df-scope .north-luna-moments-item-header .mom-avatar-ph {\n  width: 34px;\n  height: 34px;\n  font-size: 14px;\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--orca-color-text-2, var(--b3-theme-on-surface, #3A3A3C));\n}\n.orca-df-scope .north-luna-moments-item-text {\n  margin-bottom: 2px;\n  line-height: 1.55;\n}\n.orca-df-scope .north-luna-moments-item-text > .orca-df-md-p:first-child {\n  color: var(--moments-text);\n  font-weight: 450;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ol {\n  margin: 6px 0 2px;\n  color: color-mix(in srgb, var(--moments-text) 86%, transparent);\n  font-size: 0.96em;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-li {\n  line-height: 1.5;\n  margin: 1px 0;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ol {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-tags {\n  margin-top: 6px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-item-meta {\n  margin-top: 8px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-meta-item {\n  font-size: 11px;\n  line-height: 1.35;\n  letter-spacing: 0.01em;\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  opacity: 0.92;\n}\n.orca-df-scope .north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  margin: 0 6px;\n  opacity: 0.35;\n  font-weight: 500;\n}\n.orca-df-scope .north-luna-moments-item-actions {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-comment-panel {\n  margin-top: 6px;\n}\n.orca-df-scope .orca-df-inline-ref {\n  display: inline;\n  text-decoration: none;\n  border-bottom: 1px dashed color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  cursor: pointer;\n}\n.orca-df-scope .orca-df-inline-ref:hover {\n  border-bottom-style: solid;\n}\n.orca-df-refresh-fab svg { display: block; }\n.orca-df-time-hint {\n  margin: 10px 0 0;\n  font-size: 12px;\n  line-height: 1.4;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-item-text {\n  cursor: pointer;\n}\n.orca-df-load-more {\n  display: flex;\n  justify-content: center;\n  padding: 16px 12px 28px;\n}\n.orca-df-load-more-btn {\n  appearance: none;\n  border: 1px solid color-mix(in srgb, var(--orca-color-text-3, #8e8e93) 35%, transparent);\n  background: color-mix(in srgb, var(--orca-color-bg-1, #fff) 92%, transparent);\n  color: var(--orca-color-text-2, #636366);\n  border-radius: 999px;\n  padding: 8px 18px;\n  font-size: 13px;\n  line-height: 1.3;\n  cursor: pointer;\n}\n.orca-df-load-more-btn:hover {\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n}\n.orca-df-trash-fab { position: relative; }\n.orca-df-trash-fab-count,\n.orca-df-archive-fab-count,\n.orca-df-tools-fab-count {\n  position: absolute; top: -4px; right: -4px;\n  min-width: 16px; height: 16px; padding: 0 4px;\n  border-radius: 999px; background: var(--orca-color-accent, #0F6CBD);\n  color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;\n}\n.orca-df-tools-fab { position: relative; }\n.orca-df-trash-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-trash-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-trash-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-trash-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-trash-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-trash-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-trash-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-trash-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-trash-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-trash-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-trash-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-trash-act.danger { color: var(--orca-color-danger, #c42b1c); border-color: color-mix(in srgb, var(--orca-color-danger, #c42b1c) 35%, transparent); }\n.orca-df-trash-foot { padding-top: 14px; display: flex; justify-content: flex-end; }\n.orca-df-archive-fab { position: relative; }\n.orca-df-archive-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-archive-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-archive-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-archive-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-archive-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-archive-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-archive-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-archive-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-archive-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-archive-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-archive-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-outline-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: stretch; justify-content: center;\n  background: rgba(0, 0, 0, 0.28);\n}\n.orca-df-outline-pop {\n  z-index: 2147483000; width: min(420px, 100vw); max-width: 100vw;\n  max-height: min(92vh, 900px); margin: auto 0;\n  display: flex; flex-direction: column;\n  background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-radius: 12px 12px 0 0;\n  box-shadow: var(--orca-shadow-modal, 0 24px 48px rgba(0,0,0,0.22));\n  overflow: hidden;\n}\n@media (min-width: 720px) {\n  .orca-df-outline-pop {\n    width: min(480px, calc(100vw - 48px)); max-height: 82vh; margin: auto;\n    border-radius: 12px;\n  }\n}\n.orca-df-outline-head {\n  display: flex; align-items: center; gap: 4px;\n  padding: 10px 12px 8px; font-size: 17px; font-weight: 600;\n  border-bottom: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-outline-back {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  width: 36px; height: 36px; border-radius: 10px;\n  display: inline-flex; align-items: center; justify-content: center;\n  color: var(--orca-color-text-1, #1c1c1e);\n}\n.orca-df-outline-back:hover { background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent); }\n.orca-df-outline-head-spacer { width: 36px; }\n.orca-df-outline-years { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 6px; }\n.orca-df-outline-year-row { display: flex; gap: 6px; }\n.orca-df-outline-year,\n.orca-df-outline-year-ph {\n  flex: 1 1 0; min-width: 0; height: 40px;\n}\n.orca-df-outline-year {\n  appearance: none; cursor: pointer;\n  border-radius: 10px; font-size: 13px; font-weight: 600;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-outline-year.is-on {\n  background: var(--df-brand, #007AFF);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n  color: #fff;\n}\n.orca-df-outline-hint {\n  padding: 6px 16px 8px; font-size: 12px;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-months {\n  flex: 1 1 auto; min-height: 120px; overflow: auto;\n  padding: 4px 16px 16px;\n  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start;\n}\n.orca-df-outline-month {\n  appearance: none; cursor: pointer; height: 40px; padding: 0 8px;\n  display: flex; align-items: center; gap: 6px; min-width: 0;\n  border-radius: 10px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n  font-size: 13px; font-weight: 600;\n}\n.orca-df-outline-month:hover {\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n}\n.orca-df-outline-cal { flex-shrink: 0; opacity: 0.95; }\n.orca-df-outline-month-label {\n  flex: 1 1 auto; min-width: 0;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;\n}\n.orca-df-outline-month-count {\n  flex-shrink: 0; font-size: 12px; font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-empty {\n  grid-column: 1 / -1; padding: 24px 8px; text-align: center;\n  color: var(--orca-color-text-3, #8e8e93); font-size: 14px; font-weight: 400;\n}\n.orca-df-scope .mom-calendar-content {\n  max-width: min(680px, 96vw) !important;\n}\n.orca-df-scope .mom-calendar-content:has(.mom-calendar-heat-wrap) {\n  width: min(680px, 96vw) !important;\n}\n.orca-df-scope .mom-calendar-heat-wrap {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n  padding: 8px 8px 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.orca-df-scope .mom-calendar-heat-half {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-bottom: 14px;\n  border-bottom: 1px solid color-mix(in srgb, var(--orca-color-border, rgba(0,0,0,0.08)) 80%, transparent);\n}\n.orca-df-scope .mom-calendar-heat-half:last-child {\n  border-bottom: none;\n  padding-bottom: 0;\n}\n.orca-df-scope .mom-calendar-heat-caption {\n  font-size: 13px;\n  font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .mom-calendar-heat-empty {\n  font-size: 14px;\n  color: var(--orca-color-text-3, #8e8e93);\n  padding: 16px 0;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n  width: 100%;\n  justify-content: space-between;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-column {\n  flex: 1 1 0;\n  min-width: 12px;\n  max-width: 18px;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-cell {\n  width: 100%;\n  min-width: 12px;\n  min-height: 12px;\n  aspect-ratio: 1;\n  border-radius: 4px;\n  background-color: #EBEDF0;\n  transition: transform .12s ease;\n  cursor: default;\n  box-shadow: none;\n}\n.orca-df-scope .mom-calendar-cell[data-date] { cursor: pointer; }\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-cell:hover {\n  transform: scale(1.18);\n  box-shadow: none;\n  outline: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  outline-offset: 0;\n  z-index: 1;\n}\n.orca-df-scope .mom-calendar-cell.level-empty {\n  background-color: transparent;\n  opacity: 0;\n  pointer-events: none;\n}\n.orca-df-scope .mom-calendar-cell.level-empty:hover {\n  transform: none;\n  outline: none;\n}\n.orca-df-scope .mom-calendar-cell.level-0 { background-color: #EBEDF0; }\n.orca-df-scope .mom-calendar-cell.level-1 { background-color: #B6E3FF; }\n.orca-df-scope .mom-calendar-cell.level-2 { background-color: #54AEFF; }\n.orca-df-scope .mom-calendar-cell.level-3 { background-color: #218BFF; }\n.orca-df-scope .mom-calendar-cell.level-4 { background-color: #0550AE; }\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-months {\n  position: relative;\n  margin-top: 6px;\n  height: 20px;\n  min-width: 0;\n  width: 100%;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 13px;\n  color: var(--orca-color-text-3, #8e8e93);\n  white-space: nowrap;\n}\n/* ---- Tools / stats / export / images / layout ---- */\n.orca-df-quickbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-quick-kw { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-scope .mom-fab-stack .orca-df-search-fab.is-on,\n.orca-df-scope .mom-fab-stack .orca-df-tools-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-layout-compact .mom-cover { height: clamp(110px, 16vh, 180px); }\n.orca-df-layout-compact .mom-list, .orca-df-layout-compact .north-luna-moments-list { padding-left: 12px; padding-right: 12px; }\n.orca-df-layout-tall .mom-cover { height: clamp(220px, 34vh, 380px); }\n.orca-df-tools-backdrop, .orca-df-images-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-tools-pop {\n  z-index: 2147483000; width: 440px; max-width: calc(100vw - 48px); max-height: 80vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-tools-wide { width: 560px; }\n.orca-df-tools-head {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-tools-head-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }\n.orca-df-tools-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-tools-body { overflow: auto; flex: 1 1 auto; min-height: 80px; display: flex; flex-direction: column; gap: 10px; }\n.orca-df-tools-muted { font-size: 13px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-tools-label { font-size: 13px; font-weight: 500; }\n.orca-df-tools-input {\n  width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: var(--orca-color-bg-2, #f5f5f7); color: inherit; font-size: 14px;\n}\n.orca-df-tools-tile {\n  appearance: none; text-align: left; cursor: pointer;\n  display: flex; flex-direction: column; gap: 4px;\n  padding: 12px 14px; border-radius: 10px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  background: var(--orca-color-bg-2, #f5f5f7); color: inherit;\n}\n.orca-df-tools-tile:hover { border-color: var(--df-brand, #007AFF); }\n.orca-df-tools-tile b { font-size: 15px; }\n.orca-df-tools-tile span { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-tools-btn {\n  appearance: none; cursor: pointer; text-align: left;\n  padding: 10px 14px; border-radius: 8px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; color: inherit; font-size: 14px;\n}\n.orca-df-tools-btn.primary, .orca-df-tools-btn.is-on {\n  background: var(--df-brand, #007AFF); color: #fff; border-color: transparent;\n}\n.orca-df-tools-mini {\n  appearance: none; cursor: pointer; padding: 4px 10px; border-radius: 6px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-tools-mini:disabled { opacity: 0.4; cursor: default; }\n.orca-df-tools-actions { display: flex; flex-wrap: wrap; gap: 8px; }\n.orca-df-tools-status { font-size: 13px; color: var(--orca-color-text-2, #636366); }\n.orca-df-tools-sec { margin-top: 8px; }\n.orca-df-tools-sec-t { font-weight: 600; margin-bottom: 6px; }\n.orca-df-tools-row {\n  display: flex; justify-content: space-between; gap: 12px;\n  padding: 6px 0; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-stats-grid {\n  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;\n}\n@media (max-width: 520px) { .orca-df-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }\n.orca-df-stats-card {\n  padding: 12px 10px; border-radius: 10px;\n  background: var(--orca-color-bg-2, #f5f5f7); text-align: center;\n}\n.orca-df-stats-n { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }\n.orca-df-stats-l { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); margin-top: 2px; }\n.orca-df-tools-entry {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 10px 0; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-tools-entry-main { min-width: 0; flex: 1; }\n.orca-df-tools-entry-t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.orca-df-img-list { display: flex; flex-direction: column; gap: 8px; }\n.orca-df-img-row { display: flex; align-items: center; gap: 10px; }\n.orca-df-img-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: #eee; flex-shrink: 0; }\n.orca-df-img-meta { flex: 1; min-width: 0; }\n.orca-df-img-acts { display: flex; gap: 4px; flex-shrink: 0; }\n.orca-df-img-progress { height: 4px; border-radius: 2px; background: var(--orca-color-bg-2, #eee); overflow: hidden; }\n.orca-df-img-progress-bar { height: 100%; background: var(--df-brand, #007AFF); transition: width .2s ease; }";
+var ORCA_CSS = "/* src/style.css */\n.mom-root {\n  position: relative;\n  height: 100%;\n  min-height: 0;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n  background: var(--b3-theme-background, #fff);\n  font-family: inherit;\n  color: var(--b3-theme-on-background, #222);\n}\n.mom-scroll {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-cover {\n  position: relative;\n  height: clamp(170px, 26vh, 300px);\n  flex-shrink: 0;\n  overflow: hidden;\n}\n.mom-cover-bg {\n  height: 100%;\n  position: relative;\n  overflow: hidden;\n}\n.mom-cover-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cover-default {\n  position: absolute;\n  inset: 0;\n  background:\n    linear-gradient(\n      150deg,\n      var(--b3-theme-primary, #4e6ef2) 0%,\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 45%, #0c0c20) 100%);\n}\n.mom-cover-shade {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  background:\n    linear-gradient(\n      180deg,\n      rgba(0, 0, 0, .06),\n      rgba(0, 0, 0, .4));\n}\n.mom-cover-stats {\n  position: absolute;\n  bottom: 24px;\n  right: 16px;\n  z-index: 10;\n  font-size: 13px;\n  color: #fff;\n  padding: 5px 12px;\n  border-radius: 999px;\n  background: rgba(0, 0, 0, .28);\n  backdrop-filter: blur(6px);\n  -webkit-backdrop-filter: blur(6px);\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .3);\n  white-space: nowrap;\n}\n.mom-cover-settings {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  width: 30px;\n  height: 30px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .28);\n  color: #fff;\n  cursor: pointer;\n  transition: background .18s ease, transform .15s ease;\n}\n.mom-cover-settings:hover {\n  background: rgba(255, 255, 255, .5);\n  transform: scale(1.05);\n}\n.mom-avatar-ph {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background:\n    linear-gradient(\n      135deg,\n      var(--b3-theme-primary, #4e6ef2),\n      color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 52%, #0c0c20));\n  color: #fff;\n  font-weight: 600;\n}\n.mom-filter-row {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-actions {\n  display: flex;\n  gap: 8px;\n}\n.mom-actions .mom-btn-primary {\n  margin-left: auto;\n}\n.mom-chip {\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 999px;\n  padding: 3px 10px;\n  font-size: 12px;\n  cursor: pointer;\n}\n.mom-chip.active {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-btn {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  border: 1px solid var(--b3-border-color, #ddd);\n  background: transparent;\n  color: var(--b3-theme-on-background, #333);\n  border-radius: 6px;\n  padding: 5px 12px;\n  font-size: 13px;\n  cursor: pointer;\n}\n.mom-btn:hover {\n  background: var(--b3-theme-background-light, #f2f2f2);\n}\n.mom-btn-primary {\n  background: var(--b3-theme-primary, #4e6ef2);\n  border-color: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n}\n.mom-btn-primary:hover {\n  opacity: .9;\n}\n.mom-btn-small {\n  padding: 3px 9px;\n  font-size: 12px;\n}\n.mom-btn-danger {\n  border-color: #e05050;\n  color: #e05050;\n}\n.mom-btn-danger:hover {\n  background: #fdecec;\n}\n.mom-signature {\n  background-color: var(--moments-signature-bg, #f7f7f7);\n  padding: 14px 16px 10px;\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  flex-wrap: wrap;\n  flex-shrink: 0;\n}\n.mom-signature-tools {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}\n.mom-cover-tool {\n  display: inline-flex !important;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  height: 30px;\n  padding: 0 12px;\n  border: none;\n  border-radius: 8px;\n  background: rgba(255, 255, 255, .78);\n  color: #333;\n  font-size: 12px;\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);\n  transition:\n    background .18s ease,\n    transform .15s ease,\n    box-shadow .18s ease;\n  box-sizing: border-box;\n}\n.mom-cover-tool:hover {\n  background: #fff;\n  transform: translateY(-1px);\n}\n.mom-cover-tool-danger:hover {\n  background: #ff6b6b;\n  color: #fff;\n}\n.mom-signature-text {\n  font-size: 13px;\n  color: var(--moments-signature-text, #888);\n  line-height: 1.5;\n  margin-left: auto;\n  max-width: 40%;\n  word-break: break-word;\n}\n.mom-pin-strip {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 10px 16px;\n  margin: 8px auto 0;\n  width: 73%;\n  box-sizing: border-box;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-strip-label {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  flex-shrink: 0;\n}\n.mom-pin-strip-thumbs {\n  display: flex;\n  gap: 12px;\n  overflow: hidden;\n  flex: 1;\n}\n.mom-pin-group {\n  display: grid;\n  gap: 2px;\n  padding: 0;\n  border: none;\n  background: none;\n  cursor: pointer;\n  flex-shrink: 0;\n}\n.mom-pin-group:hover {\n  opacity: .9;\n}\n.mom-pin-thumb {\n  position: relative;\n  overflow: hidden;\n  border-radius: 4px;\n}\n.mom-pin-thumb img {\n  width: 44px;\n  height: 44px;\n  object-fit: cover;\n  display: block;\n}\n.mom-pin-thumb-video,\n.mom-cal-thumb-video {\n  background: #000;\n}\n.mom-pin-thumb-single img {\n  width: 88px;\n  height: 88px;\n}\n.mom-pin-thumb-text {\n  width: 88px;\n  height: 88px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: color-mix(in srgb, var(--b3-theme-surface, #fff) 40%, transparent);\n}\n.mom-pin-text {\n  font-size: 12px;\n  color: var(--b3-theme-on-background, #333);\n  padding: 4px;\n  word-break: break-word;\n  line-height: 1.4;\n}\n.mom-pin-text-center {\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-pin-text-flow {\n  display: -webkit-box;\n  -webkit-line-clamp: 3;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n.mom-pin-thumb-more {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0, 0, 0, .45);\n  color: #fff;\n  font-size: 16px;\n  font-weight: 600;\n}\n.mom-list {\n  flex: 0 0 auto;\n  overflow: visible;\n  padding: 14px 0 90px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 12px;\n}\n.mom-filter-bar {\n  width: 73%;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-empty {\n  text-align: center;\n  color: #999;\n  margin: 72px auto 0;\n  font-size: 14px;\n  max-width: 240px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 6px;\n}\n.mom-empty-ico {\n  font-size: 40px;\n  line-height: 1;\n  margin-bottom: 6px;\n  opacity: .9;\n}\n.mom-empty-title {\n  font-size: 16px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  margin: 0;\n}\n.mom-empty-sub {\n  font-size: 13px;\n  color: #999;\n  margin: 0;\n}\n.mom-empty-btn {\n  margin-top: 14px;\n}\n.mom-empty-result {\n  margin-top: 72px;\n}\n.mom-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 8px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface, #fff) 30%, transparent);\n  border: 1px solid color-mix(in srgb, var(--moments-card-border, #ddd) 75%, transparent);\n  width: 73%;\n  box-sizing: border-box;\n}\n.mom-item:hover {\n  border-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 55%, transparent);\n}\n.mom-pin-badge {\n  position: absolute;\n  top: 8px;\n  left: 8px;\n  z-index: 3;\n  display: flex;\n  align-items: center;\n  color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-item-avatar {\n  width: 48px;\n  height: 48px;\n  border-radius: 6px;\n  object-fit: cover;\n  flex-shrink: 0;\n  margin-right: 12px;\n  background-color: var(--moments-border, #ddd);\n}\n.mom-item-avatar.mom-avatar-ph {\n  font-size: 20px;\n}\n.mom-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.mom-item-name {\n  font-size: 16px;\n  color: var(--b3-theme-on-background, #333);\n  font-weight: 600;\n  line-height: 1.4;\n  margin-bottom: 4px;\n}\n.mom-item-text {\n  font-size: 14px;\n  color: var(--b3-theme-on-background, #333);\n  line-height: 1.8;\n  margin-bottom: 6px;\n  word-break: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n}\n.mom-no-text {\n  color: #bbb;\n  font-size: 13px;\n}\n.mom-long-toggle {\n  font-size: 12px;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background: none;\n  border: none;\n  cursor: pointer;\n  padding: 0;\n  margin-top: 2px;\n}\n.mom-card-imgs {\n  display: grid;\n  gap: 4px;\n  margin-top: 10px;\n}\n.mom-grid-1 {\n  grid-template-columns: 1fr;\n  max-width: 320px;\n}\n.mom-grid-2 {\n  grid-template-columns: 1fr 1fr;\n}\n.mom-grid-3 {\n  grid-template-columns: 1fr 1fr 1fr;\n}\n.mom-img-cell {\n  position: relative;\n  overflow: hidden;\n  border-radius: 6px;\n  aspect-ratio: 1;\n  background: #f0f0f0;\n}\n.mom-img-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  cursor: zoom-in;\n  display: block;\n}\n.mom-card-link {\n  margin-top: 10px;\n}\n.mom-card-link a {\n  color: var(--b3-theme-primary, #4e6ef2);\n  text-decoration: none;\n  font-size: 13px;\n}\n.mom-card-link a:hover {\n  text-decoration: underline;\n}\n.mom-bottom-space {\n  height: 90px;\n  flex-shrink: 0;\n}\n.mom-fab-stack {\n  position: absolute;\n  z-index: 40;\n  right: 16px;\n  bottom: 48px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  margin: 0;\n  padding-right: 0;\n  flex: none;\n  pointer-events: none;\n}\n.mom-outline-fab {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 44px;\n  height: 44px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  cursor: pointer;\n  color: var(--b3-theme-on-background, #333);\n  background: var(--b3-theme-surface, #fff);\n  border: 1px solid var(--b3-border-color, #ddd);\n  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);\n  transition: transform .15s ease, box-shadow .15s ease;\n  flex: none;\n  pointer-events: auto;\n}\n.mom-outline-fab:hover {\n  transform: translateY(-1px);\n  box-shadow: 0 6px 18px rgba(0, 0, 0, .24);\n}\n.mom-fab-stack.is-mobile {\n  position: absolute;\n  right: 16px;\n  bottom: 80px;\n  left: auto;\n  margin: 0;\n}\n.mom-outline-fab.is-mobile {\n  transform: none;\n}\n.mom-lightbox {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .85);\n  z-index: 1002;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: zoom-out;\n}\n.mom-lightbox-img {\n  max-width: 92%;\n  max-height: 88vh;\n  border-radius: 6px;\n  object-fit: contain;\n}\n.mom-lightbox-close {\n  position: absolute;\n  top: 16px;\n  right: 16px;\n  z-index: 2;\n  width: 36px;\n  height: 36px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 22px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-lightbox-close:hover {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav {\n  position: absolute;\n  top: 50%;\n  transform: translateY(-50%);\n  z-index: 2;\n  width: 44px;\n  height: 44px;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .15);\n  color: #fff;\n  font-size: 28px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.mom-lightbox-nav:hover:not(:disabled) {\n  background: rgba(255, 255, 255, .28);\n}\n.mom-lightbox-nav:disabled {\n  opacity: .25;\n  cursor: default;\n}\n.mom-lightbox-prev {\n  left: 12px;\n}\n.mom-lightbox-next {\n  right: 12px;\n}\n.mom-lightbox-dots {\n  position: absolute;\n  bottom: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  gap: 8px;\n  z-index: 2;\n}\n.mom-lightbox-dot {\n  width: 8px;\n  height: 8px;\n  padding: 0;\n  border: none;\n  border-radius: 50%;\n  background: rgba(255, 255, 255, .35);\n  cursor: pointer;\n}\n.mom-lightbox-dot.active {\n  background: #fff;\n  transform: scale(1.15);\n}\n.mom-lightbox-counter {\n  position: absolute;\n  top: 20px;\n  left: 50%;\n  transform: translateX(-50%);\n  color: rgba(255, 255, 255, .85);\n  font-size: 13px;\n  z-index: 2;\n  pointer-events: none;\n}\n.mom-confirm-msg {\n  margin: 0;\n  font-size: 14px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background);\n  white-space: pre-wrap;\n}\n.north-luna-moments-item-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 10px;\n}\n.north-luna-moments-item-header .mom-avatar {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  object-fit: cover;\n  flex-shrink: 0;\n}\n.north-luna-moments-item-header .mom-avatar-ph {\n  width: 40px;\n  height: 40px;\n  border-radius: 8px;\n  font-size: 16px;\n}\n.north-luna-moments-item-name {\n  font-size: 15px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  line-height: 1.3;\n}\n.mom-lightbox[hidden] {\n  display: none;\n}\n.mom-lightbox img {\n  max-width: 92%;\n  max-height: 92%;\n  border-radius: 6px;\n}\n.mom-overlay {\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, .4);\n  z-index: 2147483000;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-sizing: border-box;\n  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));\n}\n.mom-modal {\n  background: var(--b3-theme-background, #fff);\n  border-radius: 12px;\n  width: min(560px, 92vw);\n  max-height: 86vh;\n  display: flex;\n  flex-direction: column;\n  box-shadow: 0 10px 40px rgba(0, 0, 0, .3);\n}\n.mom-modal-sm {\n  width: min(340px, 90vw);\n}\n.mom-overlay.mom-settings .mom-modal {\n  width: min(320px, 92vw);\n  font-size: 16px;\n}\n.mom-overlay.mom-settings .mom-field {\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-modal-head {\n  font-size: 17px;\n}\n.mom-overlay.mom-settings .mom-modal-head .mom-modal-x {\n  font-size: 18px;\n}\n.mom-overlay.mom-settings .mom-inp {\n  width: 240px;\n  font-size: 15px;\n}\n.mom-overlay.mom-settings .mom-hint {\n  font-size: 13px;\n}\n.mom-overlay.mom-settings label.mom-btn:has(> input[type=\"file\"]) {\n  width: 240px;\n}\n/* ===== 日历弹窗（复刻 siyuan-moments）===== */\n.mom-overlay.mom-calendar {\n  background: rgba(0, 0, 0, .5);\n}\n.mom-calendar-modal {\n  display: contents;\n}\n.mom-calendar-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483000;\n  touch-action: none;\n}\n.mom-calendar-content {\n  position: relative;\n  background: var(--b3-theme-background);\n  border-radius: 12px;\n  width: auto;\n  max-width: 1200px;\n  min-width: 0;\n  max-height: 60vh;\n  overflow: hidden;\n  z-index: 2147483001;\n  box-shadow: 0 4px 24px rgba(0, 0, 0, .3);\n  display: flex;\n  flex-direction: column;\n  transition: box-shadow .2s ease, transform .2s ease;\n  touch-action: pan-y;\n  overscroll-behavior: contain;\n}\n.mom-calendar-content.dragging {\n  transition: none;\n  cursor: grabbing;\n}\n.mom-calendar-header {\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid color-mix(in srgb, var(--b3-border-color) 35%, transparent);\n  flex-shrink: 0;\n  cursor: move;\n  user-select: none;\n}\n.mom-calendar-title {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: 1;\n  min-width: 0;\n  white-space: nowrap;\n  overflow: hidden;\n}\n.mom-calendar-title > span:first-child {\n  font-size: 15px;\n  font-weight: 600;\n}\n.mom-calendar-year {\n  font-size: 13px;\n  color: var(--b3-theme-primary);\n  background: transparent;\n  border: none;\n  outline: none;\n  cursor: pointer;\n  padding: 2px 4px;\n  font-family: inherit;\n  -webkit-appearance: none;\n  -moz-appearance: none;\n  appearance: none;\n  flex-shrink: 0;\n}\n.mom-calendar-modes {\n  display: inline-flex;\n  gap: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-mode {\n  border: 1px solid var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface);\n  font-size: 12px;\n  padding: 2px 9px;\n  border-radius: 999px;\n  cursor: pointer;\n  line-height: 1.4;\n}\n.mom-calendar-mode.on {\n  background: var(--b3-theme-primary);\n  border-color: var(--b3-theme-primary);\n  color: #fff;\n}\n.mom-calendar-count {\n  font-size: 12px;\n  color: var(--b3-theme-primary);\n  margin-left: 2px;\n  flex-shrink: 0;\n}\n.mom-calendar-close {\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  font-size: 20px;\n  color: var(--b3-theme-on-surface);\n  border-radius: 4px;\n  flex-shrink: 0;\n}\n.mom-calendar-close:hover {\n  background-color: var(--b3-list-hover);\n}\n.mom-calendar-body {\n  padding: 16px;\n  overflow: auto;\n}\n.mom-calendar-grid {\n  width: 100%;\n  display: block;\n}\n.mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n}\n.mom-calendar-column {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.mom-calendar-cell {\n  width: 100%;\n  min-width: 10px;\n  aspect-ratio: 1;\n  border-radius: 3px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  transition: all .15s;\n  cursor: pointer;\n}\n.mom-calendar-cell:hover {\n  transform: scale(1.2);\n  box-shadow: 0 0 0 1px var(--b3-theme-primary);\n}\n.mom-calendar-cell.level-empty {\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 40%, transparent);\n  opacity: .5;\n}\n.mom-calendar-cell.level-empty:hover {\n  transform: none;\n  box-shadow: none;\n}\n.mom-calendar-cell.level-1 { background-color: var(--b3-theme-primary-lightest); }\n.mom-calendar-cell.level-2 { background-color: var(--b3-theme-primary-lighter); }\n.mom-calendar-cell.level-3 { background-color: var(--b3-theme-primary-light); }\n.mom-calendar-cell.level-4 { background-color: var(--b3-theme-primary); }\n.mom-calendar-months {\n  position: relative;\n  margin-top: 8px;\n  height: 18px;\n  min-width: max-content;\n}\n.mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.mom-calendar-photo-twocol {\n  display: flex;\n  flex-direction: column;\n  gap: 18px;\n}\n.mom-calendar-photo-month-title {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  margin: 4px 0 8px 4px;\n}\n.mom-calendar-photo-grid {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-calendar-photo-row {\n  display: grid;\n  grid-template-columns: repeat(7, minmax(32px, 44px));\n  gap: 6px;\n}\n.mom-calendar-photo-cell {\n  position: relative;\n  aspect-ratio: 1;\n  width: 100%;\n  min-width: 32px;\n  max-width: 44px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface-lighter) 5%, transparent);\n  border-radius: 6px;\n  border: 1px solid color-mix(in srgb, var(--b3-border-color) 20%, transparent);\n  cursor: default;\n  overflow: hidden;\n  transition: transform .15s ease, box-shadow .15s ease;\n}\n.mom-calendar-photo-cell.has-photo {\n  cursor: pointer;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);\n}\n.mom-calendar-photo-cell.has-photo:hover,\n.mom-calendar-photo-cell.has-record:hover {\n  transform: scale(1.05);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .15);\n  z-index: 1;\n}\n.mom-calendar-photo-cell.empty {\n  background-color: transparent;\n  border: 0;\n}\n.mom-calendar-photo-cell.has-record {\n  cursor: pointer;\n}\n.mom-calendar-photo-dot {\n  position: absolute;\n  right: 5px;\n  bottom: 5px;\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  background: var(--b3-theme-primary);\n  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b3-theme-background) 60%, transparent);\n  z-index: 2;\n}\n.mom-calendar-photo-num {\n  position: absolute;\n  top: 4px;\n  left: 6px;\n  font-size: 11px;\n  color: var(--b3-theme-on-surface);\n  opacity: .85;\n  background: color-mix(in srgb, var(--b3-theme-background) 65%, transparent);\n  padding: 1px 5px;\n  border-radius: 3px;\n  line-height: 1.3;\n  z-index: 1;\n}\n.mom-calendar-photo-cell.has-photo .mom-calendar-photo-num {\n  color: #fff;\n  background: rgba(0, 0, 0, .45);\n  opacity: 1;\n}\n.mom-calendar-photo-img {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  z-index: 0;\n  background: var(--b3-theme-surface);\n}\n.mom-modal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 12px 16px;\n  border-bottom: 1px solid var(--b3-border-color, #eee);\n  font-weight: 600;\n}\n.mom-modal-x {\n  border: none;\n  background: none;\n  font-size: 16px;\n  cursor: pointer;\n  color: #888;\n}\n.mom-modal-body {\n  padding: 14px 16px;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.mom-modal-foot {\n  display: flex;\n  justify-content: flex-end;\n  gap: 8px;\n  padding: 10px 16px;\n  border-top: 1px solid var(--b3-border-color, #eee);\n}\n.mom-editor-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-inp {\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 6px;\n  padding: 6px 9px;\n  font-size: 13px;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-inp-inline {\n  width: 100px;\n}\n.mom-textarea {\n  min-height: 120px;\n  width: 100%;\n  border: 1px solid var(--b3-border-color, #ddd);\n  border-radius: 8px;\n  padding: 10px;\n  font-size: 14px;\n  font-family: inherit;\n  resize: vertical;\n  background: var(--b3-theme-background, #fff);\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-img-previews {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-img-prev {\n  position: relative;\n  width: 64px;\n  height: 64px;\n}\n.mom-img-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  border-radius: 6px;\n}\n.mom-img-prev-x {\n  position: absolute;\n  top: -6px;\n  right: -6px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  border: none;\n  background: #333;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n}\n.mom-picked {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-picked-chip {\n  cursor: pointer;\n}\n.mom-pick-panel {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n.mom-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  font-size: 13px;\n}\n.mom-field-col {\n  align-items: flex-start;\n}\n.mom-field .mom-inp {\n  width: 100%;\n}\n.mom-hint {\n  font-size: 11px;\n  color: #999;\n}\n.mom-divider {\n  height: 1px;\n  background: var(--b3-border-color, #eee);\n}\n.mom-btn-row {\n  display: flex;\n  gap: 8px;\n  flex-wrap: wrap;\n}\n.mom-view-switch {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-cal-head {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.mom-cal-nav {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.mom-cal-year {\n  font-size: 14px;\n  font-weight: 600;\n  min-width: 64px;\n  text-align: center;\n}\n.mom-cal-modes {\n  display: flex;\n  gap: 6px;\n}\n.mom-cal-months {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.mom-cal-month {\n  background: var(--b3-theme-background, #fff);\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 10px;\n  padding: 10px;\n}\n.mom-cal-month-t {\n  margin: 0 0 8px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n}\n.mom-cal-grid {\n  display: grid;\n  grid-template-columns: repeat(7, 1fr);\n  gap: 4px;\n}\n.mom-cal-dow {\n  text-align: center;\n  font-size: 11px;\n  color: #aaa;\n  padding: 2px 0;\n}\n.mom-cal-blank {\n  aspect-ratio: 1;\n}\n.mom-cal-cell {\n  position: relative;\n  aspect-ratio: 1;\n  border-radius: 6px;\n  border: 1px solid transparent;\n  background: var(--b3-theme-background-light, #f4f4f4);\n  overflow: hidden;\n  cursor: pointer;\n  padding: 0;\n}\n.mom-cal-cell.has {\n  border-color: var(--b3-border-color, #ddd);\n}\n.mom-cal-cell:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell.is-today {\n  box-shadow: inset 0 0 0 2px var(--b3-theme-primary, #4e6ef2);\n}\n.mom-cal-cell img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-cal-daynum {\n  position: absolute;\n  left: 3px;\n  top: 3px;\n  font-size: 10px;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);\n}\n.mom-cal-heatline {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 11px;\n  font-weight: 600;\n}\n.mom-cal-ph-cnt {\n  width: 100%;\n  height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: var(--b3-theme-primary, #4e6ef2);\n  color: #fff;\n  font-size: 13px;\n  font-weight: 600;\n}\n.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n@keyframes mom-flash {\n  0% {\n    box-shadow: 0 0 0 3px var(--b3-theme-primary, #4e6ef2);\n  }\n  100% {\n    box-shadow: 0 0 0 0 rgba(78, 110, 242, 0);\n  }\n}\n.mom-lock {\n  position: relative;\n  min-height: 100%;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  overflow: hidden;\n}\n.mom-lock-bg {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n.mom-lock-bg--glass {\n  background:\n    linear-gradient(\n      180deg,\n      #fafafa,\n      #f0f0f0);\n}\n.mom-lock-panel {\n  position: relative;\n  z-index: 1;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  width: 100%;\n  height: 100%;\n  padding: 28px 26px;\n  background: transparent;\n}\n.mom-lock-top {\n  text-align: center;\n  color: #000;\n  width: 100%;\n  padding-bottom: 18px;\n  margin-bottom: 18px;\n  border-bottom: 1px solid #f0f0f0;\n}\n.mom-lock-date {\n  font-size: 12px;\n  letter-spacing: 2px;\n  color: #999;\n  text-transform: uppercase;\n}\n.mom-lock-time {\n  font-size: 44px;\n  font-weight: 200;\n  letter-spacing: 2px;\n  margin-top: 6px;\n  font-variant-numeric: tabular-nums;\n  color: #111;\n}\n.mom-lock-bottom {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  width: 100%;\n  gap: 10px;\n}\n.mom-lock-avatar {\n  width: 60px;\n  height: 60px;\n  border-radius: 50%;\n  font-size: 26px;\n}\n.mom-lock-name {\n  color: #111;\n  font-size: 14px;\n  font-weight: 600;\n}\n.mom-lock-input {\n  width: 50%;\n  border: 1px solid #e5e5e5;\n  border-radius: 10px;\n  padding: 10px 12px;\n  background: #f7f7f7;\n  color: #000;\n  font-size: 14px;\n  outline: none;\n  transition: border-color .18s ease, background .18s ease;\n}\n.mom-lock-input:focus {\n  border-color: #bbb;\n  background: #fff;\n}\n.mom-lock-input::placeholder {\n  color: #b0b0b0;\n}\n.mom-lock .mom-btn-primary {\n  width: 100%;\n  justify-content: center;\n  padding: 10px 12px;\n  border-radius: 10px;\n}\n.mom-lock-error {\n  color: #ff6b6b;\n  font-size: 12px;\n  margin: 0;\n}\n.mom-lock-hint {\n  color: #aaa;\n  font-size: 12px;\n  margin-top: 2px;\n}\n.mom-lock.shake {\n  animation: mom-shake .4s ease;\n}\n@keyframes mom-shake {\n  0%, 100% {\n    transform: translateX(0);\n  }\n  25% {\n    transform: translateX(-6px);\n  }\n  75% {\n    transform: translateX(6px);\n  }\n}\n.mom-switch {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  cursor: pointer;\n  font-size: 13px;\n}\n.mom-switch input {\n  display: none;\n}\n.mom-switch i {\n  width: 40px;\n  height: 22px;\n  border-radius: 999px;\n  background: #ccc;\n  position: relative;\n  transition: background .2s;\n}\n.mom-switch i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px;\n  left: 2px;\n  width: 18px;\n  height: 18px;\n  border-radius: 50%;\n  background: #fff;\n  transition: transform .2s;\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);\n}\n.mom-switch input:checked + i {\n  background: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-switch input:checked + i::after {\n  transform: translateX(18px);\n}\n.mom-switch-lab {\n  cursor: pointer;\n}\n.mom-md-toolbar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  align-items: center;\n}\n.mom-link-card {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n.mom-inline-code {\n  background: var(--b3-theme-background-light, #f2f2f2);\n  border-radius: 4px;\n  padding: 1px 5px;\n  font-size: 13px;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.mom-mark {\n  background: #ffe08a;\n  color: inherit;\n  padding: 0 2px;\n  border-radius: 3px;\n}\n.mom-card-text em {\n  font-style: italic;\n}\n.mom-publish-page {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background-color: var(--b3-theme-background, #fff);\n  z-index: 30;\n  overflow: hidden;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-page[hidden] {\n  display: none;\n}\n.mom-publish {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  min-height: 0;\n}\n.mom-publish-nav {\n  position: relative;\n  flex: 0 0 auto;\n  height: 44px;\n  background-color: var(--b3-theme-background, #fff);\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 16px;\n  border-bottom: 0.5px solid var(--moments-nav-border, #eee);\n}\n.mom-publish-back {\n  width: 24px;\n  height: 24px;\n  border: none;\n  background: transparent;\n  position: relative;\n  cursor: pointer;\n  padding: 0;\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n}\n.mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background, #333);\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n}\n.mom-publish-submit {\n  font-size: 15px;\n  font-weight: 500;\n  color: var(--b3-theme-primary, #4e6ef2);\n  background-color: color-mix(in srgb, var(--b3-theme-primary, #4e6ef2) 10%, transparent);\n  padding: 6px 16px;\n  border-radius: 4px;\n  border: none;\n  cursor: pointer;\n}\n.mom-publish-content {\n  padding: 12px;\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n}\n.mom-publish-card {\n  background: var(--b3-theme-background-light, #f7f7f7);\n  border: 1px solid color-mix(in srgb, var(--b3-border-color, #ddd) 45%, transparent);\n  border-radius: 12px;\n  padding: 14px;\n  box-sizing: border-box;\n}\n.mom-publish-card--editor {\n  flex: 0 0 auto;\n  display: flex;\n  flex-direction: column;\n}\n.mom-publish-card--editor:focus-within {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-publish-textarea {\n  width: 100%;\n  min-height: 90px;\n  max-height: 40vh;\n  border: none;\n  outline: none;\n  font-size: 16px;\n  line-height: 1.6;\n  color: var(--b3-theme-on-background, #333);\n  resize: vertical;\n  overflow-y: auto;\n  font-family: inherit;\n  background: transparent;\n}\n.mom-publish-textarea::placeholder {\n  color: #aaa;\n}\n.mom-publish-imgcard {\n  display: flex;\n  align-items: flex-start;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.mom-publish-grid-add,\n.mom-publish-grid-prev {\n  width: 56px;\n  height: 56px;\n  border: 1px dashed #ccc;\n  border-radius: 8px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  box-sizing: border-box;\n  background: transparent;\n  font-size: 22px;\n  color: #999;\n  flex: none;\n}\n.mom-publish-grid-prev {\n  border-style: solid;\n  border-color: #eee;\n}\n.mom-publish-grid-prev img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.mom-publish-grid-prev-video {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.mom-publish-prev-media {\n  position: absolute;\n  inset: 0;\n}\n.mom-publish-prev-play {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  font-size: 18px;\n  pointer-events: none;\n  text-shadow: 0 1px 3px rgba(0, 0, 0, .6);\n}\n.mom-publish-grid-x {\n  position: absolute;\n  top: 3px;\n  right: 3px;\n  width: 18px;\n  height: 18px;\n  background-color: #FA5151;\n  border-radius: 50%;\n  border: none;\n  color: #fff;\n  font-size: 11px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 10;\n  padding: 0;\n}\n.mom-publish-inp {\n  flex: none;\n  width: 100%;\n  height: 30px;\n  border: 0.5px solid color-mix(in srgb, var(--b3-border-color, #ddd) 70%, transparent);\n  border-radius: 8px;\n  padding: 0 8px;\n  font-size: 13px;\n  color: var(--b3-theme-on-background, #333);\n  background: color-mix(in srgb, var(--b3-theme-background, #fff) 55%, transparent);\n  outline: none;\n  font-family: inherit;\n  box-sizing: border-box;\n}\n.mom-publish-info {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n.mom-publish-info .mom-publish-inp[type=date] {\n  flex: 1;\n  min-width: 0;\n}\n.mom-publish-info .mom-publish-inp[data-location] {\n  flex: 2;\n  min-width: 0;\n}\n.mom-picker-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));\n  gap: 6px;\n  max-height: 60vh;\n  overflow-y: auto;\n  padding: 2px;\n}\n.mom-picker-item {\n  width: 100%;\n  aspect-ratio: 1;\n  border: 1px solid var(--b3-border-color, #eee);\n  border-radius: 6px;\n  background-size: cover;\n  background-position: center;\n  background-color: var(--b3-theme-background-light, #f4f4f4);\n  cursor: pointer;\n  padding: 0;\n  box-sizing: border-box;\n}\n.mom-picker-item:hover {\n  border-color: var(--b3-theme-primary, #4e6ef2);\n}\n.mom-list {\n  --moments-text: var(--b3-theme-on-background);\n  --moments-text-secondary: var(--b3-theme-on-surface);\n  --moments-border: var(--b3-border-color);\n  --moments-card-border: var(--b3-border-color);\n  --moments-name-color: var(--b3-theme-on-background);\n  --moments-close-color: var(--b3-theme-on-surface-light);\n  --moments-link-card-bg: var(--b3-theme-surface);\n  --moments-interaction-bg: var(--b3-theme-surface);\n  --moments-action-popup-bg: var(--b3-theme-surface);\n  --moments-action-popup-text: var(--b3-theme-on-background);\n  --moments-action-popup-border: var(--b3-border-color);\n  --moments-action-popup-active-bg: var(--b3-list-hover);\n}\n.north-luna-moments-item {\n  content-visibility: auto;\n  contain-intrinsic-size: auto 250px;\n  display: flex;\n  position: relative;\n  border-radius: 14px;\n  padding: 16px;\n  background-color: color-mix(in srgb, var(--b3-theme-surface) 45%, transparent);\n  width: calc(100% - 6%);\n  margin: 0 auto;\n  box-sizing: border-box;\n  border: 1px solid color-mix(in srgb, var(--b3-theme-on-background) 6%, transparent);\n  box-shadow: 0 1px 3px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .05);\n  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;\n}\n.north-luna-moments-item:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 12px rgba(0, 0, 0, .07), 0 12px 28px rgba(0, 0, 0, .10);\n  border-color: color-mix(in srgb, var(--b3-theme-on-background) 10%, transparent);\n}\n.north-luna-moments-item.popup-open {\n  z-index: 8;\n}\n.north-luna-moments-item-content {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-item-text {\n  font-size: 18px;\n  color: var(--moments-text);\n  line-height: 1.75;\n  margin-bottom: 6px;\n  word-wrap: break-word;\n  white-space: pre-wrap;\n  user-select: text;\n  -webkit-user-select: text;\n  overflow: hidden;\n}\n.north-luna-moments-no-text {\n  color: var(--moments-close-color);\n  font-size: 13px;\n}\n.north-luna-moments-item-text.moments-folded {\n  max-height: calc(var(--moments-fold-line-h, 32px) * var(--moments-fold-lines, 6));\n  -webkit-mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  mask-image:\n    linear-gradient(\n      to bottom,\n      black calc(100% - 36px),\n      transparent 100%);\n  -webkit-mask-size: 100% 100%;\n  mask-size: 100% 100%;\n  -webkit-mask-repeat: no-repeat;\n  mask-repeat: no-repeat;\n}\n.north-luna-moments-item.moments-expanded .north-luna-moments-item-text.moments-folded {\n  max-height: none;\n  -webkit-mask-image: none;\n  mask-image: none;\n}\n.north-luna-moments-expand {\n  display: none;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 2px;\n  margin-top: 4px;\n  margin-bottom: 10px;\n  color: var(--b3-theme-on-surface-light);\n  font-size: 13px;\n  cursor: pointer;\n  user-select: none;\n  -webkit-user-select: none;\n  transition: color 0.2s;\n}\n.north-luna-moments-expand:hover {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-item.moments-has-fold .north-luna-moments-expand {\n  display: flex;\n}\n.north-luna-moments-expand .moments-expand-icon {\n  width: 14px;\n  height: 14px;\n}\n.north-luna-moments-item-text code,\n.north-luna-moments-item-text .mom-inline-code {\n  color: var(--b3-theme-primary);\n  background-color: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent);\n  padding: 2px 4px;\n  border-radius: 7px;\n  font-size: 0.9em;\n  font-family: var(--b3-font-family-code, monospace);\n}\n.north-luna-moments-item-text mark {\n  background-color: #ffe08a;\n  padding: 0 2px;\n  border-radius: 2px;\n}\n.north-luna-moments-item-text strong {\n  font-weight: 600;\n}\n.north-luna-moments-media {\n  margin-bottom: 8px;\n}\n.north-luna-moments-video {\n  width: 100%;\n  max-height: 420px;\n  border-radius: 8px;\n  background: #000;\n  display: block;\n}\n.north-luna-moments-grid-cel {\n  position: relative;\n  display: block;\n  cursor: pointer;\n  overflow: hidden;\n  border-radius: 8px;\n}\n.north-luna-moments-grid-video-el {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  background: #000;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-video-el {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: 100%;\n}\n.north-luna-moments-grid-play {\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: 42px;\n  height: 42px;\n  border-radius: 50%;\n  background: rgba(0, 0, 0, .55);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #fff;\n  pointer-events: none;\n}\n.north-luna-moments-grid-play svg {\n  width: 22px;\n  height: 22px;\n}\n.mom-lightbox video {\n  max-width: 92vw;\n  max-height: 80vh;\n  border-radius: 8px;\n  background: #000;\n}\n.north-luna-moments-image-grid {\n  display: grid;\n  gap: 4px;\n}\n.north-luna-moments-image-grid.single {\n  grid-template-columns: 1fr;\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.double {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.triple {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.four {\n  grid-template-columns: repeat(2, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-img {\n  width: 100%;\n  aspect-ratio: 1;\n  object-fit: cover;\n  display: block;\n  cursor: zoom-in;\n  background: var(--b3-theme-surface);\n  transition: transform 0.3s ease;\n  border-radius: 8px;\n}\n.north-luna-moments-image-grid.single .north-luna-moments-grid-img {\n  aspect-ratio: auto;\n  max-height: 280px;\n  width: auto;\n  max-width: 100%;\n  border-radius: 6px;\n}\n.north-luna-moments-link-card {\n  display: flex;\n  align-items: center;\n  background-color: var(--moments-link-card-bg);\n  padding: 8px;\n  border-radius: 4px;\n  margin-bottom: 8px;\n  max-width: 220px;\n}\n.north-luna-moments-link-thumb {\n  width: 40px;\n  height: 40px;\n  border-radius: 4px;\n  object-fit: cover;\n  margin-right: 8px;\n  flex-shrink: 0;\n  background-color: #e0e0e0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.north-luna-moments-link-info {\n  flex: 1;\n  min-width: 0;\n}\n.north-luna-moments-link-title {\n  font-size: 13px;\n  color: var(--moments-text);\n  line-height: 1.4;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n}\n.north-luna-moments-link-url {\n  font-size: 11px;\n  color: var(--moments-close-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.north-luna-moments-item-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-top: 10px;\n  gap: 8px;\n  flex-wrap: nowrap;\n}\n.north-luna-moments-meta-tags {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 0;\n  flex: 1;\n  min-width: 0;\n  overflow: hidden;\n}\n.north-luna-moments-meta-item {\n  display: inline-flex;\n  align-items: center;\n  gap: 2px;\n  font-size: 12px;\n  color: var(--moments-text-secondary);\n  white-space: nowrap;\n  flex-shrink: 0;\n  line-height: 1.5;\n}\n.north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  content: \"\\b7\";\n  margin: 0 7px;\n  color: var(--moments-text-secondary);\n  opacity: 0.4;\n  font-weight: bold;\n}\n.north-luna-moments-item-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 12px;\n  position: relative;\n  margin-top: 6px;\n}\n.north-luna-moments-liked-indicator {\n  display: inline-flex;\n  align-items: center;\n  flex-shrink: 0;\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-liked-indicator svg {\n  display: block;\n}\n@keyframes moments-like-pop {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.3);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n.north-luna-moments-pin-badge {\n  position: absolute;\n  top: 12px;\n  right: 12px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--b3-theme-primary);\n  opacity: 0.6;\n  pointer-events: none;\n}\n.north-luna-moments-more-btn {\n  width: 28px;\n  height: 24px;\n  background-color: transparent;\n  border: none;\n  border-radius: 6px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  position: relative;\n  opacity: 0;\n  transition: opacity 0.2s ease, background-color 0.2s ease;\n}\n.north-luna-moments-item:hover .north-luna-moments-more-btn {\n  opacity: 1;\n}\n.north-luna-moments-more-btn:hover {\n  background-color: var(--moments-interaction-bg);\n}\n.north-luna-moments-more-btn::before {\n  content: \"\\22ef\";\n  font-size: 14px;\n  line-height: 1;\n  color: var(--moments-close-color);\n  letter-spacing: 1px;\n}\n.north-luna-moments-action-popup {\n  position: absolute;\n  right: 40px;\n  top: 50%;\n  transform: translateY(-50%);\n  background-color: var(--moments-action-popup-bg);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 8px;\n  padding: 4px;\n  display: none;\n  flex-direction: column;\n  gap: 2px;\n  z-index: 10;\n  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);\n}\n.north-luna-moments-action-popup[data-mid] {\n  display: none;\n}\n.north-luna-moments-item.popup-open .north-luna-moments-action-popup {\n  display: flex;\n}\n.north-luna-moments-action-popup-row {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 2px;\n}\n.north-luna-moments-action-popup-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  padding: 6px 10px;\n  font-size: 13px;\n  color: var(--moments-action-popup-text);\n  white-space: nowrap;\n  cursor: pointer;\n  border-radius: 6px;\n}\n.north-luna-moments-action-popup-btn:hover {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn:active {\n  background-color: var(--moments-action-popup-active-bg);\n}\n.north-luna-moments-action-popup-btn.like-btn.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-popup-btn.like-btn.liked svg {\n  animation: moments-like-pop 0.3s ease;\n}\n.north-luna-moments-comment-panel {\n  margin-top: 8px;\n  padding: 8px 0 0;\n  animation: moments-likes-fade-in 0.2s ease;\n}\n.north-luna-moments-comment-panel:has(.north-luna-moments-comment-item) {\n  border-top: 1px solid rgba(128, 128, 128, 0.08);\n}\n.north-luna-moments-comment-item {\n  padding: 4px 0;\n  font-size: 13px;\n  line-height: 1.5;\n}\n.north-luna-moments-comment-display {\n  display: block;\n}\n.north-luna-moments-comment-text {\n  color: var(--b3-theme-on-surface);\n  word-break: break-all;\n  user-select: text;\n}\n.north-luna-moments-comment-text strong {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n}\n.north-luna-moments-comment-actions {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-top: 4px;\n}\n.north-luna-moments-comment-actions-right {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-comment-time {\n  font-size: 11px;\n  color: var(--b3-theme-on-surface-light);\n  white-space: nowrap;\n}\n.north-luna-moments-comment-del {\n  display: inline-flex;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  opacity: 0;\n  padding: 2px;\n  transition: opacity 0.15s;\n}\n.north-luna-moments-comment-item:hover .north-luna-moments-comment-del {\n  opacity: 1;\n}\n.north-luna-moments-comment-del:hover {\n  color: var(--b3-theme-on-surface);\n}\n.north-luna-moments-comment-input-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-top: 8px;\n  padding-top: 6px;\n}\n.north-luna-moments-comment-input {\n  flex: 1;\n  border: none;\n  outline: none;\n  background: var(--b3-theme-surface);\n  border-radius: 7px;\n  padding: 6px 12px;\n  font-size: 13px;\n  color: var(--b3-theme-on-surface);\n  line-height: 1.4;\n}\n.north-luna-moments-comment-input::placeholder {\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send {\n  flex-shrink: 0;\n  border: none;\n  background: var(--b3-theme-primary);\n  color: #fff;\n  border-radius: 7px;\n  padding: 6px 18px;\n  min-width: 56px;\n  font-size: 13px;\n  font-weight: 600;\n  line-height: 1.3;\n  cursor: pointer;\n  transition: opacity 0.15s;\n  text-align: center;\n  white-space: nowrap;\n}\n.north-luna-moments-comment-panel .north-luna-moments-comment-send:hover {\n  opacity: 0.85;\n}\n@keyframes moments-likes-fade-in {\n  from {\n    opacity: 0;\n    transform: translateY(-4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n.north-luna-moments-item.mom-flash {\n  animation: mom-flash 1.6s ease;\n}\n.mom-list .north-luna-moments-date-group {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 10px;\n  margin: 4px 0 10px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.mom-list .north-luna-moments-date-group::before,\n.mom-list .north-luna-moments-date-group::after {\n  content: \"\";\n  flex: 1;\n  height: 1px;\n  max-width: 90px;\n  background:\n    linear-gradient(\n      to right,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group::after {\n  background:\n    linear-gradient(\n      to left,\n      transparent,\n      color-mix(in srgb, var(--b3-theme-on-surface) 22%, transparent));\n}\n.mom-list .north-luna-moments-date-group-text {\n  font-size: 20px;\n  font-weight: 600;\n  color: var(--b3-theme-on-background);\n  letter-spacing: 0.4px;\n  white-space: nowrap;\n}\n.north-luna-moments-outline-popover {\n  width: 140px;\n  max-height: 320px;\n  overflow-y: auto;\n  background: var(--b3-theme-surface);\n  border: 1px solid var(--b3-border-color);\n  border-radius: 10px;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);\n  z-index: 100;\n  padding: 6px 0;\n}\n.north-luna-moments-outline-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 6px 14px 8px;\n  border-bottom: 0.5px solid var(--b3-border-color);\n  margin-bottom: 4px;\n}\n.north-luna-moments-outline-item {\n  font-size: 14px;\n  color: var(--b3-theme-on-background);\n  padding: 8px 14px;\n  cursor: pointer;\n  transition: background 0.12s ease, color 0.12s ease;\n}\n.north-luna-moments-outline-item:hover {\n  background: var(--b3-list-hover);\n}\n.north-luna-moments-outline-item.active {\n  color: var(--b3-theme-primary);\n  font-weight: 600;\n  background: var(--b3-theme-primary-lightest);\n}\n\n/* 方案3：去掉\"⋯\"按钮，动态下方悬停淡入一行操作图标 */\n.north-luna-moments-more-btn,\n.north-luna-moments-action-popup {\n  display: none !important;\n}\n.north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n.north-luna-moments-action-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 31px;\n  height: 31px;\n  border: none;\n  border-radius: 7px;\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n  transition: background-color .15s ease, color .15s ease;\n}\n.north-luna-moments-action-btn svg {\n  width: 16px !important;\n  height: 16px !important;\n}\n.north-luna-moments-action-btn:hover,\n.north-luna-moments-action-btn:focus-visible {\n  background-color: var(--b3-theme-background-light);\n  color: var(--b3-theme-on-background);\n}\n.north-luna-moments-action-btn:focus-visible {\n  outline: 2px solid var(--b3-theme-primary, #4e6ef2);\n  outline-offset: 1px;\n}\n.north-luna-moments-action-btn.like-action.liked {\n  color: #e74c3c;\n}\n.north-luna-moments-action-btn.active {\n  color: var(--b3-theme-primary);\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del {\n  color: #e05050;\n}\n.north-luna-moments-action-btn.north-luna-moments-action-del:hover {\n  color: #e05050;\n  background-color: #fdecec;\n}\n/* ===== 移动端：卡片尽量充满屏幕 ===== */\n@media (max-width: 480px) {\n  .north-luna-moments-item {\n    width: calc(100% - 6%);\n    margin: 0 auto;\n    padding: 12px;\n  }\n}\n\n/* ===== Orca Note + Apple HIG (appended by build.mjs) ===== */\n.orca-df-host {\n  flex: 1 1 auto;\n  align-self: stretch;\n  width: 100%;\n  min-width: 0;\n  height: 100%;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.orca-df-scope .mom-root { height: 100%; width: 100%; min-width: 0; }\n/* ---- Apple / iOS-macOS tokens → legacy --b3-* ---- */\n.orca-df-scope {\n  --df-font: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"SF Pro Display\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  --df-font-mono: \"SF Mono\", ui-monospace, Menlo, Consolas, monospace;\n  --df-radius-sm: 6px;\n  --df-radius-md: 10px;\n  --df-radius-lg: 14px;\n  --df-radius-xl: 20px;\n  --df-radius-pill: 980px;\n  --df-stroke: 0.5px;\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.06);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.04);\n  --df-brand: #007AFF;\n  --df-brand-hover: #0066D6;\n  --df-brand-pressed: #0055B3;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(0,122,255,.12);\n  --df-brand-tint-2: rgba(0,122,255,.20);\n  --df-fill-tertiary: rgba(120,120,128,.12);\n  --b3-theme-background: #F2F2F7;\n  --b3-theme-background-light: rgba(255,255,255,0.72);\n  --b3-theme-on-background: #000000;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #5AC8FA;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(60,60,67,0.18);\n  --b3-theme-surface: #FFFFFF;\n  --b3-theme-surface-lighter: #F2F2F7;\n  --b3-theme-on-surface: #000000;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.12);\n  --b3-font-family-code: var(--df-font-mono);\n  --moments-card-border: rgba(60,60,67,0.12);\n  --moments-nav-border: rgba(60,60,67,0.18);\n  color: var(--b3-theme-on-background);\n  font-family: var(--df-font);\n  font-size: 15px;\n  line-height: 1.47;\n  letter-spacing: -0.01em;\n  -webkit-font-smoothing: antialiased;\n}\n.orca-df-scope.orca-df-dark {\n  --df-shadow-4: 0 1px 2px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.28);\n  --df-shadow-8: 0 2px 8px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);\n  --df-shadow-16: 0 8px 28px rgba(0,0,0,.55);\n  --df-brand: #0A84FF;\n  --df-brand-hover: #409CFF;\n  --df-brand-pressed: #0066CC;\n  --df-brand-fg: #FFFFFF;\n  --df-brand-tint: rgba(10,132,255,.22);\n  --df-brand-tint-2: rgba(10,132,255,.32);\n  --df-fill-tertiary: rgba(120,120,128,.24);\n  --b3-theme-background: #000000;\n  --b3-theme-background-light: rgba(44,44,46,0.78);\n  --b3-theme-on-background: #FFFFFF;\n  --b3-theme-primary: var(--df-brand);\n  --b3-theme-primary-light: #64D2FF;\n  --b3-theme-primary-lighter: var(--df-brand-tint-2);\n  --b3-theme-primary-lightest: var(--df-brand-tint);\n  --b3-theme-on-primary: var(--df-brand-fg);\n  --b3-border-color: rgba(84,84,88,0.65);\n  --b3-theme-surface: #1C1C1E;\n  --b3-theme-surface-lighter: #2C2C2E;\n  --b3-theme-on-surface: #FFFFFF;\n  --b3-theme-on-surface-light: #8E8E93;\n  --b3-list-hover: rgba(120,120,128,.24);\n  --moments-card-border: rgba(84,84,88,0.45);\n  --moments-nav-border: rgba(84,84,88,0.65);\n}\n.orca-df-hb-icon { display: inline-flex; align-items: center; justify-content: center; }\n.orca-df-hb-icon svg { display: block; }\n/* ---- Surfaces / cards ---- */\n.orca-df-scope .mom-root {\n  background: var(--b3-theme-background);\n  font-family: var(--df-font);\n}\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  width: 100%;\n  max-width: none;\n  margin-left: 0;\n  margin-right: 0;\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n  transition: transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s ease, background .18s ease;\n}\n.orca-df-scope .mom-item:hover,\n.orca-df-scope .north-luna-moments-item:hover {\n  box-shadow: var(--df-shadow-8);\n}\n.orca-df-scope .mom-list {\n  align-items: stretch;\n  padding-left: 16px;\n  padding-right: 16px;\n  gap: 12px;\n}\n.orca-df-scope .mom-filter-bar { width: 100%; }\n.orca-df-scope .mom-pin-strip {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  margin: 0;\n  padding: 10px 16px 0;\n  box-sizing: border-box;\n  background: transparent;\n  border: none;\n  border-radius: 0;\n  cursor: default;\n}\n.orca-df-scope .mom-pin-strip-label {\n  writing-mode: horizontal-tb;\n  white-space: nowrap;\n  font-size: 13px;\n  font-weight: 400;\n  line-height: 1;\n  color: var(--orca-color-text-3, #8e8e93);\n  margin-right: 2px;\n}\n.orca-df-scope .mom-pin-strip-thumbs {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: 8px;\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: visible;\n}\n.orca-df-scope .mom-pin-group-text {\n  display: inline-flex !important;\n  align-items: center;\n  gap: 6px;\n  max-width: min(100%, 320px);\n  height: 32px;\n  padding: 0 12px 0 10px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n  color: var(--orca-color-text-1, #1c1c1e);\n  grid-template-columns: none !important;\n}\n.orca-df-scope .mom-pin-group-text:hover {\n  opacity: 1;\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 12%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-ico {\n  display: inline-flex;\n  flex-shrink: 0;\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-scope .mom-pin-title {\n  min-width: 0;\n  font-size: 13px;\n  font-weight: 500;\n  line-height: 1.2;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.orca-df-scope .mom-pin-group-media {\n  display: grid;\n  gap: 2px;\n  padding: 3px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 22%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 8%, var(--orca-color-bg-1, #fff));\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb img {\n  width: 28px;\n  height: 28px;\n  border-radius: 4px;\n}\n.orca-df-scope .mom-pin-group-media .mom-pin-thumb-single img {\n  width: 40px;\n  height: 40px;\n}\n.orca-df-scope .mom-pin-thumb-more {\n  font-size: 11px;\n}\n.orca-df-scope .mom-avatar,\n.orca-df-scope .mom-avatar-ph {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n/* ---- Controls ---- */\n.orca-df-scope button,\n.orca-df-scope input,\n.orca-df-scope textarea,\n.orca-df-scope select {\n  font-family: inherit;\n}\n.orca-df-scope .mom-publish-submit,\n.orca-df-scope .mom-empty-btn,\n.orca-df-scope .mom-btn-primary {\n  height: 34px;\n  min-width: 72px;\n  padding: 0 16px;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-brand);\n  color: var(--df-brand-fg);\n  font-size: 15px;\n  font-weight: 600;\n  letter-spacing: -0.01em;\n  line-height: 1;\n  box-shadow: none;\n  transition: opacity .15s ease, transform .15s ease, background .15s ease;\n}\n.orca-df-scope .mom-publish-submit:hover,\n.orca-df-scope .mom-empty-btn:hover,\n.orca-df-scope .mom-btn-primary:hover {\n  background: var(--df-brand-hover);\n  opacity: 0.96;\n}\n.orca-df-scope .mom-publish-submit:active,\n.orca-df-scope .mom-empty-btn:active,\n.orca-df-scope .mom-btn-primary:active {\n  background: var(--df-brand-pressed);\n  opacity: 0.88;\n}\n.orca-df-scope .mom-publish-inp,\n.orca-df-scope .mom-publish-textarea {\n  border: none;\n  border-radius: var(--df-radius-md);\n  background: var(--df-fill-tertiary);\n  transition: background .15s ease, box-shadow .15s ease;\n}\n.orca-df-scope .mom-publish-inp:hover,\n.orca-df-scope .mom-publish-textarea:hover {\n  background: color-mix(in srgb, var(--df-fill-tertiary) 85%, var(--df-brand) 15%);\n}\n.orca-df-scope .mom-publish-inp:focus,\n.orca-df-scope .mom-publish-textarea:focus,\n.orca-df-scope .mom-publish-card--editor:focus-within {\n  outline: none;\n  box-shadow: 0 0 0 3px var(--df-brand-tint);\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-publish-card {\n  background: var(--b3-theme-surface);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  border-radius: var(--df-radius-lg);\n  box-shadow: var(--df-shadow-4);\n}\n.orca-df-scope .mom-publish-nav {\n  height: 52px;\n  border-bottom: var(--df-stroke) solid var(--moments-nav-border);\n  background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);\n  backdrop-filter: saturate(180%) blur(20px);\n  -webkit-backdrop-filter: saturate(180%) blur(20px);\n}\n.orca-df-scope .mom-publish-title {\n  font-size: 17px;\n  font-weight: 600;\n  letter-spacing: -0.02em;\n}\n.orca-df-scope .mom-publish-grid-add,\n.orca-df-scope .mom-publish-grid-prev {\n  border-radius: var(--df-radius-md);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab,\n.orca-df-scope .mom-fab-stack .mom-tag-fab,\n.orca-df-scope .mom-fab,\n.orca-df-scope button.mom-outline-fab,\n.orca-df-scope button.mom-tag-fab {\n  width: 44px;\n  height: 44px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: color-mix(in srgb, var(--b3-theme-surface) 82%, transparent);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  box-shadow: var(--df-shadow-8);\n  color: var(--df-brand);\n}\n.orca-df-scope .mom-fab-stack .mom-outline-fab:hover,\n.orca-df-scope .mom-fab-stack .mom-tag-fab:hover,\n.orca-df-scope .mom-fab:hover {\n  background: var(--b3-theme-surface);\n}\n.orca-df-scope .mom-tag-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-scope .mom-cover-default {\n  background:\n    linear-gradient(160deg, #5AC8FA 0%, #007AFF 48%, #5856D6 100%);\n}\n.orca-df-scope.orca-df-dark .mom-cover-default {\n  background:\n    linear-gradient(160deg, #64D2FF 0%, #0A84FF 45%, #5E5CE6 100%);\n}\n.orca-df-scope .mom-cover-actions .mom-cover-settings,\n.orca-df-scope .mom-cover-actions button {\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: rgba(255,255,255,.28);\n  backdrop-filter: saturate(180%) blur(16px);\n  -webkit-backdrop-filter: saturate(180%) blur(16px);\n  color: #fff;\n}\n/* ---- Tags / chips ---- */\n.north-luna-moments-tags { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; }\n.north-luna-moments-tag {\n  font-size: 13px;\n  line-height: 1.4;\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n  padding: 4px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  cursor: pointer;\n  user-select: none;\n  transition: background .15s ease, opacity .15s ease;\n}\n.north-luna-moments-tag:hover { background: var(--df-brand-tint-2); }\n.mom-publish-info { flex-wrap: wrap; }\n.mom-publish-info .mom-publish-info-tags { flex: 1 1 100%; min-width: 0; margin-top: 4px; }\n/* ---- Empty ---- */\n.mom-empty { padding: 64px 28px 52px; text-align: center; }\n.mom-empty-ico { font-size: 48px; line-height: 1; margin-bottom: 14px; opacity: 0.9; }\n.mom-empty-title { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 8px; color: var(--b3-theme-on-surface); }\n.mom-empty-sub { font-size: 15px; line-height: 1.5; margin: 0 0 6px; color: var(--b3-theme-on-surface-light); }\n.mom-empty-hint { font-size: 13px; line-height: 1.5; margin: 0 0 20px; color: var(--b3-theme-on-surface-light); opacity: 0.95; }\n.mom-empty-btn { margin-top: 4px; }\n/* ---- Tag bar / refs ---- */\n.orca-df-tagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-tagbar-label { font-size: 13px; color: var(--b3-theme-on-surface-light); margin-right: 2px; }\n.orca-df-tagchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 12px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagchip.is-on, .orca-df-tagchip:hover {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }\n.orca-df-refchip {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 3px 10px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) dashed var(--b3-border-color);\n  background: transparent;\n  color: var(--b3-theme-on-surface-light);\n  cursor: pointer;\n}\n.orca-df-refchip:hover { color: var(--df-brand); border-color: var(--df-brand); background: var(--df-brand-tint); }\n.orca-df-open-orca {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 5px 10px;\n  border-radius: var(--df-radius-pill);\n  border: none;\n  background: transparent;\n  color: var(--df-brand);\n  font-weight: 600;\n  cursor: pointer;\n}\n.orca-df-open-orca:hover { background: var(--df-brand-tint); }\n.orca-df-loc-btn.is-on { color: var(--df-brand); }\n.orca-df-tag-btn.is-on { color: var(--df-brand); }\n.orca-df-actions-wrap,\n.orca-df-scope .north-luna-moments-item-actions {\n  position: relative;\n}\n.orca-df-scope .north-luna-moments-action-bar {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  justify-content: flex-start;\n  flex-wrap: nowrap;\n}\n.orca-df-scope .north-luna-moments-action-btn {\n  width: 34px;\n  height: 34px;\n  border-radius: var(--df-radius-pill);\n}\n.orca-df-more-inline {\n  display: none;\n  align-items: center;\n  gap: 2px;\n  margin-left: 2px;\n  padding-left: 4px;\n  border-left: var(--df-stroke) solid color-mix(in srgb, var(--b3-border-color) 80%, transparent);\n  animation: orca-df-more-in .16s ease;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-inline,\n.mom-action-bar.is-more-open .orca-df-more-inline {\n  display: inline-flex;\n}\n.north-luna-moments-action-bar.is-more-open .orca-df-more-btn,\n.mom-action-bar.is-more-open .orca-df-more-btn {\n  color: var(--df-brand);\n  background: var(--df-brand-tint);\n}\n.orca-df-more-inline .orca-df-more-del {\n  color: #FF3B30;\n}\n.orca-df-more-inline .orca-df-more-del:hover {\n  background: rgba(255,59,48,.1);\n}\n@keyframes orca-df-more-in {\n  from { opacity: 0; transform: translateX(-4px); }\n  to { opacity: 1; transform: translateX(0); }\n}\n.orca-df-tags-list {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n  max-height: 220px;\n  overflow-y: auto;\n  margin-bottom: 12px;\n}\n.orca-df-tags-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 0;\n}\n.orca-df-tagpick {\n  font-size: 13px;\n  line-height: 1.4;\n  padding: 4px 12px;\n  border-radius: var(--df-radius-pill);\n  border: var(--df-stroke) solid var(--b3-border-color);\n  background: var(--df-fill-tertiary);\n  color: var(--b3-theme-on-background);\n  cursor: pointer;\n}\n.orca-df-tagpick.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n  border-color: var(--df-brand);\n}\n.orca-df-tags-add {\n  display: flex;\n  gap: 8px;\n  align-items: center;\n  margin-bottom: 8px;\n}\n.orca-df-tags-add .mom-inp { flex: 1 1 auto; min-width: 0; }\n.orca-df-loc-meta {\n  cursor: pointer;\n  color: var(--b3-theme-on-surface-light);\n}\n.orca-df-loc-meta:hover { color: var(--df-brand); }\n.orca-df-loc-pin { font-size: 12px; }\n.mom-publish-orca {\n  flex: none;\n  height: 34px;\n  padding: 0 14px;\n  margin-right: 0;\n  border: none;\n  border-radius: var(--df-radius-pill);\n  background: var(--df-fill-tertiary);\n  color: var(--df-brand);\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n}\n.mom-publish-orca:hover {\n  background: var(--df-brand-tint);\n}\n.mom-publish-nav-right { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; z-index: 2; }\n.mom-publish-nav .mom-publish-back { position: relative; z-index: 2; border-radius: var(--df-radius-pill); color: var(--df-brand); }\n.mom-publish-nav .mom-publish-title { pointer-events: none; z-index: 0; }\n/* ---- Cover actions ---- */\n.mom-cover-actions {\n  position: absolute;\n  top: 14px;\n  right: 14px;\n  z-index: 12;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.mom-cover-actions .mom-cover-settings {\n  position: static;\n  top: auto;\n  right: auto;\n}\n.mom-cover-signature {\n  position: absolute;\n  left: 16px;\n  right: 120px;\n  bottom: 22px;\n  z-index: 11;\n  margin: 0;\n  font-size: 15px;\n  line-height: 1.45;\n  font-weight: 500;\n  letter-spacing: 0.06em;\n  color: #fff;\n  text-shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 12px rgba(0,0,0,.35);\n  pointer-events: none;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.north-luna-moments-image-grid.nine {\n  grid-template-columns: repeat(3, 1fr);\n  max-width: 300px;\n}\n.north-luna-moments-grid-more {\n  position: relative;\n  display: block;\n  overflow: hidden;\n  border-radius: inherit;\n  cursor: pointer;\n}\n.north-luna-moments-grid-more .north-luna-moments-grid-img,\n.north-luna-moments-grid-more .north-luna-moments-grid-video-el {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.north-luna-moments-grid-more-badge {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0,0,0,.46);\n  color: #fff;\n  font-size: 22px;\n  font-weight: 600;\n  letter-spacing: 0.02em;\n  pointer-events: none;\n  text-shadow: 0 1px 2px rgba(0,0,0,.35);\n}\n.north-luna-moments-item-text .orca-df-md-ul,\n.north-luna-moments-item-text .orca-df-md-ol {\n  margin: 4px 0 6px;\n  padding-left: 1.4em;\n  list-style-position: outside;\n}\n.north-luna-moments-item-text .orca-df-md-ul {\n  list-style-type: disc !important;\n}\n.north-luna-moments-item-text .orca-df-md-ol {\n  list-style-type: decimal !important;\n}\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul { list-style-type: circle !important; }\n.north-luna-moments-item-text .orca-df-md-ul .orca-df-md-ul .orca-df-md-ul { list-style-type: square !important; }\n.north-luna-moments-item-text .orca-df-md-li {\n  margin: 2px 0;\n  line-height: 1.55;\n  display: list-item !important;\n}\n.north-luna-moments-item-text .orca-df-md-p {\n  margin: 0 0 4px;\n  line-height: 1.55;\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n.north-luna-moments-item-text .orca-df-md-gap { height: 8px; }\n.north-luna-moments-item-text .orca-df-md-h {\n  font-weight: 650;\n  margin: 6px 0 4px;\n  line-height: 1.4;\n}\n.north-luna-moments-item-text .orca-df-md-h1 { font-size: 1.2em; }\n.north-luna-moments-item-text .orca-df-md-h2 { font-size: 1.1em; }\n.north-luna-moments-item-text .orca-df-md-h3 { font-size: 1.05em; }\n.north-luna-moments-item-text .orca-df-md-quote {\n  margin: 4px 0;\n  padding: 2px 0 2px 10px;\n  border-left: 3px solid var(--b3-border-color);\n  color: var(--b3-theme-on-surface-light);\n}\n.north-luna-moments-item-text .orca-df-md-code {\n  margin: 6px 0;\n  padding: 8px 10px;\n  border-radius: 8px;\n  background: var(--df-fill-tertiary);\n  overflow: auto;\n  font-size: 13px;\n  line-height: 1.45;\n}\n/* ---- Popover ---- */\n.orca-df-tag-popover {\n  position: fixed;\n  z-index: 2147483001;\n  min-width: 180px;\n  max-width: min(280px, calc(100vw - 24px));\n  max-height: min(360px, 50vh);\n  overflow: auto;\n  padding: 6px;\n  border-radius: var(--df-radius-lg);\n  background: color-mix(in srgb, var(--b3-theme-surface) 86%, transparent);\n  border: var(--df-stroke) solid var(--moments-card-border);\n  box-shadow: var(--df-shadow-16);\n  backdrop-filter: saturate(180%) blur(24px);\n  -webkit-backdrop-filter: saturate(180%) blur(24px);\n  box-sizing: border-box;\n}\n.orca-df-tag-popover-title {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--b3-theme-on-surface-light);\n  padding: 8px 10px 6px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n}\n.orca-df-tag-popover-item {\n  display: block;\n  width: 100%;\n  text-align: left;\n  border: none;\n  background: transparent;\n  color: var(--b3-theme-on-background);\n  font-size: 15px;\n  line-height: 1.35;\n  padding: 10px 12px;\n  border-radius: var(--df-radius-md);\n  cursor: pointer;\n}\n.orca-df-tag-popover-item:hover,\n.orca-df-tag-popover-item.is-on {\n  background: var(--df-brand-tint);\n  color: var(--df-brand);\n}\n.orca-df-tag-popover-empty {\n  font-size: 13px;\n  color: var(--b3-theme-on-surface-light);\n  padding: 12px 10px;\n}\n/* ---- Motion ---- */\n@media (prefers-reduced-motion: no-preference) {\n  .orca-df-scope .mom-item,\n  .orca-df-scope .north-luna-moments-item,\n  .orca-df-scope .mom-publish-submit,\n  .orca-df-scope .orca-df-tagchip,\n  .orca-df-scope .mom-outline-fab,\n  .orca-df-scope .mom-tag-fab {\n    transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s cubic-bezier(.22,.61,.36,1), opacity .15s ease;\n  }\n  .orca-df-scope .mom-outline-fab:active,\n  .orca-df-scope .mom-tag-fab:active,\n  .orca-df-scope .mom-publish-submit:active {\n    transform: scale(0.96);\n  }\n}\n/* ---- 正文观感仍对齐虎鲸字号变量 ---- */\n.orca-df-scope {\n  --moments-text: var(--orca-color-text-1, var(--b3-theme-on-background, #000));\n  --df-body-font: var(--orca-fontfamily-ui, var(--orca-font-family, var(--df-font)));\n  --df-body-size: var(--orca-fontsize, 15px);\n  --df-body-leading: var(--orca-block-line-height, var(--orca-lineheight-md, 1.47));\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-publish-textarea,\n.orca-df-scope .mom-publish-card--editor .mom-publish-textarea {\n  font-family: var(--df-body-font);\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n  color: var(--moments-text);\n  letter-spacing: -0.01em;\n  font-weight: 400;\n}\n.orca-df-scope .north-luna-moments-no-text {\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  font-size: var(--df-body-size);\n  line-height: var(--df-body-leading);\n}\n.orca-df-scope .mom-inline-code,\n.orca-df-scope .north-luna-moments-item-text code {\n  font-family: var(--orca-fontfamily-code, var(--df-font-mono));\n  font-size: 0.92em;\n  line-height: inherit;\n  background: var(--df-fill-tertiary);\n  border-radius: 4px;\n  padding: 0.1em 0.35em;\n}\n.orca-df-scope .north-luna-moments-item-text a,\n.orca-df-scope .north-luna-moments-item-text .mom-md-link {\n  color: var(--orca-color-primary-5, var(--df-brand));\n}\n/* ---- 卡片正文层级：正文 > 列表 > meta 日期 ---- */\n.orca-df-scope .mom-item,\n.orca-df-scope .north-luna-moments-item {\n  padding: 12px 14px 10px;\n}\n.orca-df-scope .north-luna-moments-item-header {\n  margin-bottom: 6px;\n  gap: 8px;\n}\n.orca-df-scope .north-luna-moments-item-header .mom-avatar,\n.orca-df-scope .north-luna-moments-item-header .mom-avatar-ph {\n  width: 34px;\n  height: 34px;\n  font-size: 14px;\n}\n.orca-df-scope .north-luna-moments-item-name {\n  font-size: 14px;\n  font-weight: 600;\n  color: var(--orca-color-text-2, var(--b3-theme-on-surface, #3A3A3C));\n}\n.orca-df-scope .north-luna-moments-item-text {\n  margin-bottom: 2px;\n  line-height: 1.55;\n}\n.orca-df-scope .north-luna-moments-item-text > .orca-df-md-p:first-child {\n  color: var(--moments-text);\n  font-weight: 450;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-ol {\n  margin: 6px 0 2px;\n  color: color-mix(in srgb, var(--moments-text) 86%, transparent);\n  font-size: 0.96em;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-li {\n  line-height: 1.5;\n  margin: 1px 0;\n}\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ul,\n.orca-df-scope .north-luna-moments-item-text .orca-df-md-p + .orca-df-md-ol {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-tags {\n  margin-top: 6px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-item-meta {\n  margin-top: 8px;\n  margin-bottom: 0;\n}\n.orca-df-scope .north-luna-moments-meta-item {\n  font-size: 11px;\n  line-height: 1.35;\n  letter-spacing: 0.01em;\n  color: var(--orca-color-text-3, var(--b3-theme-on-surface-light, #8E8E93));\n  opacity: 0.92;\n}\n.orca-df-scope .north-luna-moments-meta-item + .north-luna-moments-meta-item::before {\n  margin: 0 6px;\n  opacity: 0.35;\n  font-weight: 500;\n}\n.orca-df-scope .north-luna-moments-item-actions {\n  margin-top: 4px;\n}\n.orca-df-scope .north-luna-moments-comment-panel {\n  margin-top: 6px;\n}\n.orca-df-scope .orca-df-inline-ref {\n  display: inline;\n  text-decoration: none;\n  border-bottom: 1px dashed color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  cursor: pointer;\n}\n.orca-df-scope .orca-df-inline-ref:hover {\n  border-bottom-style: solid;\n}\n.orca-df-refresh-fab svg { display: block; }\n.orca-df-time-hint {\n  margin: 10px 0 0;\n  font-size: 12px;\n  line-height: 1.4;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .north-luna-moments-item-text,\n.orca-df-scope .mom-item-text {\n  cursor: pointer;\n}\n.orca-df-load-more {\n  display: flex;\n  justify-content: center;\n  padding: 16px 12px 28px;\n}\n.orca-df-load-more-btn {\n  appearance: none;\n  border: 1px solid color-mix(in srgb, var(--orca-color-text-3, #8e8e93) 35%, transparent);\n  background: color-mix(in srgb, var(--orca-color-bg-1, #fff) 92%, transparent);\n  color: var(--orca-color-text-2, #636366);\n  border-radius: 999px;\n  padding: 8px 18px;\n  font-size: 13px;\n  line-height: 1.3;\n  cursor: pointer;\n}\n.orca-df-load-more-btn:hover {\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 45%, transparent);\n}\n.orca-df-trash-fab { position: relative; }\n.orca-df-trash-fab-count,\n.orca-df-archive-fab-count,\n.orca-df-tools-fab-count {\n  position: absolute; top: -4px; right: -4px;\n  min-width: 16px; height: 16px; padding: 0 4px;\n  border-radius: 999px; background: var(--orca-color-accent, #0F6CBD);\n  color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;\n}\n.orca-df-tools-fab { position: relative; }\n.orca-df-trash-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-trash-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-trash-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-trash-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-trash-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-trash-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-trash-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-trash-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-trash-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-trash-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-trash-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-trash-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-trash-act.danger { color: var(--orca-color-danger, #c42b1c); border-color: color-mix(in srgb, var(--orca-color-danger, #c42b1c) 35%, transparent); }\n.orca-df-trash-foot { padding-top: 14px; display: flex; justify-content: flex-end; }\n.orca-df-archive-fab { position: relative; }\n.orca-df-archive-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-archive-pop {\n  z-index: 2147483000; width: 560px; max-width: calc(100vw - 48px); max-height: 76vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-archive-head {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-archive-head-tools { display: flex; align-items: center; gap: 10px; }\n.orca-df-archive-hint { font-size: 12px; font-weight: 400; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-archive-body { overflow: auto; flex: 1 1 auto; min-height: 120px; }\n.orca-df-archive-empty { padding: 28px 8px; text-align: center; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-row {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 12px 4px; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-archive-meta { min-width: 0; flex: 1 1 auto; }\n.orca-df-archive-title {\n  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n.orca-df-archive-sub { margin-top: 2px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-archive-actions { display: flex; gap: 8px; flex-shrink: 0; }\n.orca-df-archive-act {\n  appearance: none; border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; border-radius: 6px; padding: 4px 10px; cursor: pointer;\n  color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-outline-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: stretch; justify-content: center;\n  background: rgba(0, 0, 0, 0.28);\n}\n.orca-df-outline-pop {\n  z-index: 2147483000; width: min(420px, 100vw); max-width: 100vw;\n  max-height: min(92vh, 900px); margin: auto 0;\n  display: flex; flex-direction: column;\n  background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border-radius: 12px 12px 0 0;\n  box-shadow: var(--orca-shadow-modal, 0 24px 48px rgba(0,0,0,0.22));\n  overflow: hidden;\n}\n@media (min-width: 720px) {\n  .orca-df-outline-pop {\n    width: min(480px, calc(100vw - 48px)); max-height: 82vh; margin: auto;\n    border-radius: 12px;\n  }\n}\n.orca-df-outline-head {\n  display: flex; align-items: center; gap: 4px;\n  padding: 10px 12px 8px; font-size: 17px; font-weight: 600;\n  border-bottom: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-outline-back {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  width: 36px; height: 36px; border-radius: 10px;\n  display: inline-flex; align-items: center; justify-content: center;\n  color: var(--orca-color-text-1, #1c1c1e);\n}\n.orca-df-outline-back:hover { background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent); }\n.orca-df-outline-head-spacer { width: 36px; }\n.orca-df-outline-years { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 6px; }\n.orca-df-outline-year-row { display: flex; gap: 6px; }\n.orca-df-outline-year,\n.orca-df-outline-year-ph {\n  flex: 1 1 0; min-width: 0; height: 40px;\n}\n.orca-df-outline-year {\n  appearance: none; cursor: pointer;\n  border-radius: 10px; font-size: 13px; font-weight: 600;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n}\n.orca-df-outline-year.is-on {\n  background: var(--df-brand, #007AFF);\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n  color: #fff;\n}\n.orca-df-outline-hint {\n  padding: 6px 16px 8px; font-size: 12px;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-months {\n  flex: 1 1 auto; min-height: 120px; overflow: auto;\n  padding: 4px 16px 16px;\n  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start;\n}\n.orca-df-outline-month {\n  appearance: none; cursor: pointer; height: 40px; padding: 0 8px;\n  display: flex; align-items: center; gap: 6px; min-width: 0;\n  border-radius: 10px;\n  border: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 40%, transparent);\n  background: color-mix(in srgb, var(--df-brand, #007AFF) 10%, transparent);\n  color: var(--df-brand, #007AFF);\n  font-size: 13px; font-weight: 600;\n}\n.orca-df-outline-month:hover {\n  border-color: color-mix(in srgb, var(--df-brand, #007AFF) 85%, transparent);\n}\n.orca-df-outline-cal { flex-shrink: 0; opacity: 0.95; }\n.orca-df-outline-month-label {\n  flex: 1 1 auto; min-width: 0;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;\n}\n.orca-df-outline-month-count {\n  flex-shrink: 0; font-size: 12px; font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-outline-empty {\n  grid-column: 1 / -1; padding: 24px 8px; text-align: center;\n  color: var(--orca-color-text-3, #8e8e93); font-size: 14px; font-weight: 400;\n}\n.orca-df-scope .mom-calendar-content {\n  max-width: min(680px, 96vw) !important;\n}\n.orca-df-scope .mom-calendar-content:has(.mom-calendar-heat-wrap) {\n  width: min(680px, 96vw) !important;\n}\n.orca-df-scope .mom-calendar-heat-wrap {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n  padding: 8px 8px 12px;\n  width: 100%;\n  box-sizing: border-box;\n}\n.orca-df-scope .mom-calendar-heat-half {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  padding-bottom: 14px;\n  border-bottom: 1px solid color-mix(in srgb, var(--orca-color-border, rgba(0,0,0,0.08)) 80%, transparent);\n}\n.orca-df-scope .mom-calendar-heat-half:last-child {\n  border-bottom: none;\n  padding-bottom: 0;\n}\n.orca-df-scope .mom-calendar-heat-caption {\n  font-size: 13px;\n  font-weight: 500;\n  color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-scope .mom-calendar-heat-empty {\n  font-size: 14px;\n  color: var(--orca-color-text-3, #8e8e93);\n  padding: 16px 0;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-columns {\n  display: flex;\n  gap: 4px;\n  width: 100%;\n  justify-content: space-between;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-column {\n  flex: 1 1 0;\n  min-width: 12px;\n  max-width: 18px;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-cell {\n  width: 100%;\n  min-width: 12px;\n  min-height: 12px;\n  aspect-ratio: 1;\n  border-radius: 4px;\n  background-color: #EBEDF0;\n  transition: transform .12s ease;\n  cursor: default;\n  box-shadow: none;\n}\n.orca-df-scope .mom-calendar-cell[data-date] { cursor: pointer; }\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-cell:hover {\n  transform: scale(1.18);\n  box-shadow: none;\n  outline: 1px solid color-mix(in srgb, var(--df-brand, #007AFF) 55%, transparent);\n  outline-offset: 0;\n  z-index: 1;\n}\n.orca-df-scope .mom-calendar-cell.level-empty {\n  background-color: transparent;\n  opacity: 0;\n  pointer-events: none;\n}\n.orca-df-scope .mom-calendar-cell.level-empty:hover {\n  transform: none;\n  outline: none;\n}\n.orca-df-scope .mom-calendar-cell.level-0 { background-color: #EBEDF0; }\n.orca-df-scope .mom-calendar-cell.level-1 { background-color: #B6E3FF; }\n.orca-df-scope .mom-calendar-cell.level-2 { background-color: #54AEFF; }\n.orca-df-scope .mom-calendar-cell.level-3 { background-color: #218BFF; }\n.orca-df-scope .mom-calendar-cell.level-4 { background-color: #0550AE; }\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-months {\n  position: relative;\n  margin-top: 6px;\n  height: 20px;\n  min-width: 0;\n  width: 100%;\n}\n.orca-df-scope .mom-calendar-heat-wrap .mom-calendar-month-label {\n  position: absolute;\n  transform: translateX(-50%);\n  font-size: 13px;\n  color: var(--orca-color-text-3, #8e8e93);\n  white-space: nowrap;\n}\n/* ---- Tools / stats / export / images / layout ---- */\n.orca-df-quickbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px 0; width: 100%; box-sizing: border-box; }\n.orca-df-quick-kw { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-scope .mom-fab-stack .orca-df-search-fab.is-on,\n.orca-df-scope .mom-fab-stack .orca-df-tools-fab.is-on {\n  color: var(--df-brand-fg);\n  background: var(--df-brand);\n  border-color: transparent;\n}\n.orca-df-layout-compact .mom-cover { height: clamp(110px, 16vh, 180px); }\n.orca-df-layout-compact .mom-list, .orca-df-layout-compact .north-luna-moments-list { padding-left: 12px; padding-right: 12px; }\n.orca-df-layout-tall .mom-cover { height: clamp(220px, 34vh, 380px); }\n.orca-df-tools-backdrop, .orca-df-images-backdrop {\n  position: fixed; inset: 0; z-index: 2147482999;\n  display: flex; align-items: center; justify-content: center;\n  background: rgba(0, 0, 0, 0.30);\n}\n.orca-df-tools-pop {\n  z-index: 2147483000; width: 440px; max-width: calc(100vw - 48px); max-height: 80vh;\n  display: flex; flex-direction: column; padding: 20px 24px 24px;\n  border-radius: 10px; background: var(--orca-color-bg-1, #fff);\n  color: var(--orca-color-text-1, #1c1c1e);\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  box-shadow: var(--orca-shadow-modal, 0 32px 64px rgba(0,0,0,0.24));\n  font-size: 14px; line-height: 1.5;\n}\n.orca-df-tools-wide { width: 560px; }\n.orca-df-tools-head {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 2px 0 14px; font-size: 18px; font-weight: 600;\n}\n.orca-df-tools-head-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }\n.orca-df-tools-close {\n  appearance: none; border: 0; background: transparent; cursor: pointer;\n  font-size: 22px; line-height: 1; color: var(--orca-color-text-3, #8e8e93);\n}\n.orca-df-tools-body { overflow: auto; flex: 1 1 auto; min-height: 80px; display: flex; flex-direction: column; gap: 10px; }\n.orca-df-tools-muted { font-size: 13px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-tools-label { font-size: 13px; font-weight: 500; }\n.orca-df-tools-input {\n  width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: var(--orca-color-bg-2, #f5f5f7); color: inherit; font-size: 14px;\n}\n.orca-df-tools-tile {\n  appearance: none; text-align: left; cursor: pointer;\n  display: flex; flex-direction: column; gap: 4px;\n  padding: 12px 14px; border-radius: 10px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.08));\n  background: var(--orca-color-bg-2, #f5f5f7); color: inherit;\n}\n.orca-df-tools-tile:hover { border-color: var(--df-brand, #007AFF); }\n.orca-df-tools-tile b { font-size: 15px; }\n.orca-df-tools-tile span { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-tools-btn {\n  appearance: none; cursor: pointer; text-align: left;\n  padding: 10px 14px; border-radius: 8px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; color: inherit; font-size: 14px;\n}\n.orca-df-tools-btn.primary, .orca-df-tools-btn.is-on {\n  background: var(--df-brand, #007AFF); color: #fff; border-color: transparent;\n}\n.orca-df-tools-mini {\n  appearance: none; cursor: pointer; padding: 4px 10px; border-radius: 6px;\n  border: 1px solid var(--orca-color-border, rgba(0,0,0,0.12));\n  background: transparent; color: var(--orca-color-text-2, #636366); font-size: 13px;\n}\n.orca-df-tools-mini:disabled { opacity: 0.4; cursor: default; }\n.orca-df-tools-actions { display: flex; flex-wrap: wrap; gap: 8px; }\n.orca-df-tools-status { font-size: 13px; color: var(--orca-color-text-2, #636366); }\n.orca-df-tools-sec { margin-top: 8px; }\n.orca-df-tools-sec-t { font-weight: 600; margin-bottom: 6px; }\n.orca-df-tools-row {\n  display: flex; justify-content: space-between; gap: 12px;\n  padding: 6px 0; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-stats-grid {\n  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;\n}\n@media (max-width: 520px) { .orca-df-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }\n.orca-df-stats-card {\n  padding: 12px 10px; border-radius: 10px;\n  background: var(--orca-color-bg-2, #f5f5f7); text-align: center;\n}\n.orca-df-stats-n { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }\n.orca-df-stats-l { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); margin-top: 2px; }\n.orca-df-tools-entry {\n  display: flex; align-items: center; justify-content: space-between; gap: 12px;\n  padding: 10px 0; border-top: 1px solid var(--orca-color-border, rgba(0,0,0,0.06));\n}\n.orca-df-tools-entry-main { min-width: 0; flex: 1; }\n.orca-df-tools-entry-t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.orca-df-img-list { display: flex; flex-direction: column; gap: 8px; }\n.orca-df-img-row { display: flex; align-items: center; gap: 10px; }\n.orca-df-img-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: #eee; flex-shrink: 0; }\n.orca-df-img-meta { flex: 1; min-width: 0; }\n.orca-df-img-acts { display: flex; gap: 4px; flex-shrink: 0; }\n.orca-df-img-progress { height: 4px; border-radius: 2px; background: var(--orca-color-bg-2, #eee); overflow: hidden; }\n.orca-df-img-progress-bar { height: 100%; background: var(--df-brand, #007AFF); transition: width .2s ease; }\n.orca-df-list-search {\n  min-width: 110px; flex: 1 1 auto; height: 26px; padding: 0 8px;\n  border-radius: 7px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.12));\n  background: var(--orca-color-bg-2, rgba(120,120,128,.08)); color: inherit;\n  font: inherit; font-size: 13px; outline: none;\n}\n.orca-df-list-search::placeholder { color: var(--orca-color-text-3, #8e8e93); }\n.orca-df-list-more { display: flex; justify-content: center; padding: 10px 0; }\n.orca-df-archive-foot { display: flex; justify-content: flex-end; padding: 8px 0 0; }\n.orca-df-media-list { max-height: 46vh; overflow: auto; margin: 6px 0 10px; }\n.orca-df-search-quick { display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 0 10px; }\n.orca-df-search-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }\n.orca-df-search-dates { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }";
 
 // ============================================================
 // src/orca-entry.js — Orca Note 适配层（日记流 orca-diaryflow）
@@ -6108,17 +7008,53 @@ var orcaMomentsData = null;
 var orcaCtx = null;
 var orcaThemeObserver = null;
 var orcaIsDark = false;
-var orcaEditPanelId = null;
 var orcaFeedSyncTimer = null;
 var orcaFeedSyncUnsub = null;
+var orcaSettingsLocaleUnsub = null;
+var orcaSettingsLocale = "";
+var orcaAutoCleanupScheduled = false;
 var orcaFeedSyncMutedUntil = 0;
 var orcaFeedSyncInFlight = false;
 var orcaFeedSyncFp = "";
 var orcaFeedFocusHandler = null;
 var orcaFeedVisHandler = null;
-var ORCA_FEED_PAGE_SIZE = 25;
 var orcaFeedAllItems = [];
-var orcaFeedLimit = ORCA_FEED_PAGE_SIZE;
+var orcaFeedLimit = 25;
+var DF_FILTERS_KEY = "feed-filters";
+/** 回收站/归档柜列表每页条数 */
+var DF_LIST_PAGE = 50;
+
+/** 把当前筛选状态写入插件数据（重开面板后恢复） */
+function orcaPersistFilters() {
+  if (!orcaCtx) return;
+  try {
+    var f = orcaCtx.filters || {};
+    dfSetData(DF_FILTERS_KEY, {
+      kw: f.kw || "",
+      tags: Array.isArray(f.tags) ? f.tags.filter(Boolean).slice(0, 1) : [],
+      hasImage: !!f.hasImage,
+      hasLocation: !!f.hasLocation,
+      pinnedOnly: !!f.pinnedOnly,
+      dateFrom: f.dateFrom || "",
+      dateTo: f.dateTo || ""
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function orcaLoadFilters() {
+  if (!orcaCtx) return;
+  try {
+    var v = await dfGetData(DF_FILTERS_KEY);
+    if (!v || typeof v !== "object") return;
+    orcaCtx.filters.kw = typeof v.kw === "string" ? v.kw : "";
+    orcaCtx.filters.tags = Array.isArray(v.tags) ? v.tags.filter(Boolean).slice(0, 1) : [];
+    orcaCtx.filters.hasImage = !!v.hasImage;
+    orcaCtx.filters.hasLocation = !!v.hasLocation;
+    orcaCtx.filters.pinnedOnly = !!v.pinnedOnly;
+    orcaCtx.filters.dateFrom = typeof v.dateFrom === "string" ? v.dateFrom : "";
+    orcaCtx.filters.dateTo = typeof v.dateTo === "string" ? v.dateTo : "";
+  } catch (e) { /* ignore */ }
+}
 
 globalThis.__DF_IS_DARK = function () { return orcaIsDark; };
 
@@ -6333,7 +7269,8 @@ var orcaShim = {
 };
 
 function orcaShowMessage(m) {
-  try { orca.notify("info", m); } catch (e) { console.log("[orca-diaryflow]", m); }
+  var msg = dfT(m);
+  try { orca.notify("info", msg); } catch (e) { console.log("[orca-diaryflow]", msg); }
 }
 
 var storage = require_storage();
@@ -6376,7 +7313,7 @@ async function orcaStartNewEntryInOrca(ctx) {
     }
   } catch (e) {
     console.error("[orca-diaryflow] new entry", e);
-    orca.notify("error", "新建失败: " + (e && e.message || e), { title: "日记流" });
+    orca.notify("error", dfT("新建失败: ") + (e && e.message || e), { title: dfT("日记流") });
   }
 }
 
@@ -6395,7 +7332,6 @@ function orcaFeedFingerprint(items) {
       (it.tags || []).join(","),
       (it.images || []).join("|"),
       it.location || "",
-      it.liked ? 1 : 0,
       it.pinned ? 1 : 0,
       it.archived ? 1 : 0,
       (it.comments && it.comments.length) || 0
@@ -6502,6 +7438,48 @@ function orcaStartFeedSyncWatch() {
   try { document.addEventListener("visibilitychange", orcaFeedVisHandler); } catch (e3) { /* ignore */ }
 }
 
+/** 启动后按设置自动清理未引用的插件图片（默认关闭；回收站/归档引用受保护） */
+function orcaScheduleAutoMediaCleanup() {
+  if (orcaAutoCleanupScheduled) return;
+  orcaAutoCleanupScheduled = true;
+  try {
+    if (!dfGetSetting("autoCleanImages")) return;
+  } catch (e0) { return; }
+  setTimeout(function () {
+    if (orcaIsEditingInOrca()) return;
+    if (typeof orcaToolsListOrphanMedia !== "function" || typeof orcaToolsCleanupOrphanMedia !== "function") return;
+    orcaToolsListOrphanMedia().then(function (names) {
+      if (!names || !names.length) return null;
+      return orcaToolsCleanupOrphanMedia(names).then(function (removed) {
+        if (removed) console.log("[orca-diaryflow] auto cleaned orphan images:", removed);
+      });
+    }).catch(function () { /* ignore */ });
+  }, 20000);
+}
+
+/** 监听语言切换：重注册设置页标签（中/英）并刷新主题 */
+function orcaWatchLocale() {
+  orcaSettingsLocale = String((orca.state && orca.state.locale) || "");
+  if (orcaSettingsLocaleUnsub) {
+    try { orcaSettingsLocaleUnsub(); } catch (e0) { /* ignore */ }
+    orcaSettingsLocaleUnsub = null;
+  }
+  var sub = orcaGetValtioSubscribe();
+  if (!sub || !orca.state) return;
+  try {
+    orcaSettingsLocaleUnsub = sub(orca.state, function () {
+      var loc = String((orca.state && orca.state.locale) || "");
+      if (loc === orcaSettingsLocale) return;
+      orcaSettingsLocale = loc;
+      dfRegisterSettings().catch(function () { /* ignore */ });
+      orcaApplyTheme();
+    });
+  } catch (e) {
+    console.warn("[orca-diaryflow] locale watch failed", e);
+    orcaSettingsLocaleUnsub = null;
+  }
+}
+
 function orcaStopFeedSyncWatch() {
   if (orcaFeedSyncTimer) {
     clearTimeout(orcaFeedSyncTimer);
@@ -6553,7 +7531,7 @@ async function orcaRefreshFeed(opts) {
     if (!it) return;
     it.text = OrcaBlocks.stripInlineTagText(it.text || "", it.tags || []);
   });
-  if (!opts.keepLimit) orcaFeedLimit = ORCA_FEED_PAGE_SIZE;
+  if (!opts.keepLimit) orcaFeedLimit = dfFeedPageSize();
   orcaApplyFeedWindow(cfg);
   try { await DF_ASSETS.hydrate(orcaMomentsData); } catch (e) { /* ignore */ }
   orcaFeedSyncFp = orcaFeedFingerprint(orcaFeedAllItems);
@@ -6567,7 +7545,8 @@ function orcaApplyFeedWindow(cfg) {
   if (typeof orcaToolsQuickFilterItems === "function" && orcaCtx && orcaCtx.filters) {
     all = orcaToolsQuickFilterItems(all, orcaCtx.filters);
   }
-  var limit = Math.max(ORCA_FEED_PAGE_SIZE, Number(orcaFeedLimit) || ORCA_FEED_PAGE_SIZE);
+  var page = dfFeedPageSize();
+  var limit = Math.max(page, Number(orcaFeedLimit) || page);
   orcaFeedLimit = limit;
   var visible = all.slice(0, limit);
   var prevCfg = (orcaMomentsData && orcaMomentsData.config) || {};
@@ -6582,7 +7561,7 @@ function orcaApplyFeedWindow(cfg) {
 
 function orcaLoadMoreFeed(ctx) {
   if (!orcaMomentsData || !orcaMomentsData._hasMore) return;
-  orcaFeedLimit += ORCA_FEED_PAGE_SIZE;
+  orcaFeedLimit += dfFeedPageSize();
   orcaApplyFeedWindow(orcaMomentsData.config);
   DF_ASSETS.hydrate(orcaMomentsData).then(function () {
     if (ctx && typeof ctx.reApp === "function") ctx.reApp();
@@ -6642,7 +7621,7 @@ async function orcaManualRefreshFeed(ctx) {
 function orcaBuildCtx() {
   var c = {
     plugin: orcaShim,
-    filters: { kw: "", tags: [], hasImage: false, hasLocation: false, pinnedOnly: false },
+    filters: { kw: "", tags: [], hasImage: false, hasLocation: false, pinnedOnly: false, dateFrom: "", dateTo: "" },
     view: "feed",
     calYear: new Date().getFullYear(),
     mounts: [],
@@ -6660,7 +7639,6 @@ function orcaBuildCtx() {
           var key = String(it.blockId || it.id);
           var prev = idx.overlays[key] || {};
           idx.overlays[key] = Object.assign({}, prev, {
-            liked: !!it.liked,
             pinned: !!it.pinned,
             archived: !!it.archived,
             location: it.location || "",
@@ -6717,6 +7695,22 @@ function orcaCloseTagFilterPopover(ctx) {
   }
 }
 
+/** 设标签筛选；再点同一标签则取消。返回是否仍在筛选。 */
+function orcaSetTagFilter(ctx, tag) {
+  if (!ctx.filters) ctx.filters = { kw: "", tags: [] };
+  var cur = (ctx.filters.tags || [])[0] || "";
+  var next = tag ? String(tag) : "";
+  if (!next || next === cur) {
+    ctx.filters.tags = [];
+    orcaPersistFilters();
+    return false;
+  }
+  ctx.filters.tags = [next];
+  ctx.filters.kw = "";
+  orcaPersistFilters();
+  return true;
+}
+
 function orcaOpenTagFilter(ctx, btn) {
   if (!ctx) return;
   var existing = document.querySelector(".orca-df-tag-popover");
@@ -6724,20 +7718,30 @@ function orcaOpenTagFilter(ctx, btn) {
     orcaCloseTagFilterPopover(ctx);
     return;
   }
+  // 已在标签筛选中：再点 FAB = 取消筛选
+  var activeNow = ((ctx.filters && ctx.filters.tags) || [])[0] || "";
+  if (activeNow) {
+    orcaSetTagFilter(ctx, "");
+    orcaRefreshFeed().then(function () {
+      if (ctx.reApp) ctx.reApp();
+      orcaShowMessage("已取消标签筛选");
+    });
+    return;
+  }
   OrcaBlocks.collectUserTags().then(function (tags) {
     var pop = document.createElement("div");
     pop.className = "orca-df-tag-popover orca-df-scope";
     var active = ((ctx.filters && ctx.filters.tags) || [])[0] || "";
-    var rows = '<button type="button" class="orca-df-tag-popover-item' + (!active ? " is-on" : "") + '" data-df-act="clear-tag">全部</button>';
+    var rows = '<button type="button" class="orca-df-tag-popover-item' + (!active ? " is-on" : "") + '" data-df-act="clear-tag">' + dfT("全部") + "</button>";
     if (!tags.length) {
-      rows += '<div class="orca-df-tag-popover-empty">暂无标签</div>';
+      rows += '<div class="orca-df-tag-popover-empty">' + dfT("暂无标签") + "</div>";
     } else {
       rows += tags.map(function (t) {
         var on = active === t ? " is-on" : "";
         return '<button type="button" class="orca-df-tag-popover-item' + on + '" data-df-act="filter-tag" data-tag="' + orcaEsc(t) + '">#' + orcaEsc(t) + "</button>";
       }).join("");
     }
-    pop.innerHTML = '<div class="orca-df-tag-popover-title">标签筛选</div>' + rows;
+    pop.innerHTML = '<div class="orca-df-tag-popover-title">' + dfT("标签筛选") + "</div>" + rows;
     document.body.appendChild(pop);
     var fabRect = (btn && btn.getBoundingClientRect()) || { left: 0, bottom: 0, top: 0 };
     pop.style.right = Math.max(12, window.innerWidth - fabRect.left + 8) + "px";
@@ -6760,18 +7764,19 @@ function orcaOpenTagFilter(ctx, btn) {
       e.preventDefault();
       e.stopPropagation();
       var act = item.getAttribute("data-df-act");
+      var on = false;
       if (act === "clear-tag") {
-        ctx.filters.tags = [];
+        on = orcaSetTagFilter(ctx, "");
       } else if (act === "filter-tag") {
-        var t = item.getAttribute("data-tag");
-        ctx.filters.tags = t ? [t] : [];
-        ctx.filters.kw = "";
+        on = orcaSetTagFilter(ctx, item.getAttribute("data-tag"));
       }
       orcaCloseTagFilterPopover(ctx);
       orcaRefreshFeed().then(function () {
         ctx.reApp();
-        if (ctx.filters.tags && ctx.filters.tags[0]) {
+        if (on && ctx.filters.tags && ctx.filters.tags[0]) {
           orcaShowMessage("已按标签过滤 #" + ctx.filters.tags[0]);
+        } else {
+          orcaShowMessage("已取消标签筛选");
         }
       });
     });
@@ -6822,8 +7827,8 @@ function orcaEnhanceFeedDom(el, ctx) {
         var on = active === t ? " is-on" : "";
         return '<button type="button" class="orca-df-tagchip' + on + '" data-df-act="filter-tag" data-tag="' + orcaEsc(t) + '">#' + orcaEsc(t) + "</button>";
       }).join("");
-      bar.innerHTML = '<span class="orca-df-tagbar-label">标签</span>' + chips +
-        (active ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-tag">全部</button>' : "");
+      bar.innerHTML = '<span class="orca-df-tagbar-label">' + dfT("标签") + "</span>" + chips +
+        (active ? '<button type="button" class="orca-df-tagchip" data-df-act="clear-tag">' + dfT("全部") + "</button>" : "");
       var list = el.querySelector(".mom-list") || el.querySelector("[data-list]");
       if (list && list.parentNode) list.parentNode.insertBefore(bar, list);
       if (typeof orcaEnhanceToolsUi === "function") orcaEnhanceToolsUi(el, ctx);
@@ -6854,7 +7859,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         locBtn.setAttribute("data-mid", String(it.id));
         locBtn.setAttribute("data-id", String(it.id));
         locBtn.setAttribute("data-action", "location");
-        locBtn.title = it.location ? ("地点：" + it.location) : "添加地点";
+        locBtn.title = it.location ? (dfT("地点：") + it.location) : dfT("添加地点");
         locBtn.setAttribute("aria-label", locBtn.title);
         locBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z"></path></svg>';
         if (it.location) locBtn.classList.add("is-on");
@@ -6879,13 +7884,13 @@ function orcaEnhanceFeedDom(el, ctx) {
         moreBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>';
         bar.appendChild(moreBtn);
       }
-      moreBtn.title = "更多";
-      moreBtn.setAttribute("aria-label", "更多");
+      moreBtn.title = dfT("更多");
+      moreBtn.setAttribute("aria-label", dfT("更多"));
       moreBtn.setAttribute("aria-expanded", "false");
       // 内联展开的次级图标组（每次刷新同步置顶/标签态）
       var userTags = (it.tags || []).filter(function (t) { return t && t !== "日记流"; });
-      var pinTitle = it.pinned ? "取消置顶" : "置顶";
-      var tagTitle = userTags.length ? ("标签：" + userTags.map(function (t) { return "#" + t; }).join(" ")) : "标签";
+      var pinTitle = dfT(it.pinned ? "取消置顶" : "置顶");
+      var tagTitle = userTags.length ? (dfT("标签：") + userTags.map(function (t) { return "#" + t; }).join(" ")) : dfT("标签");
       var extra = bar.querySelector(".orca-df-more-inline");
       if (!extra) {
         extra = document.createElement("span");
@@ -6896,13 +7901,13 @@ function orcaEnhanceFeedDom(el, ctx) {
       }
       extra.innerHTML =
         '<button type="button" class="north-luna-moments-action-btn' + (it.pinned ? " active is-on" : "") + '" data-action="pin" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(pinTitle) + '" aria-label="' + orcaEsc(pinTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v4l1 1 1-1v-4h5v-2l-2-2z"></path></svg></button>' +
-        '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="归档" aria-label="归档"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
+        '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("归档")) + '" aria-label="' + orcaEsc(dfT("归档")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-tag-btn' + (userTags.length ? " is-on" : "") + '" data-action="tag" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(tagTitle) + '" aria-label="' + orcaEsc(tagTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21.4 11.6l-9-9C12 2.2 11.5 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .5.2 1 .6 1.4l9 9c.4.4.9.6 1.4.6s1-.2 1.4-.6l7-7c.4-.4.6-.9.6-1.4 0-.5-.2-1-.6-1.4zM6.5 8C5.7 8 5 7.3 5 6.5S5.7 5 6.5 5 8 5.7 8 6.5 7.3 8 6.5 8z"></path></svg></button>' +
-        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="管理图片" aria-label="管理图片"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
+        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("管理图片")) + '" aria-label="' + orcaEsc(dfT("管理图片")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
         (bid && isFinite(Number(bid))
-          ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="在虎鲸中打开" aria-label="在虎鲸中打开"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
+          ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
-        '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="删除" aria-label="删除"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
+        '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("删除")) + '" aria-label="' + orcaEsc(dfT("删除")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
       bar.classList.remove("is-more-open");
     }
     // meta 地点可点编辑；无地点时不额外插空行（靠动作栏添加）
@@ -6937,8 +7942,33 @@ function orcaEnhanceFeedDom(el, ctx) {
     var content = card.querySelector(".north-luna-moments-item-content, .mom-item-content") || card;
     content.appendChild(row);
   });
+  orcaEnhanceComments(el);
   orcaLazyHydrateDeepBodies(el, ctx);
   orcaEnsureLoadMoreButton(el, ctx);
+}
+
+/** 给每条评论注入「编辑」按钮（vendor 只提供删除） */
+function orcaEnhanceComments(el) {
+  if (!el) return;
+  el.querySelectorAll(".north-luna-moments-comment-item").forEach(function (item) {
+    var right = item.querySelector(".north-luna-moments-comment-actions-right");
+    if (!right || right.querySelector('[data-action="edit-comment"]')) return;
+    var panel = item.closest(".north-luna-moments-comment-panel");
+    var mid = panel ? panel.getAttribute("data-mid") : "";
+    var cid = item.getAttribute("data-cid");
+    if (!mid || !cid) return;
+    var edit = document.createElement("span");
+    edit.className = "north-luna-moments-comment-del orca-df-comment-edit";
+    edit.setAttribute("data-mid", mid);
+    edit.setAttribute("data-id", mid);
+    edit.setAttribute("data-cid", cid);
+    edit.setAttribute("data-action", "edit-comment");
+    edit.setAttribute("role", "button");
+    edit.title = dfT("编辑");
+    edit.setAttribute("aria-label", dfT("编辑"));
+    edit.innerHTML = '<svg class="icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+    right.insertBefore(edit, right.firstChild);
+  });
 }
 
 /** 深层嵌套条目：进视口后再拉全文，避免 listFeed 全树加载 */
@@ -6997,9 +8027,12 @@ function orcaEnsureLoadMoreButton(el, ctx) {
   var total = data._allCount || shown;
   var wrap = document.createElement("div");
   wrap.className = "orca-df-load-more";
+  var moreLabel = dfLocaleIsEn()
+    ? ("Load more (" + shown + " / " + total + ")")
+    : ("加载更多（" + shown + " / " + total + "）");
   wrap.innerHTML =
     '<button type="button" class="orca-df-load-more-btn" data-action="load-more-feed">' +
-    "加载更多（" + shown + " / " + total + "）" +
+    moreLabel +
     "</button>";
   host.appendChild(wrap);
 }
@@ -7010,8 +8043,8 @@ function orcaCollapseAllMoreBars(exceptBar) {
     b.classList.remove("is-more-open");
     var mb = b.querySelector('[data-action="more"]');
     if (mb) {
-      mb.title = "更多";
-      mb.setAttribute("aria-label", "更多");
+      mb.title = dfT("更多");
+      mb.setAttribute("aria-label", dfT("更多"));
       mb.setAttribute("aria-expanded", "false");
     }
   });
@@ -7050,7 +8083,7 @@ function orcaChangeEntryTime(ctx, it) {
         '<button type="button" class="mom-btn mom-btn-primary" data-save>确定</button>' +
       "</div>" +
     "</div>";
-  document.body.appendChild(overlay);
+  dfMountDialog(overlay);
   function close() {
     try { overlay.remove(); } catch (e) { /* ignore */ }
   }
@@ -7074,7 +8107,7 @@ function orcaChangeEntryTime(ctx, it) {
       close();
     }).catch(function (e) {
       console.error("[orca-diaryflow] update time", e);
-      orca.notify("error", "改时间失败: " + (e && e.message || e), { title: "日记流" });
+      orca.notify("error", dfT("改时间失败: ") + (e && e.message || e), { title: dfT("日记流") });
     });
   }
   overlay.addEventListener("click", function (e) {
@@ -7106,7 +8139,7 @@ function orcaChangeEntryLocation(ctx, it) {
         '<button type="button" class="mom-btn mom-btn-primary" data-save>确定</button>' +
       "</div>" +
     "</div>";
-  document.body.appendChild(overlay);
+  dfMountDialog(overlay);
   var inp = overlay.querySelector("[data-loc]");
   if (inp) {
     try { inp.focus(); inp.select(); } catch (eF) { /* ignore */ }
@@ -7125,7 +8158,7 @@ function orcaChangeEntryLocation(ctx, it) {
       close();
     }).catch(function (e) {
       console.error("[orca-diaryflow] update location", e);
-      orca.notify("error", "改地点失败: " + (e && e.message || e), { title: "日记流" });
+      orca.notify("error", dfT("改地点失败: ") + (e && e.message || e), { title: dfT("日记流") });
     });
   }
   overlay.addEventListener("click", function (e) {
@@ -7180,7 +8213,7 @@ function orcaChangeEntryTags(ctx, it) {
         '<button type="button" class="mom-btn mom-btn-primary" data-save>确定</button>' +
       "</div>" +
     "</div>";
-  document.body.appendChild(overlay);
+  dfMountDialog(overlay);
   var listEl = overlay.querySelector("[data-tag-list]");
   var newInp = overlay.querySelector("[data-new-tag]");
 
@@ -7240,7 +8273,7 @@ function orcaChangeEntryTags(ctx, it) {
       close();
     }).catch(function (e) {
       console.error("[orca-diaryflow] update tags", e);
-      orca.notify("error", "改标签失败: " + (e && e.message || e), { title: "日记流" });
+      orca.notify("error", dfT("改标签失败: ") + (e && e.message || e), { title: dfT("日记流") });
     });
   }
 
@@ -7347,6 +8380,12 @@ function orcaBindFeedActions(el, ctx) {
       orcaDeleteComment(ctx, btn);
       return;
     }
+    if (action === "edit-comment") {
+      e.preventDefault();
+      e.stopPropagation();
+      orcaEditComment(ctx, btn);
+      return;
+    }
     if (action === "load-more-feed") {
       e.preventDefault();
       e.stopPropagation();
@@ -7361,8 +8400,8 @@ function orcaBindFeedActions(el, ctx) {
       var willOpen = !bar.classList.contains("is-more-open");
       orcaCollapseAllMoreBars(willOpen ? bar : null);
       bar.classList.toggle("is-more-open", willOpen);
-      btn.title = willOpen ? "收起" : "更多";
-      btn.setAttribute("aria-label", willOpen ? "收起" : "更多");
+      btn.title = dfT(willOpen ? "收起" : "更多");
+      btn.setAttribute("aria-label", dfT(willOpen ? "收起" : "更多"));
       btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
       return;
     }
@@ -7414,7 +8453,8 @@ function orcaBindFeedActions(el, ctx) {
       var aid = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
       var ait = (ctx.data().items || []).find(function (x) { return String(x.id) === String(aid); });
       if (!ait) return;
-      if (!window.confirm("归档这条日记？\n主时间线将隐藏，可在归档柜取消归档。\n" + String(ait.text || "").slice(0, 40))) return;
+      var archMsg = dfT("归档这条日记？\n主时间线将隐藏，可在归档柜取消归档。\n") + String(ait.text || "").slice(0, 40);
+      if (dfGetSetting("confirmDelete") && !window.confirm(archMsg)) return;
       OrcaBlocks.setEntryArchived(ait.blockId || ait.id, true).then(function () {
         return orcaRefreshFeed({ keepLimit: true });
       }).then(function () {
@@ -7433,7 +8473,8 @@ function orcaBindFeedActions(el, ctx) {
       var delId = btn.dataset.id;
       var delIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(delId); });
       if (!delIt) return;
-      if (!window.confirm("将这条日记移入回收站？\n（可在回收站恢复，约保留 30 天）\n" + String(delIt.text || "").slice(0, 40))) return;
+      var delMsg = dfT("将这条日记移入回收站？\n（可在回收站恢复，约保留 30 天）\n") + String(delIt.text || "").slice(0, 40);
+      if (dfGetSetting("confirmDelete") && !window.confirm(delMsg)) return;
       OrcaBlocks.deleteEntry(delIt.blockId || delIt.id).then(function () {
         return orcaRefreshFeed({ keepLimit: true });
       }).then(function () {
@@ -7451,9 +8492,11 @@ function orcaBindFeedActions(el, ctx) {
       e.stopPropagation();
       var tag = btn.getAttribute("data-tag");
       if (!tag) return;
-      ctx.filters.tags = [tag];
-      ctx.filters.kw = "";
-      orcaRefreshFeed().then(function () { ctx.reApp(); orcaShowMessage("已按标签过滤 #" + tag); });
+      var on = orcaSetTagFilter(ctx, tag);
+      orcaRefreshFeed().then(function () {
+        ctx.reApp();
+        orcaShowMessage(on ? ("已按标签过滤 #" + tag) : "已取消标签筛选");
+      });
     }
   }, true);
   if (!el.__dfMoreClose) {
@@ -7477,7 +8520,7 @@ function orcaSendComment(ctx, btn) {
   var input = panel && panel.querySelector(".north-luna-moments-comment-input");
   var text = ((input && input.value) || "").trim();
   if (!text) return;
-  var nickname = ((ctx.data().config) || {}).nickname || "我";
+  var nickname = ((ctx.data().config) || {}).nickname || dfT("我");
   var now = new Date();
   function p2(n) { return String(n).padStart(2, "0"); }
   var time = now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate()) +
@@ -7510,7 +8553,7 @@ function orcaDeleteComment(ctx, btn) {
     it = (orcaFeedAllItems || []).find(function (x) { return String(x.id) === String(id); });
   }
   if (!it || !cid) return;
-  if (!window.confirm("删除这条评论？")) return;
+  if (dfGetSetting("confirmDelete") && !window.confirm(dfT("删除这条评论？"))) return;
   OrcaBlocks.deleteComment(it.blockId || it.id, cid)
     .then(function () { return orcaRefreshFeed({ keepLimit: true }); })
     .then(function () {
@@ -7521,6 +8564,61 @@ function orcaDeleteComment(ctx, btn) {
       console.warn("[orca-diaryflow] del comment", e);
       orcaShowMessage("删除评论失败");
     });
+}
+
+function orcaEditComment(ctx, btn) {
+  if (!OrcaBlocks || !btn) return;
+  var id = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
+  var cid = btn.dataset.cid || btn.getAttribute("data-cid");
+  var it = (ctx.data().items || []).find(function (x) { return String(x.id) === String(id); });
+  if (!it) it = (orcaFeedAllItems || []).find(function (x) { return String(x.id) === String(id); });
+  if (!it || !cid) return;
+  var cur = "";
+  (it.comments || []).forEach(function (c) {
+    if (String(c && c.id) === String(cid)) cur = String(c.text || "");
+  });
+  var overlay = document.createElement("div");
+  overlay.className = "mom-overlay mom-time orca-df-comment-overlay";
+  overlay.innerHTML =
+    '<div class="mom-modal mom-modal-sm">' +
+      '<div class="mom-modal-head"><span>' + dfT("编辑评论") + '</span><button type="button" class="mom-modal-x" data-x>×</button></div>' +
+      '<div class="mom-modal-body">' +
+        '<input type="text" class="mom-inp" data-cmt maxlength="200" value="' + orcaEsc(cur) + '" placeholder="' + orcaEsc(dfT("写评论…")) + '">' +
+      "</div>" +
+      '<div class="mom-modal-foot">' +
+        '<button type="button" class="mom-btn" data-x>' + dfT("取消") + "</button>" +
+        '<button type="button" class="mom-btn mom-btn-primary" data-save>' + dfT("确定") + "</button>" +
+      "</div>" +
+    "</div>";
+  dfMountDialog(overlay);
+  var inp = overlay.querySelector("[data-cmt]");
+  if (inp) { try { inp.focus(); inp.select(); } catch (eF) { /* ignore */ } }
+  function close() {
+    try { overlay.remove(); } catch (e) { /* ignore */ }
+  }
+  function save() {
+    var v = inp && inp.value != null ? String(inp.value).trim() : "";
+    if (!v) { orcaShowMessage("评论不能为空"); return; }
+    orcaMuteFeedSync(2500);
+    OrcaBlocks.updateComment(it.blockId || it.id, cid, v).then(function () {
+      return orcaRefreshFeed({ keepLimit: true, skipHeal: true, preferLive: true });
+    }).then(function () {
+      if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+      orcaShowMessage("评论已更新");
+      close();
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] update comment", e);
+      orcaShowMessage("评论更新失败");
+    });
+  }
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay || e.target.closest("[data-x]")) close();
+    else if (e.target.closest("[data-save]")) save();
+  });
+  overlay.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); }
+  });
 }
 
 function orcaRefreshToolsFab(ctx, root) {
@@ -7575,6 +8673,11 @@ function orcaTrashFormatTime(ts) {
 
 function orcaTrashRemainingText(ms) {
   var days = ms / 864e5;
+  if (dfLocaleIsEn()) {
+    if (days <= 0) return "Expires today";
+    if (days < 1) return "Less than 1 day left";
+    return Math.ceil(days) + " days left";
+  }
   if (days <= 0) return "今天过期";
   if (days < 1) return "剩不到 1 天";
   return "剩 " + Math.ceil(days) + " 天";
@@ -7598,48 +8701,86 @@ function orcaOpenTrashDialog(ctx) {
     '<div class="orca-df-trash-head">' +
     "<span>回收站</span>" +
     '<div class="orca-df-trash-head-tools">' +
+    '<input type="search" class="orca-df-list-search" data-df-trash-search placeholder="' + orcaEsc(dfT("搜索标题…")) + '" />' +
     '<span class="orca-df-trash-hint">保留约 30 天</span>' +
     '<button type="button" class="orca-df-trash-close" data-df-trash="close" aria-label="关闭">×</button>' +
     "</div></div>" +
     '<div class="orca-df-trash-body"><div class="orca-df-trash-empty">加载中…</div></div>' +
     '<div class="orca-df-trash-foot">' +
+    '<button type="button" class="orca-df-trash-act" data-df-trash="restore-all">全部恢复</button>' +
     '<button type="button" class="orca-df-trash-act danger" data-df-trash="purge-all">清空回收站</button>' +
     "</div></div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
 
   var body = host.querySelector(".orca-df-trash-body");
   var busy = false;
+  var trashItems = [];
+  var trashShown = DF_LIST_PAGE;
+  var trashSearchEl = host.querySelector("[data-df-trash-search]");
+  var trashHintEl = host.querySelector(".orca-df-trash-hint");
+  if (trashHintEl) {
+    trashHintEl.textContent = dfLocaleIsEn()
+      ? ("Kept about " + dfTrashRetentionDays() + " days")
+      : ("保留约 " + dfTrashRetentionDays() + " 天");
+  }
 
   function renderRows(items) {
     if (!items.length) {
-      body.innerHTML = '<div class="orca-df-trash-empty">回收站为空</div>';
+      body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("回收站为空") + "</div>";
       return;
     }
     body.innerHTML = items.map(function (it) {
       return (
         '<div class="orca-df-trash-row" data-trash-id="' + orcaEsc(it.trashId) + '">' +
         '<div class="orca-df-trash-meta">' +
-        '<div class="orca-df-trash-title" title="' + orcaEsc(it.title || "") + '">' + orcaEsc(it.title || "(无标题)") + "</div>" +
+        '<div class="orca-df-trash-title" title="' + orcaEsc(it.title || "") + '">' + orcaEsc(it.title || dfT("(无标题)")) + "</div>" +
         '<div class="orca-df-trash-sub">' + orcaEsc(orcaTrashFormatTime(it.deletedAt)) +
         " · " + orcaEsc(orcaTrashRemainingText(it.remainingMs)) + "</div>" +
         "</div>" +
         '<div class="orca-df-trash-actions">' +
-        '<button type="button" class="orca-df-trash-act" data-df-trash="restore" data-id="' + orcaEsc(it.trashId) + '">恢复</button>' +
-        '<button type="button" class="orca-df-trash-act danger" data-df-trash="purge" data-id="' + orcaEsc(it.trashId) + '">彻底删除</button>' +
+        '<button type="button" class="orca-df-trash-act" data-df-trash="restore" data-id="' + orcaEsc(it.trashId) + '">' + dfT("恢复") + "</button>" +
+        '<button type="button" class="orca-df-trash-act danger" data-df-trash="purge" data-id="' + orcaEsc(it.trashId) + '">' + dfT("彻底删除") + "</button>" +
         "</div></div>"
       );
     }).join("");
   }
 
+  function applyTrashFilter() {
+    var q = trashSearchEl && trashSearchEl.value ? String(trashSearchEl.value).trim().toLowerCase() : "";
+    var list = q
+      ? trashItems.filter(function (it) { return String(it && it.title || "").toLowerCase().indexOf(q) >= 0; })
+      : trashItems;
+    if (q && !list.length) {
+      body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("没有匹配的条目") + "</div>";
+      return;
+    }
+    var shown = list.slice(0, trashShown);
+    renderRows(shown);
+    if (list.length > shown.length) {
+      var mt = dfLocaleIsEn()
+        ? ("Load more (" + shown.length + " / " + list.length + ")")
+        : ("加载更多（" + shown.length + " / " + list.length + "）");
+      body.insertAdjacentHTML("beforeend",
+        '<div class="orca-df-list-more"><button type="button" class="orca-df-tools-btn" data-df-trash="more">' + mt + "</button></div>");
+    }
+  }
+
   function refresh() {
     return OrcaBlocks.trashList().then(function (items) {
-      renderRows(items || []);
+      trashItems = items || [];
+      applyTrashFilter();
       orcaRefreshTrashFab(ctx);
     }).catch(function () {
-      body.innerHTML = '<div class="orca-df-trash-empty">加载失败</div>';
+      body.innerHTML = '<div class="orca-df-trash-empty">' + dfT("加载失败") + "</div>";
     });
   }
 
+  if (trashSearchEl) {
+    trashSearchEl.addEventListener("input", function () {
+      trashShown = DF_LIST_PAGE;
+      applyTrashFilter();
+    });
+  }
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseTrashDialog();
   });
@@ -7651,12 +8792,48 @@ function orcaOpenTrashDialog(ctx) {
       orcaCloseTrashDialog();
       return;
     }
+    if (act === "more") {
+      trashShown += DF_LIST_PAGE;
+      applyTrashFilter();
+      return;
+    }
     if (busy) return;
+    if (act === "restore-all") {
+      if (!trashItems.length) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("全部恢复？共 ") + trashItems.length + dfT(" 条"))) return;
+      busy = true;
+      btn.disabled = true;
+      var rids = trashItems.map(function (it) { return it.trashId; });
+      var rdone = 0;
+      Promise.resolve().then(function loop(i) {
+        if (i >= rids.length) return null;
+        return OrcaBlocks.restoreTrashItem(rids[i]).then(function () {
+          rdone++;
+          btn.textContent = dfT("全部恢复") + " " + rdone + "/" + rids.length;
+          return loop(i + 1);
+        });
+      }).then(function () {
+        orcaShowMessage("已恢复");
+        return orcaRefreshFeed({ keepLimit: true });
+      }).then(function () {
+        if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+        return refresh();
+      }).catch(function (err) {
+        orcaShowMessage(String(err && err.message || "恢复失败"));
+      }).then(function () {
+        busy = false;
+        btn.disabled = false;
+        btn.textContent = dfT("全部恢复");
+      });
+      return;
+    }
     if (act === "restore") {
       busy = true;
       OrcaBlocks.restoreTrashItem(btn.getAttribute("data-id"))
         .then(function (r) {
-          orcaShowMessage("已恢复：" + ((r && r.title) || ""));
+          var rt = (r && r.title) || "";
+          if (r && r.wasArchived) orcaShowMessage("已恢复（原归档条目已回到时间线）：" + rt);
+          else orcaShowMessage("已恢复：" + rt);
           return orcaRefreshFeed({ keepLimit: true });
         })
         .then(function () {
@@ -7670,7 +8847,7 @@ function orcaOpenTrashDialog(ctx) {
       return;
     }
     if (act === "purge") {
-      if (!window.confirm("彻底删除该条目？不可恢复。")) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("彻底删除该条目？不可恢复。"))) return;
       busy = true;
       OrcaBlocks.purgeTrashItem(btn.getAttribute("data-id"))
         .then(function () { return refresh(); })
@@ -7681,7 +8858,7 @@ function orcaOpenTrashDialog(ctx) {
     if (act === "purge-all") {
       var rows = host.querySelectorAll(".orca-df-trash-row").length;
       if (!rows) return;
-      if (!window.confirm("确定清空回收站？共 " + rows + " 项将永久删除，不可恢复。")) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("确定清空回收站？共 ") + rows + dfT("项将永久删除，不可恢复。"))) return;
       busy = true;
       OrcaBlocks.purgeAllTrash()
         .then(function () {
@@ -7726,7 +8903,11 @@ function orcaMonthLabel(monthKey) {
   var m = Number(parts[1]);
   if (!y || !m) return String(monthKey || "");
   var now = new Date();
-  if (y === now.getFullYear() && m === now.getMonth() + 1) return "本月";
+  var isCurrent = y === now.getFullYear() && m === now.getMonth() + 1;
+  if (dfLocaleIsEn()) {
+    return isCurrent ? "This month" : (DF_I18N_MONTHS[m - 1] + " " + y);
+  }
+  if (isCurrent) return "本月";
   return y + "年" + m + "月";
 }
 
@@ -7766,7 +8947,7 @@ function orcaJumpToMonth(ctx, monthKey) {
     orcaShowMessage("该月暂无日记");
     return;
   }
-  var needLimit = needIdx + ORCA_FEED_PAGE_SIZE;
+  var needLimit = needIdx + dfFeedPageSize();
   if ((orcaFeedLimit || 0) < needLimit) {
     orcaFeedLimit = needLimit;
     orcaApplyFeedWindow(orcaMomentsData && orcaMomentsData.config);
@@ -7827,7 +9008,7 @@ function orcaOpenMonthOutline(ctx) {
     '<div class="orca-df-outline-hint">点年份快速定位</div>' +
     '<div class="orca-df-outline-months"></div>' +
     "</div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
 
   var yearsEl = host.querySelector(".orca-df-outline-years");
   var monthsEl = host.querySelector(".orca-df-outline-months");
@@ -7861,7 +9042,7 @@ function orcaOpenMonthOutline(ctx) {
       ? groups.filter(function (g) { return String(g.key).indexOf(selectedYear) === 0; })
       : groups;
     if (!list.length) {
-      monthsEl.innerHTML = '<div class="orca-df-outline-empty">这一年没有日记。</div>';
+      monthsEl.innerHTML = '<div class="orca-df-outline-empty">' + dfT("这一年没有日记。") + "</div>";
       return;
     }
     monthsEl.innerHTML = list.map(function (g) {
@@ -7931,25 +9112,30 @@ function orcaOpenArchiveDialog(ctx) {
     '<div class="orca-df-archive-head">' +
     "<span>归档柜</span>" +
     '<div class="orca-df-archive-head-tools">' +
+    '<input type="search" class="orca-df-list-search" data-df-arch-search placeholder="' + orcaEsc(dfT("搜索标题…")) + '" />' +
     '<span class="orca-df-archive-hint">仍保留在日记页</span>' +
     '<button type="button" class="orca-df-archive-close" data-df-arch="close" aria-label="关闭">×</button>' +
     "</div></div>" +
     '<div class="orca-df-archive-body"><div class="orca-df-archive-empty">加载中…</div></div>' +
+    '<div class="orca-df-archive-foot"><button type="button" class="orca-df-archive-act" data-df-arch="unarchive-all">全部取消归档</button></div>' +
     "</div>";
-  document.body.appendChild(host);
+  dfMountDialog(host);
 
   var body = host.querySelector(".orca-df-archive-body");
   var busy = false;
+  var archiveItems = [];
+  var archiveShown = DF_LIST_PAGE;
+  var archiveSearchEl = host.querySelector("[data-df-arch-search]");
 
   function renderRows(items) {
     if (!items.length) {
-      body.innerHTML = '<div class="orca-df-archive-empty">暂无归档</div>';
+      body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("暂无归档") + "</div>";
       return;
     }
     body.innerHTML = items.map(function (it) {
       var title = String(it.text || "").replace(/\r\n/g, "\n").split("\n").map(function (s) {
         return s.trim();
-      }).filter(Boolean)[0] || "(无标题)";
+      }).filter(Boolean)[0] || dfT("(无标题)");
       title = title.slice(0, 80);
       var bid = it.blockId || it.id;
       return (
@@ -7960,22 +9146,53 @@ function orcaOpenArchiveDialog(ctx) {
         ((it.tags && it.tags.length) ? (" · " + orcaEsc(it.tags.map(function (t) { return "#" + t; }).join(" "))) : "") +
         "</div></div>" +
         '<div class="orca-df-archive-actions">' +
-        '<button type="button" class="orca-df-archive-act" data-df-arch="open" data-block-id="' + orcaEsc(String(bid)) + '">打开</button>' +
-        '<button type="button" class="orca-df-archive-act" data-df-arch="unarchive" data-id="' + orcaEsc(String(bid)) + '">取消归档</button>' +
+        '<button type="button" class="orca-df-archive-act" data-df-arch="open" data-block-id="' + orcaEsc(String(bid)) + '">' + dfT("打开") + "</button>" +
+        '<button type="button" class="orca-df-archive-act" data-df-arch="unarchive" data-id="' + orcaEsc(String(bid)) + '">' + dfT("取消归档") + "</button>" +
         "</div></div>"
       );
     }).join("");
   }
 
+  function applyArchiveFilter() {
+    var q = archiveSearchEl && archiveSearchEl.value ? String(archiveSearchEl.value).trim().toLowerCase() : "";
+    var list = q
+      ? archiveItems.filter(function (it) {
+        if (!it) return false;
+        var blob = String(it.text || "") + " " + ((it.tags || []).join(" ")) + " " + String(it.created || "");
+        return blob.toLowerCase().indexOf(q) >= 0;
+      })
+      : archiveItems;
+    if (q && !list.length) {
+      body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("没有匹配的条目") + "</div>";
+      return;
+    }
+    var shown = list.slice(0, archiveShown);
+    renderRows(shown);
+    if (list.length > shown.length) {
+      var mt = dfLocaleIsEn()
+        ? ("Load more (" + shown.length + " / " + list.length + ")")
+        : ("加载更多（" + shown.length + " / " + list.length + "）");
+      body.insertAdjacentHTML("beforeend",
+        '<div class="orca-df-list-more"><button type="button" class="orca-df-tools-btn" data-df-arch="more">' + mt + "</button></div>");
+    }
+  }
+
   function refresh() {
     return OrcaBlocks.listArchivedFeed({ skipHeal: true }).then(function (feed) {
-      renderRows((feed && feed.items) || []);
+      archiveItems = (feed && feed.items) || [];
+      applyArchiveFilter();
       orcaRefreshArchiveFab(ctx);
     }).catch(function () {
-      body.innerHTML = '<div class="orca-df-archive-empty">加载失败</div>';
+      body.innerHTML = '<div class="orca-df-archive-empty">' + dfT("加载失败") + "</div>";
     });
   }
 
+  if (archiveSearchEl) {
+    archiveSearchEl.addEventListener("input", function () {
+      archiveShown = DF_LIST_PAGE;
+      applyArchiveFilter();
+    });
+  }
   host.addEventListener("mousedown", function (e) {
     if (e.target === host) orcaCloseArchiveDialog();
   });
@@ -7990,6 +9207,11 @@ function orcaOpenArchiveDialog(ctx) {
     if (act === "open") {
       var obid = Number(btn.getAttribute("data-block-id"));
       if (obid) orcaOpenInOrca(obid);
+      return;
+    }
+    if (act === "more") {
+      archiveShown += DF_LIST_PAGE;
+      applyArchiveFilter();
       return;
     }
     if (busy) return;
@@ -8008,6 +9230,35 @@ function orcaOpenArchiveDialog(ctx) {
           orcaShowMessage(String(err && err.message || "取消归档失败"));
         })
         .then(function () { busy = false; });
+      return;
+    }
+    if (act === "unarchive-all") {
+      if (!archiveItems.length) return;
+      if (dfGetSetting("confirmDelete") && !window.confirm(dfT("全部取消归档？共 ") + archiveItems.length + dfT(" 条"))) return;
+      busy = true;
+      btn.disabled = true;
+      var done = 0;
+      var ids = archiveItems.map(function (it) { return it.blockId || it.id; });
+      Promise.resolve().then(function loop(i) {
+        if (i >= ids.length) return null;
+        return OrcaBlocks.setEntryArchived(ids[i], false).then(function () {
+          done++;
+          btn.textContent = dfT("全部取消归档") + " " + done + "/" + ids.length;
+          return loop(i + 1);
+        });
+      }).then(function () {
+        orcaShowMessage("已取消归档");
+        return orcaRefreshFeed({ keepLimit: true });
+      }).then(function () {
+        if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+        return refresh();
+      }).catch(function (err) {
+        orcaShowMessage(String(err && err.message || "取消归档失败"));
+      }).then(function () {
+        busy = false;
+        btn.disabled = false;
+        btn.textContent = dfT("全部取消归档");
+      });
     }
   });
 
@@ -8029,26 +9280,21 @@ function orcaHandleDfAct(ctx, act, btn) {
     orcaManualRefreshFeed(ctx);
     return;
   }
-  if (act === "open-trash") {
-    orcaOpenTrashDialog(ctx);
-    return;
-  }
-  if (act === "open-archive") {
-    orcaOpenArchiveDialog(ctx);
-    return;
-  }
   if (act === "clear-tag") {
-    ctx.filters.tags = [];
-    ctx.filters.kw = "";
+    orcaSetTagFilter(ctx, "");
     if (typeof orcaToolsClearQuickFilters === "function") orcaToolsClearQuickFilters(ctx.filters);
+    ctx.filters.kw = "";
+    orcaPersistFilters();
     orcaRefreshFeed().then(function () { ctx.reApp(); });
     return;
   }
   if (act === "filter-tag") {
     var t = btn.getAttribute("data-tag");
-    ctx.filters.tags = t ? [t] : [];
-    ctx.filters.kw = "";
-    orcaRefreshFeed().then(function () { ctx.reApp(); });
+    var on = orcaSetTagFilter(ctx, t);
+    orcaRefreshFeed().then(function () {
+      ctx.reApp();
+      orcaShowMessage(on ? ("已按标签过滤 #" + t) : "已取消标签筛选");
+    });
     return;
   }
   if (act === "goto-ref" || act === "open-orca") {
@@ -8079,6 +9325,14 @@ function orcaMountFeed(container, panelId) {
   if (orcaCtx.mounts.indexOf(el) < 0) orcaCtx.mounts.push(el);
   return function () {
     orcaCtx.mounts = orcaCtx.mounts.filter(function (m) { return m !== el; });
+    if (el.__dfMoreClose) {
+      try { document.removeEventListener("click", el.__dfMoreClose, true); } catch (e0) { /* ignore */ }
+      el.__dfMoreClose = null;
+    }
+    if (el.__dfLazyObs) {
+      try { el.__dfLazyObs.disconnect(); } catch (e1) { /* ignore */ }
+      el.__dfLazyObs = null;
+    }
   };
 }
 
@@ -8141,7 +9395,6 @@ function OrcaPanelRenderer(props) {
   }, [panelId]);
 
   R.useEffect(function () {
-    orcaEditPanelId = panelId;
     orcaScheduleFeedSync();
   }, [panelId]);
 
@@ -8232,7 +9485,7 @@ function orcaOpenPanel() {
   try {
     var active = orca.state.activePanel;
     if (!active) {
-      orca.notify("warn", "当前没有可用的面板", { title: "日记流" });
+      orca.notify("warn", dfT("当前没有可用的面板"), { title: dfT("日记流") });
       return;
     }
     var existed = orcaFindPanelId(orca.state.panels);
@@ -8242,7 +9495,7 @@ function orcaOpenPanel() {
     } else {
       targetId = orca.nav.addTo(active, "right", { view: ORCA_PANEL_TYPE, viewArgs: {}, viewState: {} });
       if (!targetId) {
-        orca.notify("error", "无法创建日记流面板", { title: "日记流" });
+        orca.notify("error", dfT("无法创建日记流面板"), { title: dfT("日记流") });
         return;
       }
       dfGetData(DF_PANEL_W_KEY).then(function (v) {
@@ -8270,7 +9523,7 @@ function orcaRegisterHeadbar() {
     if (orca.state.headbarButtons && orca.state.headbarButtons[ORCA_BTN_ID] == null) {
       var Button = orca.components.Button;
       orca.headbar.registerHeadbarButton(ORCA_BTN_ID, function () {
-        return h(Button, { variant: "plain", onClick: orcaOpenPanel, title: "打开日记流" },
+        return h(Button, { variant: "plain", onClick: orcaOpenPanel, title: dfT("打开日记流") },
           h("span", { className: "orca-df-hb-icon", dangerouslySetInnerHTML: { __html: ORCA_ICON_SVG } }));
       });
     }
@@ -8285,7 +9538,7 @@ function orcaRegisterSidetool() {
       var Button = orca.components.Button;
       orca.editorSidetools.registerEditorSidetool(ORCA_SIDETOOL_ID, {
         render: function () {
-          return h(Button, { variant: "plain", className: "orca-block-editor-sidetools-btn", title: "打开日记流", onClick: orcaOpenPanel },
+          return h(Button, { variant: "plain", className: "orca-block-editor-sidetools-btn", title: dfT("打开日记流"), onClick: orcaOpenPanel },
             h("span", { className: "orca-df-hb-icon", dangerouslySetInnerHTML: { __html: ORCA_ICON_SVG } }));
         }
       });
@@ -8299,6 +9552,8 @@ async function load(name) {
   orcaPluginName = name;
   orcaInjectStyles();
   orcaWatchTheme();
+  orcaWatchLocale();
+  await dfRegisterSettings();
   orcaMomentsData = storage.defaultData();
   orcaCtx = orcaBuildCtx();
 
@@ -8314,6 +9569,11 @@ async function load(name) {
       console.warn("[orca-diaryflow] trash purge expired", eTrash);
     }
     try {
+      await orcaLoadFilters();
+    } catch (eFilters) {
+      console.warn("[orca-diaryflow] load filters failed", eFilters);
+    }
+    try {
       await orcaRefreshFeed();
     } catch (e) {
       console.warn("[orca-diaryflow] refresh feed failed", e);
@@ -8324,13 +9584,14 @@ async function load(name) {
     }
     orcaReady = true;
     orcaStartFeedSyncWatch();
+    orcaScheduleAutoMediaCleanup();
     var cbs = orcaReadyCbs;
     orcaReadyCbs = [];
     cbs.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
     if (orcaCtx) orcaCtx.reApp();
   })();
 
-  try { orca.commands.registerCommand(orcaPluginName + ".open", orcaOpenPanel, "打开日记流面板"); } catch (e) {}
+  try { orca.commands.registerCommand(orcaPluginName + ".open", orcaOpenPanel, dfT("打开日记流面板")); } catch (e) {}
   try {
     orca.panels.registerPanel(ORCA_PANEL_TYPE, OrcaPanelRenderer);
     orcaRegisteredPanel = true;
@@ -8345,6 +9606,10 @@ async function load(name) {
 
 async function unload() {
   orcaStopFeedSyncWatch();
+  if (orcaSettingsLocaleUnsub) {
+    try { orcaSettingsLocaleUnsub(); } catch (e) { /* ignore */ }
+    orcaSettingsLocaleUnsub = null;
+  }
   try { orca.commands.unregisterCommand(orcaPluginName + ".open"); } catch (e) {}
   try { orca.headbar.unregisterHeadbarButton(ORCA_BTN_ID); } catch (e) {}
   try {

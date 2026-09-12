@@ -1,0 +1,5 @@
+            <span>日历</span>
+            <select class="mom-calendar-year" data-cal-year></select>
+            <span class="mom-calendar-modes">
+              <button class="mom-calendar-mode${ctx.calMode === "photo" ? " on" : ""}" data-cal-mode="photo">照片</button>
+              <button class="mom-calendar-mode${ctx.calMode === "heatmap" ? " on" : ""}" data-cal-mode="heatmap">热度</button>

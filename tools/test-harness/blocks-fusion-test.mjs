@@ -5,7 +5,10 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const src = readFileSync(join(ROOT, "src", "orca-blocks.js"), "utf8");
+const src =
+  readFileSync(join(ROOT, "src", "orca-blocks.js"), "utf8") +
+  "\n" + readFileSync(join(ROOT, "src", "orca-trash.js"), "utf8") +
+  "\n" + readFileSync(join(ROOT, "src", "orca-settings.js"), "utf8");
 
 const store = new Map();
 const blocks = new Map();
@@ -71,7 +74,7 @@ globalThis.orca = {
         let parentId = a && a.id;
         if (pos === "after" && a && a.parent) parentId = a.parent;
         const block = {
-          id, text, children: [], refs: [], properties: [], created: new Date(),
+          id, text, content: content || [], children: [], refs: [], properties: [], created: new Date(),
           parent: parentId, _repr: repr, repr
         };
         blocks.set(id, block);
@@ -97,6 +100,26 @@ globalThis.orca = {
             bl.text = (row.content || []).map((x) => x && x.v).filter(Boolean).join("") || "";
             bl.content = row.content;
           }
+        });
+        return true;
+      }
+      if (cmd === "core.editor.setProperties") {
+        const ids = a || [];
+        const props = b || [];
+        ids.forEach((id) => {
+          const bl = blocks.get(id) || orca.state.blocks[id];
+          if (!bl) return;
+          bl.properties = (bl.properties || []).filter((p) => !props.some((np) => np.name === p.name));
+          props.forEach((np) => bl.properties.push({ name: np.name, type: np.type, value: np.value }));
+        });
+        return true;
+      }
+      if (cmd === "core.editor.deleteProperties") {
+        const ids = a || [];
+        const names = b || [];
+        ids.forEach((id) => {
+          const bl = blocks.get(id) || orca.state.blocks[id];
+          if (bl) bl.properties = (bl.properties || []).filter((p) => names.indexOf(p.name) < 0);
         });
         return true;
       }
@@ -168,6 +191,15 @@ console.log("search hello:", feed2.items.length);
 const feed3 = await OB.listFeed({ tags: ["工作"] });
 console.log("filter tag 工作:", feed3.items.length);
 
+// 增量缓存：评论编辑后应失效并反映新文本
+const cm = await OB.addComment(created.id, { name: "我", text: "原评论" });
+const feedC1 = await OB.listFeed({});
+const c1 = ((feedC1.items[0] || {}).comments || []).find((c) => c.text === "原评论");
+await OB.updateComment(created.id, cm.id, "改后评论");
+const feedC2 = await OB.listFeed({});
+const c2 = ((feedC2.items[0] || {}).comments || []).find((c) => c.text === "改后评论");
+console.log("cache comment edit reflected:", !!c1, "->", !!c2);
+
 await OB.deleteEntry(created.id);
 const feed4 = await OB.listFeed({});
 console.log("after delete:", feed4.items.length);
@@ -176,6 +208,7 @@ const ok = feed1.items.length === 1 && feed2.items.length === 1 && feed3.items.l
   && feed1.items[0].tags.includes("工作")
   && !/#日记流|#工作/.test(feed1.items[0].text || "")
   && stripOk
+  && !!c1 && !!c2
   && (feed1.items[0].images || []).length >= 1;
 console.log(ok ? "PASS" : "FAIL");
 process.exit(ok ? 0 : 1);

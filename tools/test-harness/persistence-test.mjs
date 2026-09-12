@@ -1,8 +1,8 @@
 // 持久化往返测试：模拟 Orca 严格类型校验的 setData，验证 save → load 完整链路
 import { JSDOM } from "jsdom";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
-const distPath = "C:/Users/i5156/Documents/orca/plugins/orca-diaryflow/dist/index.js";
+const distPath = process.argv[2] || fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
 globalThis.window = dom.window;

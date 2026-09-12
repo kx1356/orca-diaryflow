@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const distPath = process.argv[2] || "C:/Users/i5156/Documents/orca/plugins/orca-diaryflow/dist/index.js";
+const distPath = process.argv[2] || fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 // ---------- jsdom 环境 ----------
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body><div id='app'></div></body></html>", {
@@ -21,10 +21,11 @@ globalThis.btoa = (s) => Buffer.from(s, "binary").toString("base64");
 if (!globalThis.matchMedia) globalThis.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
 
 // ---------- React mock（捕获 useLayoutEffect 回调以触发挂载） ----------
-const hooks = { layoutFns: [] };
+const hooks = { layoutFns: [], effectFns: [] };
 globalThis.window.React = {
   useRef: (init) => ({ current: init }),
   useLayoutEffect: (fn) => { hooks.layoutFns.push(fn); },
+  useEffect: (fn) => { hooks.effectFns.push(fn); },
   createElement: (type, props, ...children) => ({ type, props, children }),
 };
 
@@ -37,7 +38,7 @@ const panelsTree = { id: "root", children: [{ id: "p1", view: "editor" }] };
 
 globalThis.orca = {
   state: {
-    dataDir: "C:/Users/i5156/Documents/orca",
+    dataDir: process.cwd(),
     activePanel: "p1",
     panels: panelsTree,
     headbarButtons: {},

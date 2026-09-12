@@ -23,12 +23,12 @@
       return new Promise((resolve, reject) => {
         const bad = dfIsUnsupportedImage(file);
         if (bad) {
-          reject(new Error("\u6682\u4E0D\u652F\u6301 " + bad + "\uFF0C\u8BF7\u5148\u8F6C\u4E3A JPG/PNG/WebP"));
+          reject(new Error(dfT("\u6682\u4E0D\u652F\u6301 ") + bad + dfT("\uFF0C\u8BF7\u5148\u8F6C\u4E3A JPG/PNG/WebP")));
           return;
         }
         const type = String((file && file.type) || "").toLowerCase();
         if (type === "image/svg+xml" || /\.svg$/i.test(file && file.name || "")) {
-          reject(new Error("\u6682\u4E0D\u652F\u6301 SVG \u4F5C\u4E3A\u5934\u50CF/\u5C01\u9762\uFF0C\u8BF7\u7528 JPG/PNG"));
+          reject(new Error(dfT("\u6682\u4E0D\u652F\u6301 SVG \u4F5C\u4E3A\u5934\u50CF/\u5C01\u9762\uFF0C\u8BF7\u7528 JPG/PNG")));
           return;
         }
         const url = URL.createObjectURL(file);
@@ -38,7 +38,7 @@
           let w = img.naturalWidth || img.width || 0;
           let h = img.naturalHeight || img.height || 0;
           if (!w || !h) {
-            reject(new Error("\u56FE\u7247\u5C3A\u5BF8\u65E0\u6548\uFF0C\u8BF7\u6362\u4E00\u5F20 JPG/PNG"));
+            reject(new Error(dfT("\u56FE\u7247\u5C3A\u5BF8\u65E0\u6548\uFF0C\u8BF7\u6362\u4E00\u5F20 JPG/PNG")));
             return;
           }
           const scale = Math.min(1, maxDim / Math.max(w, h, 1));
@@ -58,7 +58,7 @@
             }
             ctx2d.drawImage(img, 0, 0, w, h);
           } catch (eDraw) {
-            reject(new Error("\u56FE\u7247\u8FC7\u5927\u6216\u65E0\u6CD5\u89E3\u7801\uFF0C\u8BF7\u538B\u7F29\u540E\u91CD\u8BD5"));
+            reject(new Error(dfT("\u56FE\u7247\u8FC7\u5927\u6216\u65E0\u6CD5\u89E3\u7801\uFF0C\u8BF7\u538B\u7F29\u540E\u91CD\u8BD5")));
             return;
           }
           // 统一出 JPEG（兼容性最好）；原图为 PNG 且不太大时保留 PNG
@@ -66,7 +66,7 @@
           const outType = keepPng ? "image/png" : "image/jpeg";
           canvas.toBlob((blob) => {
             if (!blob) {
-              reject(new Error("\u56FE\u7247\u8F6C\u7801\u5931\u8D25\uFF0C\u8BF7\u6362 JPG/PNG \u91CD\u8BD5"));
+              reject(new Error(dfT("\u56FE\u7247\u8F6C\u7801\u5931\u8D25\uFF0C\u8BF7\u6362 JPG/PNG \u91CD\u8BD5")));
               return;
             }
             const ext = outType === "image/png" ? "png" : "jpg";
@@ -76,7 +76,7 @@
         };
         img.onerror = () => {
           URL.revokeObjectURL(url);
-          reject(new Error("\u65E0\u6CD5\u8BFB\u53D6\u8BE5\u56FE\u7247\uFF08\u683C\u5F0F\u4E0D\u652F\u6301\u6216\u5DF2\u635F\u574F\uFF09\uFF0C\u8BF7\u7528 JPG/PNG/WebP"));
+          reject(new Error(dfT("\u65E0\u6CD5\u8BFB\u53D6\u8BE5\u56FE\u7247\uFF08\u683C\u5F0F\u4E0D\u652F\u6301\u6216\u5DF2\u635F\u574F\uFF09\uFF0C\u8BF7\u7528 JPG/PNG/WebP")));
         };
         img.src = url;
       });

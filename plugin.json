@@ -2,7 +2,7 @@
     "name": "orca-diaryflow",
     "author": "kx1356",
     "url": "https://github.com/kx1356/orca-diaryflow",
-    "version": "0.3.16",
+    "version": "0.3.19",
     "minAppVersion": "2.10.0",
     "script": "index.js",
     "description": {

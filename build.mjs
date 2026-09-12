@@ -109,7 +109,17 @@ const patches = [
   { block: "editor", name: "P55-heat-narrow" },
   { block: "editor", name: "P56-settings-rm-export" },
   { block: "editor", name: "P57-settings-title" },
-  { block: "editor", name: "P58-settings-rm-export-handler" }
+  { block: "editor", name: "P58-settings-rm-export-handler" },
+  { block: "editor", name: "P59-cal-months", all: true },
+  { block: "editor", name: "P60-cal-tip-photo" },
+  { block: "editor", name: "P61-cal-tip-heat" },
+  { block: "editor", name: "P62-cal-month-title" },
+  { block: "editor", name: "P63-cal-header" },
+  { block: "editor", name: "P64-cal-year-option" },
+  { block: "editor", name: "P65-cal-target-title" },
+  { block: "editor", name: "P66-cal-count" },
+  { block: "editor", name: "P67-cal-heat-halves" },
+  { block: "editor", name: "P68-cal-heat-empty" }
 ];
 
 function applyPatch(block, name, all) {
@@ -1350,11 +1360,24 @@ const extraCss = [
   ".orca-df-img-meta { flex: 1; min-width: 0; }",
   ".orca-df-img-acts { display: flex; gap: 4px; flex-shrink: 0; }",
   ".orca-df-img-progress { height: 4px; border-radius: 2px; background: var(--orca-color-bg-2, #eee); overflow: hidden; }",
-  ".orca-df-img-progress-bar { height: 100%; background: var(--df-brand, #007AFF); transition: width .2s ease; }"
+  ".orca-df-img-progress-bar { height: 100%; background: var(--df-brand, #007AFF); transition: width .2s ease; }",
+  ".orca-df-list-search {",
+  "  min-width: 110px; flex: 1 1 auto; height: 26px; padding: 0 8px;",
+  "  border-radius: 7px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.12));",
+  "  background: var(--orca-color-bg-2, rgba(120,120,128,.08)); color: inherit;",
+  "  font: inherit; font-size: 13px; outline: none;",
+  "}",
+  ".orca-df-list-search::placeholder { color: var(--orca-color-text-3, #8e8e93); }",
+  ".orca-df-list-more { display: flex; justify-content: center; padding: 10px 0; }",
+  ".orca-df-archive-foot { display: flex; justify-content: flex-end; padding: 8px 0 0; }",
+  ".orca-df-media-list { max-height: 46vh; overflow: auto; margin: 6px 0 10px; }",
+  ".orca-df-search-quick { display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 0 10px; }",
+  ".orca-df-search-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }",
+  ".orca-df-search-dates { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }"
 ].join("\n");
 const allCss = css + extraCss;
 
-const VERSION = "0.3.16";
+const VERSION = "0.3.19";
 const REPO_URL = "https://github.com/kx1356/orca-diaryflow";
 
 // ---------- 组装输出 ----------
@@ -1370,6 +1393,12 @@ const out = [
   blocks.render,
   blocks.export,
   blocks.editor,
+  "",
+  "// ===== i18n (zh -> en) =====",
+  readFileSync(join(ROOT, "src", "orca-i18n.js"), "utf8"),
+  "",
+  "// ===== Settings =====",
+  readFileSync(join(ROOT, "src", "orca-settings.js"), "utf8"),
   "",
   "// ===== Orca blocks store =====",
   orcaBlocks,

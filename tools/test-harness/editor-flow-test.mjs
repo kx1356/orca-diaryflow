@@ -1,8 +1,8 @@
 // 端到端测试 v2：点击「发表日记」→ 填文字 → 发表 → 验证 PluginStorage 落盘 → 重启恢复
 import { JSDOM } from "jsdom";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
-const distPath = "C:/Users/i5156/Documents/orca/plugins/orca-diaryflow/dist/index.js";
+const distPath = process.argv[2] || fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 const dom = new JSDOM("<!DOCTYPE html><html><head></head><body></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
 globalThis.window = dom.window;

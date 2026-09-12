@@ -18,6 +18,13 @@ jobs:
         run: node build.mjs
       - name: Validate marketplace package
         run: node scripts/validate-marketplace-package.mjs
+      - name: Install test harness deps
+        run: npm ci --prefix tools/test-harness
+      - name: Run harness tests
+        run: |
+          node tools/test-harness/md-frag-test.mjs
+          node tools/test-harness/blocks-fusion-test.mjs
+          node tools/test-harness/run-test.mjs dist/index.js
       - name: Check release essentials
         run: |
           test -f dist/index.js

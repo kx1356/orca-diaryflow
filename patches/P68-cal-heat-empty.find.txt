@@ -1,0 +1,1 @@
+          return `<div class="mom-calendar-heat-half"><div class="mom-calendar-heat-caption">${caption}</div><div class="mom-calendar-heat-empty">暂无记录</div></div>`;
