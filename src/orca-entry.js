@@ -335,31 +335,44 @@ function orcaParseTags(s) {
 function orcaComposeTemplates() {
   var en = dfLocaleIsEn();
   return [
-    { label: en ? "Blank" : "空白", text: "" },
-    { label: en ? "Three things" : "今天的三件事", text: en ? "Three things today:\n1. \n2. \n3. " : "今天的三件事：\n1. \n2. \n3. " },
-    { label: en ? "Gratitude" : "感恩", text: en ? "Grateful for:\n- " : "今天想感谢：\n- " },
-    { label: en ? "Review" : "复盘", text: en ? "What went well:\n- \nTo improve:\n- " : "做得好的：\n- \n可以改进：\n- " },
-    { label: en ? "Travel" : "行程", text: en ? "Where:\nWhat happened:\n" : "地点：\n行程：\n" }
+    { id: "blank", label: en ? "Blank" : "空白", text: "" },
+    { id: "three", label: en ? "Three things" : "今天的三件事", text: en ? "Three things today:\n1. \n2. \n3. " : "今天的三件事：\n1. \n2. \n3. " },
+    { id: "gratitude", label: en ? "Gratitude" : "感恩", text: en ? "Grateful for:\n- " : "今天想感谢：\n- " },
+    { id: "review", label: en ? "Review" : "复盘", text: en ? "What went well:\n- \nTo improve:\n- " : "做得好的：\n- \n可以改进：\n- " },
+    { id: "travel", label: en ? "Travel" : "行程", text: en ? "Where:\nWhat happened:\n" : "地点：\n行程：\n" }
   ];
 }
 
 var DF_TPL_KEY = "compose-templates";
 
-async function orcaLoadCustomTemplates() {
-  try {
-    var v = await dfGetData(DF_TPL_KEY);
-    if (!Array.isArray(v)) return [];
-    return v.filter(function (t) { return t && typeof t.text === "string"; })
-      .map(function (t) { return { label: String(t.label || dfT("自定义模板")).slice(0, 40), text: String(t.text) }; })
-      .slice(0, 50);
-  } catch (e) {
-    return [];
-  }
+function orcaNormalizeCustomTemplates(v) {
+  if (!Array.isArray(v)) return [];
+  return v.filter(function (t) { return t && typeof t.text === "string"; })
+    .map(function (t) { return { label: String(t.label || dfT("自定义模板")).slice(0, 40), text: String(t.text) }; })
+    .slice(0, 50);
 }
 
-async function orcaSaveCustomTemplates(list) {
+async function orcaLoadComposeTemplates() {
   try {
-    await dfSetData(DF_TPL_KEY, (Array.isArray(list) ? list : []).slice(0, 50));
+    var v = await dfGetData(DF_TPL_KEY);
+    if (Array.isArray(v)) return { custom: orcaNormalizeCustomTemplates(v), hidden: [] };
+    if (v && typeof v === "object") {
+      return {
+        custom: orcaNormalizeCustomTemplates(v.custom),
+        hidden: Array.isArray(v.hidden) ? v.hidden.filter(function (x) { return typeof x === "string"; }).slice(0, 50) : []
+      };
+    }
+  } catch (e) { /* ignore */ }
+  return { custom: [], hidden: [] };
+}
+
+async function orcaSaveComposeTemplates(state) {
+  state = state || {};
+  try {
+    await dfSetData(DF_TPL_KEY, {
+      custom: (state.custom || []).slice(0, 50),
+      hidden: (state.hidden || []).slice(0, 50)
+    });
   } catch (e) { /* ignore */ }
 }
 
@@ -423,6 +436,7 @@ function orcaOpenComposeDialog(ctx) {
   var tplSaveRow = overlay.querySelector(".orca-df-compose-tplsave");
   var tplNameInp = overlay.querySelector("[data-tpl-name]");
   var customT = [];
+  var hiddenBuiltins = [];
   var imgsEl = overlay.querySelector("[data-imgs]");
   var fileInput = overlay.querySelector("[data-file]");
   var tagsInp = overlay.querySelector("[data-tags]");
@@ -531,16 +545,20 @@ function orcaOpenComposeDialog(ctx) {
       var tplBody = ta ? String(ta.value || "") : "";
       if (!tplBody.trim()) { orcaShowMessage("模板内容为空"); return; }
       customT.push({ label: tplName.slice(0, 40), text: tplBody });
-      orcaSaveCustomTemplates(customT).then(refreshTpl);
+      orcaSaveComposeTemplates({ custom: customT, hidden: hiddenBuiltins }).then(refreshTpl);
       if (tplSaveRow) tplSaveRow.hidden = true;
       orcaShowMessage("已保存模板");
       return;
     }
     if (e.target.closest("[data-tpl-del]")) {
-      var delIdx = selectedCustomIndex();
-      if (delIdx < 0) return;
-      customT.splice(delIdx, 1);
-      orcaSaveCustomTemplates(customT).then(refreshTpl);
+      var ref = selectedRef();
+      if (!ref) return;
+      if (ref.type === "builtin") {
+        if (hiddenBuiltins.indexOf(ref.id) < 0) hiddenBuiltins.push(ref.id);
+      } else {
+        customT.splice(ref.index, 1);
+      }
+      orcaSaveComposeTemplates({ custom: customT, hidden: hiddenBuiltins }).then(refreshTpl);
       orcaShowMessage("已删除模板");
       return;
     }
@@ -570,22 +588,24 @@ function orcaOpenComposeDialog(ctx) {
     });
     renderImgs();
   });
-  function selectedCustomIndex() {
+  function selectedRef() {
     var v = tplSel ? String(tplSel.value || "") : "";
-    if (v.charAt(0) === "c") {
-      var i = Number(v.slice(1));
-      return isFinite(i) ? i : -1;
+    if (v.indexOf("b:") === 0) return { type: "builtin", id: v.slice(2) };
+    if (v.indexOf("c:") === 0) {
+      var i = Number(v.slice(2));
+      return isFinite(i) ? { type: "custom", index: i } : null;
     }
-    return -1;
+    return null;
   }
   function refreshTpl() {
     if (!tplSel) return;
     var opts = '<option value="">' + orcaEsc(dfT("模板")) + "</option>";
-    orcaComposeTemplates().forEach(function (t, i) {
-      opts += '<option value="b' + i + '">' + orcaEsc(t.label) + "</option>";
+    orcaComposeTemplates().forEach(function (t) {
+      if (hiddenBuiltins.indexOf(t.id) >= 0) return;
+      opts += '<option value="b:' + t.id + '">' + orcaEsc(t.label) + "</option>";
     });
     customT.forEach(function (t, i) {
-      opts += '<option value="c' + i + '">' + orcaEsc(t.label) + "</option>";
+      opts += '<option value="c:' + i + '">' + orcaEsc(t.label) + "</option>";
     });
     tplSel.innerHTML = opts;
     tplSel.value = "";
@@ -595,17 +615,16 @@ function orcaOpenComposeDialog(ctx) {
     // 注意：不要在原生 select 的 change 里同步弹 confirm/prompt（Electron 会死锁），
     // 也不要在事件分发中直接改 DOM，统一延后到下一个 tick。
     tplSel.addEventListener("change", function () {
-      var v = String(tplSel.value || "");
-      // 选中自定义模板时保留「删除模板」按钮，便于删除
-      if (tplDelBtn) tplDelBtn.hidden = v.charAt(0) !== "c";
-      if (!v || !ta) return;
+      var ref = selectedRef();
+      // 内置 / 自定义模板均可删除；选中后按钮保持可见
+      if (tplDelBtn) tplDelBtn.hidden = !ref;
+      if (!ref || !ta) return;
       var text = "";
-      if (v.charAt(0) === "b") {
-        var bt = orcaComposeTemplates()[Number(v.slice(1))];
+      if (ref.type === "builtin") {
+        var bt = orcaComposeTemplates().filter(function (t) { return t.id === ref.id; })[0];
         text = bt ? bt.text : "";
       } else {
-        var ct = customT[Number(v.slice(1))];
-        text = ct ? ct.text : "";
+        text = customT[ref.index] ? customT[ref.index].text : "";
       }
       if (!text) return;
       setTimeout(function () {
@@ -614,9 +633,10 @@ function orcaOpenComposeDialog(ctx) {
       }, 0);
     });
   }
-  orcaLoadCustomTemplates().then(function (list) {
+  orcaLoadComposeTemplates().then(function (st) {
     if (!overlay.isConnected) return;
-    customT = list || [];
+    customT = (st && st.custom) || [];
+    hiddenBuiltins = (st && st.hidden) || [];
     refreshTpl();
   });
   if (ta) { try { ta.focus(); } catch (eF) { /* ignore */ } }
@@ -1279,7 +1299,6 @@ function orcaEnhanceFeedDom(el, ctx) {
         '<button type="button" class="north-luna-moments-action-btn' + (it.pinned ? " active is-on" : "") + '" data-action="pin" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(pinTitle) + '" aria-label="' + orcaEsc(pinTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v4l1 1 1-1v-4h5v-2l-2-2z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-archive-btn" data-action="archive" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("归档")) + '" aria-label="' + orcaEsc(dfT("归档")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-tag-btn' + (userTags.length ? " is-on" : "") + '" data-action="tag" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(tagTitle) + '" aria-label="' + orcaEsc(tagTitle) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21.4 11.6l-9-9C12 2.2 11.5 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .5.2 1 .6 1.4l9 9c.4.4.9.6 1.4.6s1-.2 1.4-.6l7-7c.4-.4.6-.9.6-1.4 0-.5-.2-1-.6-1.4zM6.5 8C5.7 8 5 7.3 5 6.5S5.7 5 6.5 5 8 5.7 8 6.5 7.3 8 6.5 8z"></path></svg></button>' +
-        '<button type="button" class="north-luna-moments-action-btn" data-df-act="manage-images" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("管理图片")) + '" aria-label="' + orcaEsc(dfT("管理图片")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>' +
         (bid && isFinite(Number(bid))
           ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
