@@ -343,6 +343,26 @@ function orcaComposeTemplates() {
   ];
 }
 
+var DF_TPL_KEY = "compose-templates";
+
+async function orcaLoadCustomTemplates() {
+  try {
+    var v = await dfGetData(DF_TPL_KEY);
+    if (!Array.isArray(v)) return [];
+    return v.filter(function (t) { return t && typeof t.text === "string"; })
+      .map(function (t) { return { label: String(t.label || dfT("自定义模板")).slice(0, 40), text: String(t.text) }; })
+      .slice(0, 50);
+  } catch (e) {
+    return [];
+  }
+}
+
+async function orcaSaveCustomTemplates(list) {
+  try {
+    await dfSetData(DF_TPL_KEY, (Array.isArray(list) ? list : []).slice(0, 50));
+  } catch (e) { /* ignore */ }
+}
+
 /** 面板内快速撰写：文字 / 图片 / 标签 / 时间 / 心情天气 → 创建到今日日记 */
 function orcaOpenComposeDialog(ctx) {
   if (!OrcaBlocks) return;
@@ -357,12 +377,16 @@ function orcaOpenComposeDialog(ctx) {
     '<div class="mom-modal orca-df-compose-modal">' +
       '<div class="mom-modal-head"><span>' + dfT("新建日记") + '</span><button type="button" class="mom-modal-x" data-x>×</button></div>' +
       '<div class="mom-modal-body">' +
-        '<select class="mom-inp orca-df-compose-tpl" data-template>' +
-          '<option value="">' + orcaEsc(dfT("模板")) + "</option>" +
-          orcaComposeTemplates().map(function (t, ti) {
-            return '<option value="' + ti + '">' + orcaEsc(t.label) + "</option>";
-          }).join("") +
-        "</select>" +
+        '<div class="orca-df-compose-tplrow">' +
+          '<select class="mom-inp orca-df-compose-tpl" data-template><option value="">' + orcaEsc(dfT("模板")) + "</option></select>" +
+          '<button type="button" class="mom-btn mom-btn-small" data-tpl-save>' + dfT("保存为模板") + "</button>" +
+          '<button type="button" class="mom-btn mom-btn-small" data-tpl-del hidden>' + dfT("删除模板") + "</button>" +
+        "</div>" +
+        '<div class="orca-df-compose-tplsave" hidden>' +
+          '<input type="text" class="mom-inp" data-tpl-name maxlength="40" placeholder="' + orcaEsc(dfT("模板名称")) + '">' +
+          '<button type="button" class="mom-btn mom-btn-small" data-tpl-confirm>' + dfT("保存") + "</button>" +
+          '<button type="button" class="mom-btn mom-btn-small" data-tpl-cancel>' + dfT("取消") + "</button>" +
+        "</div>" +
         '<textarea class="mom-inp orca-df-compose-text" data-text rows="4" placeholder="' + orcaEsc(dfT("写点什么…")) + '"></textarea>' +
         '<div class="orca-df-compose-imgs" data-imgs></div>' +
         '<div class="orca-df-compose-row">' +
@@ -386,6 +410,10 @@ function orcaOpenComposeDialog(ctx) {
   dfMountDialog(overlay);
   var ta = overlay.querySelector("[data-text]");
   var tplSel = overlay.querySelector("[data-template]");
+  var tplDelBtn = overlay.querySelector("[data-tpl-del]");
+  var tplSaveRow = overlay.querySelector(".orca-df-compose-tplsave");
+  var tplNameInp = overlay.querySelector("[data-tpl-name]");
+  var customT = [];
   var imgsEl = overlay.querySelector("[data-imgs]");
   var fileInput = overlay.querySelector("[data-file]");
   var tagsInp = overlay.querySelector("[data-tags]");
@@ -449,6 +477,32 @@ function orcaOpenComposeDialog(ctx) {
     if (e.target.closest("[data-add-img]")) { fileInput.click(); return; }
     if (e.target.closest("[data-publish-open]")) { submit(true); return; }
     if (e.target.closest("[data-publish]")) { submit(false); return; }
+    if (e.target.closest("[data-tpl-save]")) {
+      if (tplSaveRow) {
+        tplSaveRow.hidden = false;
+        if (tplNameInp) { tplNameInp.value = ""; try { tplNameInp.focus(); } catch (eF) { /* ignore */ } }
+      }
+      return;
+    }
+    if (e.target.closest("[data-tpl-cancel]")) { if (tplSaveRow) tplSaveRow.hidden = true; return; }
+    if (e.target.closest("[data-tpl-confirm]")) {
+      var tplName = (tplNameInp && tplNameInp.value ? String(tplNameInp.value).trim() : "") || dfT("自定义模板");
+      var tplBody = ta ? String(ta.value || "") : "";
+      if (!tplBody.trim()) { orcaShowMessage("模板内容为空"); return; }
+      customT.push({ label: tplName.slice(0, 40), text: tplBody });
+      orcaSaveCustomTemplates(customT).then(refreshTpl);
+      if (tplSaveRow) tplSaveRow.hidden = true;
+      orcaShowMessage("已保存模板");
+      return;
+    }
+    if (e.target.closest("[data-tpl-del]")) {
+      var delIdx = selectedCustomIndex();
+      if (delIdx < 0) return;
+      customT.splice(delIdx, 1);
+      orcaSaveCustomTemplates(customT).then(refreshTpl);
+      orcaShowMessage("已删除模板");
+      return;
+    }
     var rm = e.target.closest("[data-rm-img]");
     if (rm) {
       var i = Number(rm.getAttribute("data-rm-img"));
@@ -475,22 +529,56 @@ function orcaOpenComposeDialog(ctx) {
     });
     renderImgs();
   });
+  function selectedCustomIndex() {
+    var v = tplSel ? String(tplSel.value || "") : "";
+    if (v.charAt(0) === "c") {
+      var i = Number(v.slice(1));
+      return isFinite(i) ? i : -1;
+    }
+    return -1;
+  }
+  function refreshTpl() {
+    if (!tplSel) return;
+    var opts = '<option value="">' + orcaEsc(dfT("模板")) + "</option>";
+    orcaComposeTemplates().forEach(function (t, i) {
+      opts += '<option value="b' + i + '">' + orcaEsc(t.label) + "</option>";
+    });
+    customT.forEach(function (t, i) {
+      opts += '<option value="c' + i + '">' + orcaEsc(t.label) + "</option>";
+    });
+    tplSel.innerHTML = opts;
+    tplSel.value = "";
+    if (tplDelBtn) tplDelBtn.hidden = true;
+  }
   if (tplSel) {
-    // 注意：不要在原生 select 的 change 事件里同步弹 confirm（Electron 下会死锁）；
-    // 也不要在事件分发中直接改 DOM。统一延后到下一个 tick。
+    // 注意：不要在原生 select 的 change 里同步弹 confirm/prompt（Electron 会死锁），
+    // 也不要在事件分发中直接改 DOM，统一延后到下一个 tick。
     tplSel.addEventListener("change", function () {
-      var idx = Number(tplSel.value);
-      var tpls = orcaComposeTemplates();
-      var text = (tpls[idx] && tpls[idx].text) || "";
+      var v = String(tplSel.value || "");
+      if (tplDelBtn) tplDelBtn.hidden = v.charAt(0) !== "c";
+      if (!v || !ta) return;
+      var text = "";
+      if (v.charAt(0) === "b") {
+        var bt = orcaComposeTemplates()[Number(v.slice(1))];
+        text = bt ? bt.text : "";
+      } else {
+        var ct = customT[Number(v.slice(1))];
+        text = ct ? ct.text : "";
+      }
       if (!text) { setTimeout(function () { try { tplSel.value = ""; } catch (e) {} }, 0); return; }
-      if (!ta) return;
       setTimeout(function () {
         ta.value = text;
         try { tplSel.value = ""; } catch (eR) { /* ignore */ }
+        if (tplDelBtn) tplDelBtn.hidden = true;
         try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (eF) { /* ignore */ }
       }, 0);
     });
   }
+  orcaLoadCustomTemplates().then(function (list) {
+    if (!overlay.isConnected) return;
+    customT = list || [];
+    refreshTpl();
+  });
   if (ta) { try { ta.focus(); } catch (eF) { /* ignore */ } }
 }
 
