@@ -324,6 +324,189 @@ async function orcaStartNewEntryInOrca(ctx) {
   }
 }
 
+var ORCA_MOODS = ["", "😀", "🙂", "😐", "😔", "😡", "😴", "🤒"];
+
+function orcaParseTags(s) {
+  return String(s || "").split(/[\s,，、#]+/).map(function (t) { return t.trim(); })
+    .filter(function (t) { return t && t !== "日记流"; });
+}
+
+/** 面板内快速撰写：文字 / 图片 / 标签 / 时间 / 心情天气 → 创建到今日日记 */
+function orcaOpenComposeDialog(ctx) {
+  if (!OrcaBlocks) return;
+  var files = [];
+  var objectUrls = [];
+  var overlay = document.createElement("div");
+  overlay.className = "mom-overlay orca-df-compose-overlay";
+  var moodOpts = ORCA_MOODS.map(function (m) {
+    return '<option value="' + orcaEsc(m) + '">' + (m || dfT("心情")) + "</option>";
+  }).join("");
+  overlay.innerHTML =
+    '<div class="mom-modal orca-df-compose-modal">' +
+      '<div class="mom-modal-head"><span>' + dfT("新建日记") + '</span><button type="button" class="mom-modal-x" data-x>×</button></div>' +
+      '<div class="mom-modal-body">' +
+        '<textarea class="mom-inp orca-df-compose-text" data-text rows="4" placeholder="' + orcaEsc(dfT("写点什么…")) + '"></textarea>' +
+        '<div class="orca-df-compose-imgs" data-imgs></div>' +
+        '<div class="orca-df-compose-row">' +
+          '<button type="button" class="mom-btn mom-btn-small" data-add-img>' + dfT("添加图片") + "</button>" +
+          '<input type="file" accept="image/*" multiple hidden data-file>' +
+        "</div>" +
+        '<input type="text" class="mom-inp" data-tags placeholder="' + orcaEsc(dfT("标签（空格/逗号分隔）")) + '" maxlength="200">' +
+        '<div class="orca-df-compose-row">' +
+          '<input type="datetime-local" class="mom-inp" data-date value="' + orcaEsc(orcaToDatetimeLocalValue(Date.now())) + '">' +
+          '<select class="mom-inp orca-df-compose-mood" data-mood>' + moodOpts + "</select>" +
+          '<input type="text" class="mom-inp orca-df-compose-weather" data-weather placeholder="' + orcaEsc(dfT("天气")) + '" maxlength="20">' +
+        "</div>" +
+      "</div>" +
+      '<div class="mom-modal-foot">' +
+        '<button type="button" class="mom-btn" data-x>' + dfT("取消") + "</button>" +
+        '<button type="button" class="mom-btn" data-publish>' + dfT("发布") + "</button>" +
+        '<button type="button" class="mom-btn mom-btn-primary" data-publish-open>' + dfT("发布并打开") + "</button>" +
+      "</div>" +
+    "</div>";
+  dfMountDialog(overlay);
+  var ta = overlay.querySelector("[data-text]");
+  var imgsEl = overlay.querySelector("[data-imgs]");
+  var fileInput = overlay.querySelector("[data-file]");
+  var tagsInp = overlay.querySelector("[data-tags]");
+  var dateInp = overlay.querySelector("[data-date]");
+  var moodSel = overlay.querySelector("[data-mood]");
+  var weatherInp = overlay.querySelector("[data-weather]");
+  var busy = false;
+
+  function renderImgs() {
+    if (!files.length) { imgsEl.innerHTML = ""; return; }
+    imgsEl.innerHTML = files.map(function (f, i) {
+      return '<div class="orca-df-compose-img"><img src="' + orcaEsc(f.__url) + '" alt="">' +
+        '<button type="button" class="orca-df-compose-img-x" data-rm-img="' + i + '" aria-label="' + orcaEsc(dfT("删除")) + '">×</button></div>';
+    }).join("");
+  }
+  function revokeAll() {
+    objectUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) { /* ignore */ } });
+    objectUrls = [];
+  }
+  function close() {
+    try { overlay.remove(); } catch (e) { /* ignore */ }
+    revokeAll();
+  }
+  async function submit(openAfter) {
+    if (busy) return;
+    busy = true;
+    try {
+      orcaMuteFeedSync(3500);
+      var d = dateInp.value ? new Date(dateInp.value) : new Date();
+      if (isNaN(d.getTime())) d = new Date();
+      var block = await OrcaBlocks.createEntry({
+        date: d,
+        text: ta.value || "",
+        tags: orcaParseTags(tagsInp.value),
+        images: files.map(function (f) { return f.__url; })
+      });
+      var id = block && block.id;
+      var mood = moodSel.value || "";
+      var weather = String(weatherInp.value || "").trim();
+      if (id && (mood || weather) && OrcaBlocks.updateEntryMeta) {
+        try { await OrcaBlocks.updateEntryMeta(id, { mood: mood, weather: weather }); } catch (eM) { /* ignore */ }
+      }
+      revokeAll();
+      try { overlay.remove(); } catch (e) { /* ignore */ }
+      await orcaRefreshFeed();
+      if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+      orcaShowMessage("已发布");
+      if (openAfter && id) {
+        try { await OrcaBlocks.openEntry(id, null, { date: d }); } catch (eO) { orcaOpenInOrca(id); }
+      }
+    } catch (e) {
+      console.error("[orca-diaryflow] compose", e);
+      orca.notify("error", dfT("发布失败: ") + (e && e.message || e), { title: dfT("日记流") });
+      busy = false;
+    }
+  }
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay || e.target.closest("[data-x]")) { close(); return; }
+    if (e.target.closest("[data-add-img]")) { fileInput.click(); return; }
+    if (e.target.closest("[data-publish-open]")) { submit(true); return; }
+    if (e.target.closest("[data-publish]")) { submit(false); return; }
+    var rm = e.target.closest("[data-rm-img]");
+    if (rm) {
+      var i = Number(rm.getAttribute("data-rm-img"));
+      if (isFinite(i) && files[i]) {
+        try { URL.revokeObjectURL(files[i].__url); } catch (e2) { /* ignore */ }
+        files.splice(i, 1);
+        objectUrls = files.map(function (f) { return f.__url; });
+        renderImgs();
+      }
+    }
+  });
+  overlay.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(false); }
+  });
+  fileInput.addEventListener("change", function () {
+    var picked = Array.prototype.slice.call(fileInput.files || []);
+    fileInput.value = "";
+    picked.forEach(function (f) {
+      if (files.length >= 9) return;
+      f.__url = URL.createObjectURL(f);
+      objectUrls.push(f.__url);
+      files.push(f);
+    });
+    renderImgs();
+  });
+  if (ta) { try { ta.focus(); } catch (eF) { /* ignore */ } }
+}
+
+/** 编辑已有条目的心情 / 天气 */
+function orcaChangeEntryMeta(ctx, it) {
+  if (!it || !OrcaBlocks || !OrcaBlocks.updateEntryMeta) return;
+  var bid = it.blockId || Number(it.id);
+  if (!bid || !isFinite(Number(bid))) { orcaShowMessage("找不到对应虎鲸块"); return; }
+  var overlay = document.createElement("div");
+  overlay.className = "mom-overlay orca-df-meta-overlay";
+  var moodOpts = ORCA_MOODS.map(function (m) {
+    return '<option value="' + orcaEsc(m) + '"' + (String(it.mood || "") === m ? " selected" : "") + ">" + (m || dfT("心情")) + "</option>";
+  }).join("");
+  overlay.innerHTML =
+    '<div class="mom-modal mom-modal-sm">' +
+      '<div class="mom-modal-head"><span>' + dfT("心情 / 天气") + '</span><button type="button" class="mom-modal-x" data-x>×</button></div>' +
+      '<div class="mom-modal-body">' +
+        '<label class="orca-df-tools-label">' + dfT("心情") + '</label>' +
+        '<select class="mom-inp" data-mood>' + moodOpts + "</select>" +
+        '<label class="orca-df-tools-label">' + dfT("天气") + '</label>' +
+        '<input type="text" class="mom-inp" data-weather maxlength="20" value="' + orcaEsc(it.weather || "") + '">' +
+      "</div>" +
+      '<div class="mom-modal-foot">' +
+        '<button type="button" class="mom-btn" data-x>' + dfT("取消") + "</button>" +
+        '<button type="button" class="mom-btn mom-btn-primary" data-save>' + dfT("确定") + "</button>" +
+      "</div>" +
+    "</div>";
+  dfMountDialog(overlay);
+  var moodSel = overlay.querySelector("[data-mood]");
+  var weatherInp = overlay.querySelector("[data-weather]");
+  function close() { try { overlay.remove(); } catch (e) { /* ignore */ } }
+  function save() {
+    orcaMuteFeedSync(2500);
+    var mood = moodSel ? moodSel.value : "";
+    var weather = String(weatherInp && weatherInp.value || "").trim();
+    OrcaBlocks.updateEntryMeta(bid, { mood: mood, weather: weather }).then(function () {
+      it.mood = mood;
+      it.weather = weather;
+      return orcaRefreshFeed({ keepLimit: true, skipHeal: true, preferLive: true });
+    }).then(function () {
+      if (ctx && typeof ctx.reApp === "function") ctx.reApp();
+      orcaShowMessage("已更新");
+      close();
+    }).catch(function (e) {
+      console.warn("[orca-diaryflow] meta", e);
+      orcaShowMessage("更新失败");
+    });
+  }
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay || e.target.closest("[data-x]")) close();
+    else if (e.target.closest("[data-save]")) save();
+  });
+}
+
 function orcaMuteFeedSync(ms) {
   var until = Date.now() + Math.max(0, Number(ms) || 0);
   if (until > orcaFeedSyncMutedUntil) orcaFeedSyncMutedUntil = until;
@@ -917,6 +1100,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         (bid && isFinite(Number(bid))
           ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
+        '<button type="button" class="north-luna-moments-action-btn orca-df-meta-btn' + ((it.mood || it.weather) ? " is-on" : "") + '" data-action="meta" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("心情 / 天气")) + '" aria-label="' + orcaEsc(dfT("心情 / 天气")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.9-3.5H7.1c.7 2 2.6 3.5 4.9 3.5z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("删除")) + '" aria-label="' + orcaEsc(dfT("删除")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
       bar.classList.remove("is-more-open");
     }
@@ -939,6 +1123,17 @@ function orcaEnhanceFeedDom(el, ctx) {
             locEl.insertAdjacentHTML("afterbegin", '<span class="orca-df-loc-pin" aria-hidden="true">📍</span> ');
           }
         }
+      }
+    }
+    if (it.mood || it.weather) {
+      var contentEl = card.querySelector(".north-luna-moments-item-content, .mom-item-content") || card;
+      if (contentEl && !contentEl.querySelector(".orca-df-meta-chips")) {
+        var chipRow = document.createElement("div");
+        chipRow.className = "orca-df-meta-chips";
+        chipRow.innerHTML =
+          (it.mood ? '<span class="orca-df-meta-chip">' + orcaEsc(it.mood) + "</span>" : "") +
+          (it.weather ? '<span class="orca-df-meta-chip">' + orcaEsc(it.weather) + "</span>" : "");
+        contentEl.appendChild(chipRow);
       }
     }
     if (card.querySelector(".orca-df-refs")) return;
@@ -1384,7 +1579,7 @@ function orcaBindFeedActions(el, ctx) {
     if (action === "open-editor") {
       e.preventDefault();
       e.stopPropagation();
-      orcaStartNewEntryInOrca(ctx);
+      orcaOpenComposeDialog(ctx);
       return;
     }
     if (action === "open-tag-filter") {
@@ -1473,6 +1668,16 @@ function orcaBindFeedActions(el, ctx) {
       var tagIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(tagId); });
       if (!tagIt) return;
       orcaChangeEntryTags(ctx, tagIt);
+      return;
+    }
+    if (action === "meta") {
+      e.preventDefault();
+      e.stopPropagation();
+      orcaCollapseAllMoreBars();
+      var metaId = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
+      var metaIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(metaId); });
+      if (!metaIt) return;
+      orcaChangeEntryMeta(ctx, metaIt);
       return;
     }
     if (action === "pin" || action === "like") {

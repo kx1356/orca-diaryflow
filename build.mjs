@@ -1379,7 +1379,20 @@ const extraCss = [
   ".mom-calendar-photo-twocol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; align-items: start; }",
   ".mom-calendar-photo-row { grid-template-columns: repeat(7, minmax(32px, 1fr)); }",
   ".mom-calendar-photo-cell { max-width: none; }",
-  "@media (max-width: 720px) { .mom-calendar-photo-twocol { grid-template-columns: 1fr; } }"
+  "@media (max-width: 720px) { .mom-calendar-photo-twocol { grid-template-columns: 1fr; } }",
+  "/* ---- 快速撰写 / 心情天气 ---- */",
+  ".orca-df-compose-modal { max-width: 520px; width: 92%; }",
+  ".orca-df-compose-text { width: 100%; min-height: 84px; resize: vertical; box-sizing: border-box; }",
+  ".orca-df-compose-imgs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }",
+  ".orca-df-compose-img { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--orca-color-bg-2, #eee); }",
+  ".orca-df-compose-img img { width: 100%; height: 100%; object-fit: cover; display: block; }",
+  ".orca-df-compose-img-x { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; line-height: 1; cursor: pointer; }",
+  ".orca-df-compose-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }",
+  ".orca-df-compose-row .mom-inp { flex: 1 1 auto; min-width: 0; }",
+  ".orca-df-compose-mood { flex: 0 0 92px; }",
+  ".orca-df-compose-weather { flex: 0 0 96px; }",
+  ".orca-df-meta-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }",
+  ".orca-df-meta-chip { font-size: 12px; padding: 1px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }"
 ].join("\n");
 const allCss = css + extraCss;
 

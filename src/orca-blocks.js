@@ -1291,6 +1291,8 @@ async function dfBlockToFeedItem(block, overlay, opts) {
     pinned: !!(overlay.pinned || dfProp(block, "df.pinned")),
     archived: dfIsArchived(block, overlay),
     location: dfResolveLocation(block, overlay),
+    mood: String(dfProp(block, "df.mood") || overlay.mood || ""),
+    weather: String(dfProp(block, "df.weather") || overlay.weather || ""),
     tags: tags,
     refs: refs,
     needsFullText: !!needsFullText
@@ -1453,6 +1455,10 @@ async function dfEntrySearchBlob(block) {
   var parts = [String(block.text || ""), dfTagsOf(block).join(" ")];
   var loc = dfProp(block, DF_LOC_PROP);
   if (loc) parts.push(String(loc));
+  var mood = dfProp(block, "df.mood");
+  if (mood) parts.push(String(mood));
+  var weather = dfProp(block, "df.weather");
+  if (weather) parts.push(String(weather));
   var kids = block.children || [];
   if (kids.length) {
     var need = kids.filter(function (id) { return !(orca.state.blocks && orca.state.blocks[id]); });
@@ -2307,6 +2313,31 @@ async function updateEntryLocation(blockId, location) {
   return { block: blockOut, location: loc };
 }
 
+/** 心情 / 天气：写块属性 df.mood / df.weather（空则删除） */
+async function updateEntryMeta(blockId, meta) {
+  var id = dfBlockId(blockId);
+  if (!id) throw new Error("无效 blockId");
+  meta = meta || {};
+  var mood = String(meta.mood == null ? "" : meta.mood).trim();
+  var weather = String(meta.weather == null ? "" : meta.weather).trim();
+  await dfWithEditor(async function () {
+    var sets = [];
+    if (mood) sets.push({ name: "df.mood", type: DF_PROP_TEXT, value: mood });
+    if (weather) sets.push({ name: "df.weather", type: DF_PROP_TEXT, value: weather });
+    if (sets.length) {
+      try { await dfEditorCommand("core.editor.setProperties", null, [id], sets); } catch (eSet) { /* ignore */ }
+    }
+    var dels = [];
+    if (!mood) dels.push("df.mood");
+    if (!weather) dels.push("df.weather");
+    if (dels.length) {
+      try { await dfEditorCommand("core.editor.deleteProperties", null, [id], dels); } catch (eDel) { /* ignore */ }
+    }
+  });
+  try { delete orca.state.blocks[id]; } catch (e0) { /* ignore */ }
+  return { block: await dfGetBlock(id), mood: mood, weather: weather };
+}
+
 function dfNormalizeUserTags(tags) {
   var out = [];
   var seen = {};
@@ -2742,6 +2773,7 @@ var OrcaBlocks = {
   updateEntry: updateEntry,
   updateEntryTime: updateEntryTime,
   updateEntryLocation: updateEntryLocation,
+  updateEntryMeta: updateEntryMeta,
   updateEntryTags: updateEntryTags,
   deleteEntry: deleteEntry,
   setEntryArchived: setEntryArchived,
