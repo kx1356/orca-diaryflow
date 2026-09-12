@@ -5,7 +5,8 @@
           content.style.width = w + "px";
           content.style.maxWidth = w + "px";
         } else {
-          content.style.width = "auto";
-          content.style.maxWidth = "420px";
+          // 照片模式：加宽以两列并排显示两个月
+          content.style.width = "94%";
+          content.style.maxWidth = "880px";
         }
       };

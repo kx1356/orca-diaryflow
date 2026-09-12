@@ -1374,7 +1374,12 @@ const extraCss = [
   ".orca-df-search-quick { display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 0 10px; }",
   ".orca-df-search-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }",
   ".orca-df-search-dates { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }",
-  ".orca-df-list-sort { height: 26px; padding: 0 6px; border-radius: 7px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.12)); background: var(--orca-color-bg-2, rgba(120,120,128,.08)); color: inherit; font: inherit; font-size: 13px; outline: none; }"
+  ".orca-df-list-sort { height: 26px; padding: 0 6px; border-radius: 7px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.12)); background: var(--orca-color-bg-2, rgba(120,120,128,.08)); color: inherit; font: inherit; font-size: 13px; outline: none; }",
+  "/* ---- 封面日历：照片模式两列（一屏显示两个月） ---- */",
+  ".mom-calendar-photo-twocol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; align-items: start; }",
+  ".mom-calendar-photo-row { grid-template-columns: repeat(7, minmax(32px, 1fr)); }",
+  ".mom-calendar-photo-cell { max-width: none; }",
+  "@media (max-width: 720px) { .mom-calendar-photo-twocol { grid-template-columns: 1fr; } }"
 ].join("\n");
 const allCss = css + extraCss;
 
