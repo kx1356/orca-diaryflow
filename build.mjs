@@ -119,7 +119,9 @@ const patches = [
   { block: "editor", name: "P65-cal-target-title" },
   { block: "editor", name: "P66-cal-count" },
   { block: "editor", name: "P67-cal-heat-halves" },
-  { block: "editor", name: "P68-cal-heat-empty" }
+  { block: "editor", name: "P68-cal-heat-empty" },
+  { block: "render", name: "P70-md-hr" },
+  { block: "render", name: "P71-md-task" }
 ];
 
 function applyPatch(block, name, all) {
@@ -1409,7 +1411,9 @@ const extraCss = [
   ".orca-df-year-fill { height: 100%; background: var(--df-brand, #007AFF); border-radius: 7px; }",
   ".orca-df-year-row b { width: 28px; text-align: right; font-size: 12px; }",
   ".orca-df-year-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }",
-  ".orca-df-year-tag { font-size: 12px; padding: 2px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }"
+  ".orca-df-year-tag { font-size: 12px; padding: 2px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }",
+  ".north-luna-moments-item-text .orca-df-md-hr { border: 0; border-top: 1px solid var(--b3-border-color, rgba(0,0,0,.14)); margin: 8px 0; }",
+  ".north-luna-moments-item-text .orca-df-md-li input[type=checkbox] { margin-right: 4px; vertical-align: middle; }"
 ].join("\n");
 const allCss = css + extraCss;
 

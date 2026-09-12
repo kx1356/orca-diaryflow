@@ -258,7 +258,8 @@ function dfFragToMarkdown(frag) {
     if (mid) return "[↗ #" + mid + "](dfref:" + mid + ")";
     return frag.v != null ? String(frag.v) : "";
   }
-  if (frag.t && frag.t !== "t") return "";
+  // 未知行内类型：不丢内容，回退为纯文本
+  if (frag.t && frag.t !== "t") return frag.v != null ? String(frag.v) : "";
   var v = String(frag.v == null ? "" : frag.v);
   var f = frag.f || "";
   if (!f || f === "fc") return v;
@@ -941,6 +942,24 @@ function dfIngestBlockTree(node) {
   return block;
 }
 
+/** 无法还原的块类型 → 可读占位标签（渲染时经 dfT 本地化） */
+var DF_TYPE_LABEL = {
+  table: "▦ 表格",
+  audio: "♪ 音频",
+  embed: "🔗 嵌入",
+  bookmark: "🔗 书签",
+  query: "🔍 查询",
+  mermaid: "🧩 Mermaid",
+  kanban: "📋 看板",
+  mindmap: "🗺 思维导图",
+  whiteboard: "✏️ 白板",
+  drawio: "✏️ 图表",
+  math: "∑ 公式",
+  latex: "∑ 公式",
+  formula: "∑ 公式",
+  html: "</> HTML"
+};
+
 /** 把块树收成 markdown：对齐虎鲸大纲——子块一律作列表项，ul/ol/text 均可嵌套 */
 async function dfAppendEntryMarkdown(block, depth, lines, opts) {
   opts = opts || {};
@@ -970,14 +989,20 @@ async function dfAppendEntryMarkdown(block, depth, lines, opts) {
   } else if (type === "quote" || type === "quote2") {
     lines.push("> " + (md || ""));
   } else if (type === "code") {
-    lines.push("```");
+    var lang = String(repr.language || repr.lang || "").replace(/[^\w+#.-]/g, "");
+    lines.push("```" + lang);
     lines.push(md || "");
     lines.push("```");
+  } else if (type === "hr" || type === "divider" || type === "separator") {
+    lines.push("---");
+  } else if (type === "table") {
+    // 表格结构这里不还原，给出可读提示（在虎鲸中查看）
+    lines.push(pad + dfT(DF_TYPE_LABEL.table));
   } else if (type === "ul" || type === "text" || md) {
     // 虎鲸默认大纲圆点：未显式转 ol 的子块都当无序列表项
     lines.push(pad + "- " + (md || ""));
   } else if (type && type !== "journal") {
-    lines.push(pad + "〔" + String(type) + "〕");
+    lines.push(pad + (DF_TYPE_LABEL[type] ? dfT(DF_TYPE_LABEL[type]) : ("〔" + String(type) + "〕")));
   }
 
   // shallow：只收根 + 直接子行，不进孙块（feed 列表用）

@@ -1,0 +1,7 @@
+        if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+          closeTo(-1);
+          html += `<hr class="orca-df-md-hr">`;
+          i++;
+          continue;
+        }
+        const hm = line.match(/^(#{1,6})\s+(.*)$/);

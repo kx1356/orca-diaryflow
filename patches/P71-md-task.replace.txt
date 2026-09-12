@@ -1,0 +1,5 @@
+          let liTxt = lm[3];
+          let cbHtml = "";
+          const tm = liTxt.match(/^\[( |x|X)\]\s+(.*)$/);
+          if (tm) { cbHtml = `<input type="checkbox" disabled${tm[1].toLowerCase() === "x" ? " checked" : ""}> `; liTxt = tm[2]; }
+          html += `<li class="orca-df-md-li">${cbHtml}${renderInlineMd(liTxt)}</li>`;
