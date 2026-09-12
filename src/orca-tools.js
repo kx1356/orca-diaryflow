@@ -435,6 +435,7 @@ function orcaOpenToolsHub(ctx) {
     '<button type="button" class="orca-df-tools-tile" data-df-tools="cleanup"><b>清理图片</b><span>移除未引用的插件图片</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="backup"><b>备份与恢复</b><span>导出 / 恢复 JSON 备份</span></button>' +
     '<button type="button" class="orca-df-tools-tile" data-df-tools="tags"><b>标签重命名</b><span>批量改名 / 合并 / 删除标签</span></button>' +
+    '<button type="button" class="orca-df-tools-tile" data-df-tools="year"><b>年度报告</b><span>年度统计，可导出长图 / PDF</span></button>' +
     "</div></div>";
   dfMountDialog(host);
   var archHint = host.querySelector("[data-df-tools-arch-hint]");
@@ -475,6 +476,7 @@ function orcaOpenToolsHub(ctx) {
     else if (act === "cleanup") orcaOpenMediaCleanupDialog(ctx);
     else if (act === "backup") orcaOpenBackupDialog(ctx);
     else if (act === "tags") orcaOpenTagRenameDialog(ctx);
+    else if (act === "year") orcaOpenYearReportDialog(ctx);
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
 }
@@ -1219,6 +1221,174 @@ function orcaOpenBackupDialog(ctx) {
   });
   orcaToolsBindEsc(orcaCloseToolsDialog);
   refresh();
+}
+
+async function orcaToolsYearData(year) {
+  var feed = await OrcaBlocks.listFeed({ skipHeal: true, includeArchived: true, preferLive: true, fullText: false });
+  var all = (feed && feed.items) || [];
+  var items = all.filter(function (it) { return String(orcaToolsItemDay(it)).slice(0, 4) === String(year); });
+  var days = {}, byMonth = new Array(12).fill(0), byTag = {}, moods = {}, withImg = 0, words = 0;
+  items.forEach(function (it) {
+    var day = orcaToolsItemDay(it);
+    if (day) days[day] = true;
+    var mo = day ? Number(day.slice(5, 7)) - 1 : -1;
+    if (mo >= 0 && mo < 12) byMonth[mo]++;
+    if (it.images && it.images.length) withImg++;
+    if (it.mood) moods[it.mood] = (moods[it.mood] || 0) + 1;
+    (it.tags || []).forEach(function (t) { if (t && t !== "日记流") byTag[t] = (byTag[t] || 0) + 1; });
+    words += String(it.text || "").replace(/\s+/g, "").length;
+  });
+  var dayList = Object.keys(days).sort();
+  var yearsSet = {};
+  all.forEach(function (it) {
+    var y = String(orcaToolsItemDay(it)).slice(0, 4);
+    if (/^\d{4}$/.test(y)) yearsSet[y] = true;
+  });
+  return {
+    year: String(year),
+    total: items.length,
+    activeDays: dayList.length,
+    months: byMonth,
+    monthMax: Math.max.apply(null, byMonth.concat([1])),
+    tags: Object.keys(byTag).map(function (k) { return { tag: k, count: byTag[k] }; })
+      .sort(function (a, b) { return b.count - a.count; }).slice(0, 10),
+    moods: Object.keys(moods).map(function (k) { return { mood: k, count: moods[k] }; })
+      .sort(function (a, b) { return b.count - a.count; }).slice(0, 6),
+    withImg: withImg,
+    words: words,
+    first: dayList[0] || "",
+    last: dayList[dayList.length - 1] || "",
+    years: Object.keys(yearsSet).sort().reverse()
+  };
+}
+
+function orcaToolsBuildYearHtml(d, cfg) {
+  function card(label, val) {
+    return '<div class="orca-df-stats-card"><div class="orca-df-stats-n">' + val + '</div><div class="orca-df-stats-l">' + orcaToolsEsc(label) + "</div></div>";
+  }
+  var monthRows = d.months.map(function (c, i) {
+    var pct = Math.round((c / d.monthMax) * 100);
+    return '<div class="orca-df-year-row"><span class="orca-df-year-m">' + (i + 1) + '</span>' +
+      '<div class="orca-df-year-track"><div class="orca-df-year-fill" style="width:' + pct + '%"></div></div>' +
+      "<b>" + c + "</b></div>";
+  }).join("");
+  var tagRows = d.tags.map(function (r) { return "<span class=\"orca-df-year-tag\">#" + orcaToolsEsc(r.tag) + " · " + r.count + "</span>"; }).join("");
+  var moodRows = d.moods.map(function (r) { return "<span class=\"orca-df-year-tag\">" + orcaToolsEsc(r.mood) + " · " + r.count + "</span>"; }).join("");
+  return '<div class="orca-df-year">' +
+    '<h2 class="orca-df-year-title">' + orcaToolsEsc(String((cfg && cfg.nickname) || dfT("日记流"))) + " · " + d.year + "</h2>" +
+    '<div class="orca-df-stats-grid">' + card(dfT("全部"), d.total) + card(dfT("有记录天数"), d.activeDays) + card(dfT("含图"), d.withImg) + card(dfT("字数"), d.words) + "</div>" +
+    '<p class="orca-df-tools-muted">' + orcaToolsEsc(d.first) + " — " + orcaToolsEsc(d.last) + "</p>" +
+    '<div class="orca-df-year-sec">' + monthRows + "</div>" +
+    (tagRows ? '<div class="orca-df-year-sec"><div class="orca-df-tools-sec-t">' + dfT("标签分布") + '</div><div class="orca-df-year-tags">' + tagRows + "</div></div>" : "") +
+    (moodRows ? '<div class="orca-df-year-sec"><div class="orca-df-tools-sec-t">' + dfT("心情") + '</div><div class="orca-df-year-tags">' + moodRows + "</div></div>" : "") +
+    "</div>";
+}
+
+async function orcaToolsYearToPng(d, cfg) {
+  var pad = 30, W = 660, dpr = 2;
+  var F = DF_CARD_FONT;
+  var rowH = 30, secGap = 18;
+  var cardH = 92;
+  var tagsLines = 1;
+  var H = pad + 46 + cardH + 26 + (12 * rowH) + secGap + tagsLines * 28 + 60 + pad;
+  var canvas = document.createElement("canvas");
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  var ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+  var y = pad;
+  ctx.fillStyle = "#111"; ctx.font = "bold 22px " + F;
+  ctx.fillText(String((cfg && cfg.nickname) || dfT("日记流")) + " · " + d.year, pad, y); y += 46;
+  // stat cards
+  var stats = [[dfT("全部"), d.total], [dfT("有记录天数"), d.activeDays], [dfT("含图"), d.withImg], [dfT("字数"), d.words]];
+  var cw = (W - pad * 2 - 18) / 4;
+  for (var i = 0; i < stats.length; i++) {
+    var x = pad + i * (cw + 6);
+    ctx.fillStyle = "#f4f4f6"; orcaToolsRoundRect(ctx, x, y, cw, 74, 10); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.font = "bold 20px " + F; ctx.fillText(String(stats[i][1]), x + 12, y + 12);
+    ctx.fillStyle = "#8e8e93"; ctx.font = "12px " + F; ctx.fillText(String(stats[i][0]), x + 12, y + 46);
+  }
+  y += 74 + 26;
+  var trackX = pad + 34, trackW = W - pad * 2 - 34 - 34;
+  for (var m = 0; m < 12; m++) {
+    ctx.fillStyle = "#8e8e93"; ctx.font = "12px " + F; ctx.fillText(String(m + 1), pad, y + 3);
+    ctx.fillStyle = "#ececf0"; orcaToolsRoundRect(ctx, trackX, y + 4, trackW, 14, 7); ctx.fill();
+    var w = Math.round((d.months[m] / d.monthMax) * trackW);
+    if (w > 0) { ctx.fillStyle = "#007AFF"; orcaToolsRoundRect(ctx, trackX, y + 4, w, 14, 7); ctx.fill(); }
+    ctx.fillStyle = "#111"; ctx.font = "12px " + F; ctx.textAlign = "right"; ctx.fillText(String(d.months[m]), W - pad, y + 3); ctx.textAlign = "left";
+    y += rowH;
+  }
+  y += secGap;
+  if (d.tags.length) {
+    ctx.fillStyle = "#2563eb"; ctx.font = "13px " + F;
+    var tline = d.tags.map(function (r) { return "#" + r.tag + " " + r.count; }).join("   ");
+    ctx.fillText(tline.slice(0, 90), pad, y); y += 26;
+  }
+  return await new Promise(function (resolve) {
+    try {
+      canvas.toBlob(function (blob) {
+        if (!blob) { resolve(false); return; }
+        orcaToolsDownloadBlob("diaryflow-year-" + d.year + ".png", blob);
+        resolve(true);
+      }, "image/png");
+    } catch (e) { resolve(false); }
+  });
+}
+
+function orcaOpenYearReportDialog(ctx) {
+  orcaCloseToolsDialog();
+  var host = document.createElement("div");
+  host.className = "orca-df-tools-backdrop orca-df-scope";
+  host.innerHTML =
+    '<div class="orca-df-tools-pop orca-df-tools-wide" role="dialog" aria-label="年度报告">' +
+    '<div class="orca-df-tools-head"><span>年度报告</span>' +
+    '<div class="orca-df-tools-head-tools">' +
+    '<select class="orca-df-list-sort" data-year-sel></select>' +
+    '<button type="button" class="orca-df-tools-mini" data-year="png">导出长图</button>' +
+    '<button type="button" class="orca-df-tools-mini" data-year="print">打印 / PDF</button>' +
+    '<button type="button" class="orca-df-tools-close" data-df-tools="close" aria-label="关闭">×</button>' +
+    "</div></div>" +
+    '<div class="orca-df-tools-body"><div class="orca-df-tools-muted">加载中…</div></div>' +
+    '<div class="orca-df-tools-status" data-year-status hidden></div>' +
+    "</div>";
+  dfMountDialog(host);
+  var body = host.querySelector(".orca-df-tools-body");
+  var yearSel = host.querySelector("[data-year-sel]");
+  var statusEl = host.querySelector("[data-year-status]");
+  var data = null;
+  var busy = false;
+  function setStatus(t) { statusEl.hidden = !t; statusEl.textContent = t || ""; }
+  function currentYear() { return String(yearSel && yearSel.value || new Date().getFullYear()); }
+  function render() {
+    var year = Number(currentYear());
+    orcaToolsYearData(year).then(function (d) {
+      data = d;
+      body.innerHTML = orcaToolsBuildYearHtml(d, (ctx && ctx.data && ctx.data() && ctx.data().config) || {});
+      if (yearSel && !yearSel.options.length) {
+        var years = d.years.slice();
+        if (years.indexOf(String(year)) < 0) years.unshift(String(year));
+        yearSel.innerHTML = years.map(function (y) { return '<option value="' + y + '"' + (y === String(year) ? " selected" : "") + ">" + y + "</option>"; }).join("");
+      }
+    }).catch(function () { body.innerHTML = '<div class="orca-df-tools-muted">' + dfT("加载失败") + "</div>"; });
+  }
+  host.addEventListener("mousedown", function (e) { if (e.target === host) orcaCloseToolsDialog(); });
+  host.addEventListener("change", function (e) { if (e.target === yearSel) render(); });
+  host.addEventListener("click", function (e) {
+    if (e.target.closest("[data-df-tools=close]")) { orcaCloseToolsDialog(); return; }
+    var btn = e.target.closest("[data-year]");
+    if (!btn || busy || !data) return;
+    var act = btn.getAttribute("data-year");
+    var cfg = (ctx && ctx.data && ctx.data() && ctx.data().config) || {};
+    if (act === "png") {
+      busy = true; setStatus(dfT("正在生成…"));
+      orcaToolsYearToPng(data, cfg).then(function (ok) { setStatus(ok ? dfT("已导出长图") : dfT("生成失败")); }).catch(function () { setStatus(dfT("生成失败")); }).then(function () { busy = false; });
+    } else if (act === "print") {
+      if (!orcaToolsPrintHtml(orcaToolsBuildYearHtml(data, cfg))) setStatus(dfT("打印窗口被拦截"));
+    }
+  });
+  orcaToolsBindEsc(orcaCloseToolsDialog);
+  render();
 }
 
 var DF_CARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";

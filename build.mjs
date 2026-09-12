@@ -1398,7 +1398,17 @@ const extraCss = [
   ".orca-df-img-row.is-dragging { opacity: .45; }",
   ".orca-df-img-cap { width: 100%; box-sizing: border-box; height: 24px; font-size: 12px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--orca-color-border, rgba(0,0,0,.1)); background: transparent; color: inherit; margin-bottom: 2px; }",
   ".orca-df-captions { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; }",
-  ".orca-df-caption { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }"
+  ".orca-df-caption { font-size: 12px; color: var(--orca-color-text-3, #8e8e93); }",
+  "/* ---- 年度报告 ---- */",
+  ".orca-df-year-title { margin: 2px 0 10px; font-size: 18px; font-weight: 600; }",
+  ".orca-df-year-sec { margin-top: 12px; }",
+  ".orca-df-year-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }",
+  ".orca-df-year-m { width: 18px; font-size: 12px; color: var(--orca-color-text-3, #8e8e93); text-align: right; }",
+  ".orca-df-year-track { flex: 1 1 auto; height: 14px; border-radius: 7px; background: var(--orca-color-bg-2, rgba(120,120,128,.12)); overflow: hidden; }",
+  ".orca-df-year-fill { height: 100%; background: var(--df-brand, #007AFF); border-radius: 7px; }",
+  ".orca-df-year-row b { width: 28px; text-align: right; font-size: 12px; }",
+  ".orca-df-year-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }",
+  ".orca-df-year-tag { font-size: 12px; padding: 2px 8px; border-radius: 980px; background: var(--orca-color-bg-2, rgba(120,120,128,.1)); color: var(--orca-color-text-2, #555); }"
 ].join("\n");
 const allCss = css + extraCss;
 
