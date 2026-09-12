@@ -321,6 +321,9 @@ var DF_I18N_EN = {
     "Max width (px) of embedded images when exporting Word/PDF (0 = no compression)",
   "自动备份": "Auto backup",
   "启动后自动备份（每天一次）到插件备份目录": "Back up automatically to the plugin backup folder once a day on startup",
+  "正文原生渲染（实验）": "Native entry body (experimental)",
+  "卡片正文改用虎鲸原生块渲染，尽量完整显示表格/颜色/嵌入等格式；如异常请关闭":
+    "Render card body with Orca's native block renderer to show tables/colors/embeds; turn off if it misbehaves",
   "备份保留份数": "Backups to keep",
   "自动备份最多保留的份数": "Maximum number of auto backups to keep",
   "年度报告": "Year in review",

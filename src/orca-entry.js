@@ -1361,8 +1361,85 @@ function orcaEnhanceFeedDom(el, ctx) {
   });
   orcaEnhanceComments(el);
   orcaLocalizeVendorUi(el);
+  orcaMountNativeBodies(el, ctx);
   orcaLazyHydrateDeepBodies(el, ctx);
   orcaEnsureLoadMoreButton(el, ctx);
+}
+
+function orcaGetNativeBoundary() {
+  if (orcaGetNativeBoundary._c !== undefined) return orcaGetNativeBoundary._c;
+  var R = window.React;
+  var C = null;
+  if (R && R.Component) {
+    C = class OrcaDfNativeBoundary extends R.Component {
+      constructor(props) { super(props); this.state = { err: false }; }
+      static getDerivedStateFromError() { return { err: true }; }
+      componentDidCatch() { try { if (this.props.onError) this.props.onError(); } catch (e) { /* ignore */ } }
+      render() { return this.state.err ? null : this.props.children; }
+    };
+  }
+  orcaGetNativeBoundary._c = C;
+  return C;
+}
+
+function orcaUnmountNativeBodies(el) {
+  if (!el || !el.__dfNativeRoots) return;
+  el.__dfNativeRoots.forEach(function (r) {
+    try { r.root.unmount(); } catch (e) { /* ignore */ }
+  });
+  el.__dfNativeRoots = null;
+}
+
+/** 实验：卡片正文改用虎鲸原生块渲染（失败回退到 Markdown 摘要） */
+function orcaMountNativeBodies(el, ctx) {
+  if (!el) return;
+  orcaUnmountNativeBodies(el);
+  var on = false;
+  try { on = !!dfGetSetting("nativeEntryBody"); } catch (e) { on = false; }
+  if (!on) {
+    el.querySelectorAll(".orca-df-native").forEach(function (n) { n.remove(); });
+    el.querySelectorAll(".north-luna-moments-item-text").forEach(function (t) { t.style.display = ""; });
+    return;
+  }
+  var R = window.React;
+  var createRoot = window.createRoot || (window.ReactDOM && window.ReactDOM.createRoot);
+  var Block = orca.components && orca.components.Block;
+  var panelId = ctx && ctx.orcaPanelId;
+  var Boundary = orcaGetNativeBoundary();
+  if (!R || !createRoot || !Block || !panelId || !Boundary) return;
+  var roots = [];
+  (ctx.data().items || []).forEach(function (it) {
+    if (!it) return;
+    var card = el.querySelector('.north-luna-moments-item[data-id="' + it.id + '"], .mom-item[data-id="' + it.id + '"]');
+    if (!card) return;
+    var bid = it.blockId || Number(it.id);
+    if (!bid || !isFinite(Number(bid))) return;
+    var content = card.querySelector(".north-luna-moments-item-content, .mom-item-content");
+    if (!content) return;
+    var textEl = content.querySelector(".north-luna-moments-item-text");
+    var holder = content.querySelector(".orca-df-native");
+    if (!holder) {
+      holder = document.createElement("div");
+      holder.className = "orca-df-native";
+      if (textEl && textEl.parentNode) textEl.parentNode.insertBefore(holder, textEl);
+      else content.insertBefore(holder, content.firstChild);
+    }
+    if (textEl) textEl.style.display = "none";
+    var self = { textEl: textEl, holder: holder };
+    try {
+      var root = createRoot(holder);
+      root.render(
+        R.createElement(Boundary, { onError: function () { if (self.textEl) self.textEl.style.display = ""; } },
+          R.createElement(Block, { panelId: panelId, blockId: Number(bid), blockLevel: 0, indentLevel: 0, renderingMode: "simple" })
+        )
+      );
+      roots.push({ root: root, node: holder });
+    } catch (eMount) {
+      if (textEl) textEl.style.display = "";
+      try { holder.remove(); } catch (e2) { /* ignore */ }
+    }
+  });
+  el.__dfNativeRoots = roots;
 }
 
 /** 仅本地化 feed 内 vendor 控件/空状态的静态文案，绝不触碰用户内容 */
@@ -2894,6 +2971,7 @@ function orcaMountFeed(container, panelId) {
   if (orcaCtx.mounts.indexOf(el) < 0) orcaCtx.mounts.push(el);
   return function () {
     orcaCtx.mounts = orcaCtx.mounts.filter(function (m) { return m !== el; });
+    orcaUnmountNativeBodies(el);
     if (el.__dfMoreClose) {
       try { document.removeEventListener("click", el.__dfMoreClose, true); } catch (e0) { /* ignore */ }
       el.__dfMoreClose = null;
