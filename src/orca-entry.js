@@ -1152,6 +1152,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         (bid && isFinite(Number(bid))
           ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
+        '<button type="button" class="north-luna-moments-action-btn orca-df-share-btn" data-action="share" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("生成分享图")) + '" aria-label="' + orcaEsc(dfT("生成分享图")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A3 3 0 1 0 6 15a2.99 2.99 0 0 0 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a2.92 2.92 0 1 0 2.92-2.92z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-meta-btn' + ((it.mood || it.weather) ? " is-on" : "") + '" data-action="meta" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("心情 / 天气")) + '" aria-label="' + orcaEsc(dfT("心情 / 天气")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.9-3.5H7.1c.7 2 2.6 3.5 4.9 3.5z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("删除")) + '" aria-label="' + orcaEsc(dfT("删除")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
       bar.classList.remove("is-more-open");
@@ -1732,6 +1733,19 @@ function orcaBindFeedActions(el, ctx) {
       var tagIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(tagId); });
       if (!tagIt) return;
       orcaChangeEntryTags(ctx, tagIt);
+      return;
+    }
+    if (action === "share") {
+      e.preventDefault();
+      e.stopPropagation();
+      orcaCollapseAllMoreBars();
+      var shareId = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
+      var shareIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(shareId); });
+      if (!shareIt) shareIt = (orcaFeedAllItems || []).find(function (x) { return String(x.id) === String(shareId); });
+      if (!shareIt || typeof orcaToolsShareEntry !== "function") return;
+      orcaToolsShareEntry(shareIt, (ctx.data().config) || {}).then(function (ok) {
+        orcaShowMessage(ok ? "已生成分享图片" : "生成失败");
+      });
       return;
     }
     if (action === "meta") {

@@ -1221,6 +1221,155 @@ function orcaOpenBackupDialog(ctx) {
   refresh();
 }
 
+var DF_CARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+
+function orcaToolsWrapText(ctx, text, maxWidth, font) {
+  ctx.font = font;
+  var out = [];
+  String(text || "").split("\n").forEach(function (para) {
+    if (!para) { out.push(""); return; }
+    var line = "";
+    for (var i = 0; i < para.length; i++) {
+      var ch = para[i];
+      var test = line + ch;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        out.push(line);
+        line = ch;
+      } else {
+        line = test;
+      }
+    }
+    out.push(line);
+  });
+  return out;
+}
+
+function orcaToolsLoadImage(src) {
+  return new Promise(function (resolve, reject) {
+    var im = new Image();
+    im.onload = function () { resolve(im); };
+    im.onerror = function () { reject(new Error("image load failed")); };
+    im.src = src;
+  });
+}
+
+function orcaToolsRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** 把一条日记渲染成分享图片（PNG 下载） */
+async function orcaToolsShareEntry(item, cfg) {
+  if (!item) return false;
+  var pad = 26, W = 620, dpr = 2;
+  var bodyFont = "15px " + DF_CARD_FONT;
+  var srcs = (item.images || []).slice(0, 9);
+  var imgs = [];
+  for (var i = 0; i < srcs.length; i++) {
+    try {
+      var ds = await orcaToolsImageToDataUrl(srcs[i]);
+      var im = await orcaToolsLoadImage(ds);
+      imgs.push({ el: im, cap: (item.imagesMeta && item.imagesMeta[i]) || "" });
+    } catch (e) { /* skip unloadable */ }
+  }
+  var measure = document.createElement("canvas").getContext("2d");
+  var contentW = W - pad * 2;
+  var lines = orcaToolsWrapText(measure, item.text || "", contentW, bodyFont);
+  var metaBits = [];
+  if (item.mood) metaBits.push(item.mood);
+  if (item.weather) metaBits.push(item.weather);
+  if (item.location) metaBits.push(item.location);
+  var imgBlocks = [];
+  for (var k = 0; k < imgs.length; k++) {
+    var el = imgs[k].el;
+    var iw = el.naturalWidth || el.width || 1;
+    var ih = el.naturalHeight || el.height || 1;
+    var w = contentW, h = Math.round(w * ih / iw);
+    if (h > 520) { h = 520; w = Math.round(h * iw / ih); }
+    imgBlocks.push({ w: w, h: h, el: el, cap: imgs[k].cap });
+  }
+  var tags = (item.tags || []).filter(function (t) { return t && t !== "日记流"; });
+  var headerH = 56;
+  var metaH = metaBits.length ? 24 : 0;
+  var bodyH = lines.length * 24;
+  var imgsH = imgBlocks.reduce(function (s, b) { return s + b.h + (b.cap ? 22 : 0) + 12; }, 0);
+  var footerH = (tags.length ? 26 : 0) + (item.comments && item.comments.length ? 22 : 0) + 8;
+  var totalH = pad + headerH + metaH + bodyH + imgsH + footerH + pad;
+  var canvas = document.createElement("canvas");
+  canvas.width = W * dpr;
+  canvas.height = totalH * dpr;
+  var ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, W, totalH);
+  var cy = pad;
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 19px " + DF_CARD_FONT;
+  ctx.fillText(String((cfg && cfg.nickname) || dfT("日记流")), pad, cy);
+  ctx.fillStyle = "#8e8e93";
+  ctx.font = "13px " + DF_CARD_FONT;
+  ctx.textAlign = "right";
+  ctx.fillText(String(item.created || ""), W - pad, cy + 5);
+  ctx.textAlign = "left";
+  cy += headerH;
+  if (metaBits.length) {
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "14px " + DF_CARD_FONT;
+    ctx.fillText(metaBits.join("  ·  "), pad, cy);
+    cy += metaH;
+  }
+  ctx.fillStyle = "#222222";
+  ctx.font = bodyFont;
+  for (var l = 0; l < lines.length; l++) { ctx.fillText(lines[l], pad, cy); cy += 24; }
+  for (var b = 0; b < imgBlocks.length; b++) {
+    var blk = imgBlocks[b];
+    var bx = pad + Math.max(0, Math.round((contentW - blk.w) / 2));
+    try {
+      orcaToolsRoundRect(ctx, bx, cy, blk.w, blk.h, 10);
+      ctx.save(); ctx.clip(); ctx.drawImage(blk.el, bx, cy, blk.w, blk.h); ctx.restore();
+    } catch (eDraw) { /* ignore */ }
+    cy += blk.h;
+    if (blk.cap) {
+      ctx.fillStyle = "#8e8e93";
+      ctx.font = "12px " + DF_CARD_FONT;
+      ctx.fillText(blk.cap, pad, cy + 4);
+      cy += 22;
+    }
+    cy += 12;
+  }
+  if (tags.length) {
+    ctx.fillStyle = "#2563eb";
+    ctx.font = "13px " + DF_CARD_FONT;
+    ctx.fillText(tags.map(function (t) { return "#" + t; }).join("  "), pad, cy);
+    cy += 26;
+  }
+  if (item.comments && item.comments.length) {
+    ctx.fillStyle = "#8e8e93";
+    ctx.font = "13px " + DF_CARD_FONT;
+    ctx.fillText(dfT("评论") + " · " + item.comments.length, pad, cy);
+  }
+  return await new Promise(function (resolve) {
+    try {
+      canvas.toBlob(function (blob) {
+        if (!blob) { resolve(false); return; }
+        var d = item.createdAt ? new Date(item.createdAt) : new Date();
+        var fn = "diaryflow-" + d.getFullYear() + ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2) +
+          "-" + String(item.id).slice(-4) + ".png";
+        orcaToolsDownloadBlob(fn, blob);
+        resolve(true);
+      }, "image/png");
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
 function orcaOpenTagRenameDialog(ctx) {
   orcaCloseToolsDialog();
   var host = document.createElement("div");

@@ -2332,6 +2332,9 @@ var DF_I18N_EN = {
   "天气": "Weather",
   "心情": "Mood",
   "心情 / 天气": "Mood / Weather",
+  "生成分享图": "Share image",
+  "已生成分享图片": "Share image created",
+  "生成失败": "Generation failed",
   "发布": "Publish",
   "发布并打开": "Publish & open",
   "发布失败: ": "Publish failed: ",
@@ -7063,6 +7066,155 @@ function orcaOpenBackupDialog(ctx) {
   refresh();
 }
 
+var DF_CARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+
+function orcaToolsWrapText(ctx, text, maxWidth, font) {
+  ctx.font = font;
+  var out = [];
+  String(text || "").split("\n").forEach(function (para) {
+    if (!para) { out.push(""); return; }
+    var line = "";
+    for (var i = 0; i < para.length; i++) {
+      var ch = para[i];
+      var test = line + ch;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        out.push(line);
+        line = ch;
+      } else {
+        line = test;
+      }
+    }
+    out.push(line);
+  });
+  return out;
+}
+
+function orcaToolsLoadImage(src) {
+  return new Promise(function (resolve, reject) {
+    var im = new Image();
+    im.onload = function () { resolve(im); };
+    im.onerror = function () { reject(new Error("image load failed")); };
+    im.src = src;
+  });
+}
+
+function orcaToolsRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** 把一条日记渲染成分享图片（PNG 下载） */
+async function orcaToolsShareEntry(item, cfg) {
+  if (!item) return false;
+  var pad = 26, W = 620, dpr = 2;
+  var bodyFont = "15px " + DF_CARD_FONT;
+  var srcs = (item.images || []).slice(0, 9);
+  var imgs = [];
+  for (var i = 0; i < srcs.length; i++) {
+    try {
+      var ds = await orcaToolsImageToDataUrl(srcs[i]);
+      var im = await orcaToolsLoadImage(ds);
+      imgs.push({ el: im, cap: (item.imagesMeta && item.imagesMeta[i]) || "" });
+    } catch (e) { /* skip unloadable */ }
+  }
+  var measure = document.createElement("canvas").getContext("2d");
+  var contentW = W - pad * 2;
+  var lines = orcaToolsWrapText(measure, item.text || "", contentW, bodyFont);
+  var metaBits = [];
+  if (item.mood) metaBits.push(item.mood);
+  if (item.weather) metaBits.push(item.weather);
+  if (item.location) metaBits.push(item.location);
+  var imgBlocks = [];
+  for (var k = 0; k < imgs.length; k++) {
+    var el = imgs[k].el;
+    var iw = el.naturalWidth || el.width || 1;
+    var ih = el.naturalHeight || el.height || 1;
+    var w = contentW, h = Math.round(w * ih / iw);
+    if (h > 520) { h = 520; w = Math.round(h * iw / ih); }
+    imgBlocks.push({ w: w, h: h, el: el, cap: imgs[k].cap });
+  }
+  var tags = (item.tags || []).filter(function (t) { return t && t !== "日记流"; });
+  var headerH = 56;
+  var metaH = metaBits.length ? 24 : 0;
+  var bodyH = lines.length * 24;
+  var imgsH = imgBlocks.reduce(function (s, b) { return s + b.h + (b.cap ? 22 : 0) + 12; }, 0);
+  var footerH = (tags.length ? 26 : 0) + (item.comments && item.comments.length ? 22 : 0) + 8;
+  var totalH = pad + headerH + metaH + bodyH + imgsH + footerH + pad;
+  var canvas = document.createElement("canvas");
+  canvas.width = W * dpr;
+  canvas.height = totalH * dpr;
+  var ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, W, totalH);
+  var cy = pad;
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 19px " + DF_CARD_FONT;
+  ctx.fillText(String((cfg && cfg.nickname) || dfT("日记流")), pad, cy);
+  ctx.fillStyle = "#8e8e93";
+  ctx.font = "13px " + DF_CARD_FONT;
+  ctx.textAlign = "right";
+  ctx.fillText(String(item.created || ""), W - pad, cy + 5);
+  ctx.textAlign = "left";
+  cy += headerH;
+  if (metaBits.length) {
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "14px " + DF_CARD_FONT;
+    ctx.fillText(metaBits.join("  ·  "), pad, cy);
+    cy += metaH;
+  }
+  ctx.fillStyle = "#222222";
+  ctx.font = bodyFont;
+  for (var l = 0; l < lines.length; l++) { ctx.fillText(lines[l], pad, cy); cy += 24; }
+  for (var b = 0; b < imgBlocks.length; b++) {
+    var blk = imgBlocks[b];
+    var bx = pad + Math.max(0, Math.round((contentW - blk.w) / 2));
+    try {
+      orcaToolsRoundRect(ctx, bx, cy, blk.w, blk.h, 10);
+      ctx.save(); ctx.clip(); ctx.drawImage(blk.el, bx, cy, blk.w, blk.h); ctx.restore();
+    } catch (eDraw) { /* ignore */ }
+    cy += blk.h;
+    if (blk.cap) {
+      ctx.fillStyle = "#8e8e93";
+      ctx.font = "12px " + DF_CARD_FONT;
+      ctx.fillText(blk.cap, pad, cy + 4);
+      cy += 22;
+    }
+    cy += 12;
+  }
+  if (tags.length) {
+    ctx.fillStyle = "#2563eb";
+    ctx.font = "13px " + DF_CARD_FONT;
+    ctx.fillText(tags.map(function (t) { return "#" + t; }).join("  "), pad, cy);
+    cy += 26;
+  }
+  if (item.comments && item.comments.length) {
+    ctx.fillStyle = "#8e8e93";
+    ctx.font = "13px " + DF_CARD_FONT;
+    ctx.fillText(dfT("评论") + " · " + item.comments.length, pad, cy);
+  }
+  return await new Promise(function (resolve) {
+    try {
+      canvas.toBlob(function (blob) {
+        if (!blob) { resolve(false); return; }
+        var d = item.createdAt ? new Date(item.createdAt) : new Date();
+        var fn = "diaryflow-" + d.getFullYear() + ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2) +
+          "-" + String(item.id).slice(-4) + ".png";
+        orcaToolsDownloadBlob(fn, blob);
+        resolve(true);
+      }, "image/png");
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
 function orcaOpenTagRenameDialog(ctx) {
   orcaCloseToolsDialog();
   var host = document.createElement("div");
@@ -8673,6 +8825,7 @@ function orcaEnhanceFeedDom(el, ctx) {
         (bid && isFinite(Number(bid))
           ? '<button type="button" class="north-luna-moments-action-btn" data-df-act="open-orca" data-block-id="' + orcaEsc(String(bid)) + '" title="' + orcaEsc(dfT("在虎鲸中打开")) + '" aria-label="' + orcaEsc(dfT("在虎鲸中打开")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"></path></svg></button>'
           : "") +
+        '<button type="button" class="north-luna-moments-action-btn orca-df-share-btn" data-action="share" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("生成分享图")) + '" aria-label="' + orcaEsc(dfT("生成分享图")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81A3 3 0 1 0 6 15a2.99 2.99 0 0 0 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a2.92 2.92 0 1 0 2.92-2.92z"/></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn orca-df-meta-btn' + ((it.mood || it.weather) ? " is-on" : "") + '" data-action="meta" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("心情 / 天气")) + '" aria-label="' + orcaEsc(dfT("心情 / 天气")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.9-3.5H7.1c.7 2 2.6 3.5 4.9 3.5z"></path></svg></button>' +
         '<button type="button" class="north-luna-moments-action-btn north-luna-moments-action-del orca-df-more-del" data-action="del" data-id="' + orcaEsc(it.id) + '" data-mid="' + orcaEsc(it.id) + '" title="' + orcaEsc(dfT("删除")) + '" aria-label="' + orcaEsc(dfT("删除")) + '"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>';
       bar.classList.remove("is-more-open");
@@ -9253,6 +9406,19 @@ function orcaBindFeedActions(el, ctx) {
       var tagIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(tagId); });
       if (!tagIt) return;
       orcaChangeEntryTags(ctx, tagIt);
+      return;
+    }
+    if (action === "share") {
+      e.preventDefault();
+      e.stopPropagation();
+      orcaCollapseAllMoreBars();
+      var shareId = btn.dataset.id || btn.getAttribute("data-id") || btn.dataset.mid;
+      var shareIt = (ctx.data().items || []).find(function (x) { return String(x.id) === String(shareId); });
+      if (!shareIt) shareIt = (orcaFeedAllItems || []).find(function (x) { return String(x.id) === String(shareId); });
+      if (!shareIt || typeof orcaToolsShareEntry !== "function") return;
+      orcaToolsShareEntry(shareIt, (ctx.data().config) || {}).then(function (ok) {
+        orcaShowMessage(ok ? "已生成分享图片" : "生成失败");
+      });
       return;
     }
     if (action === "meta") {
