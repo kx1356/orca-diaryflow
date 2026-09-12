@@ -332,6 +332,17 @@ function orcaParseTags(s) {
     .filter(function (t) { return t && t !== "日记流"; });
 }
 
+function orcaComposeTemplates() {
+  var en = dfLocaleIsEn();
+  return [
+    { label: en ? "Blank" : "空白", text: "" },
+    { label: en ? "Three things" : "今天的三件事", text: en ? "Three things today:\n1. \n2. \n3. " : "今天的三件事：\n1. \n2. \n3. " },
+    { label: en ? "Gratitude" : "感恩", text: en ? "Grateful for:\n- " : "今天想感谢：\n- " },
+    { label: en ? "Review" : "复盘", text: en ? "What went well:\n- \nTo improve:\n- " : "做得好的：\n- \n可以改进：\n- " },
+    { label: en ? "Travel" : "行程", text: en ? "Where:\nWhat happened:\n" : "地点：\n行程：\n" }
+  ];
+}
+
 /** 面板内快速撰写：文字 / 图片 / 标签 / 时间 / 心情天气 → 创建到今日日记 */
 function orcaOpenComposeDialog(ctx) {
   if (!OrcaBlocks) return;
@@ -346,6 +357,12 @@ function orcaOpenComposeDialog(ctx) {
     '<div class="mom-modal orca-df-compose-modal">' +
       '<div class="mom-modal-head"><span>' + dfT("新建日记") + '</span><button type="button" class="mom-modal-x" data-x>×</button></div>' +
       '<div class="mom-modal-body">' +
+        '<select class="mom-inp orca-df-compose-tpl" data-template>' +
+          '<option value="">' + orcaEsc(dfT("模板")) + "</option>" +
+          orcaComposeTemplates().map(function (t, ti) {
+            return '<option value="' + ti + '">' + orcaEsc(t.label) + "</option>";
+          }).join("") +
+        "</select>" +
         '<textarea class="mom-inp orca-df-compose-text" data-text rows="4" placeholder="' + orcaEsc(dfT("写点什么…")) + '"></textarea>' +
         '<div class="orca-df-compose-imgs" data-imgs></div>' +
         '<div class="orca-df-compose-row">' +
@@ -368,6 +385,7 @@ function orcaOpenComposeDialog(ctx) {
     "</div>";
   dfMountDialog(overlay);
   var ta = overlay.querySelector("[data-text]");
+  var tplSel = overlay.querySelector("[data-template]");
   var imgsEl = overlay.querySelector("[data-imgs]");
   var fileInput = overlay.querySelector("[data-file]");
   var tagsInp = overlay.querySelector("[data-tags]");
@@ -457,6 +475,19 @@ function orcaOpenComposeDialog(ctx) {
     });
     renderImgs();
   });
+  if (tplSel) {
+    tplSel.addEventListener("change", function () {
+      var idx = Number(tplSel.value);
+      var tpls = orcaComposeTemplates();
+      if (!tpls[idx]) return;
+      var text = tpls[idx].text || "";
+      if (!text) { tplSel.value = ""; return; }
+      if (ta.value.trim() && !window.confirm(dfT("用模板覆盖当前内容？"))) { tplSel.value = ""; return; }
+      ta.value = text;
+      try { ta.focus(); } catch (eF) { /* ignore */ }
+      tplSel.value = "";
+    });
+  }
   if (ta) { try { ta.focus(); } catch (eF) { /* ignore */ } }
 }
 
